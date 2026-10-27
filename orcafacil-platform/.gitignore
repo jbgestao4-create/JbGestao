@@ -1,0 +1,35 @@
+# Dependências
+node_modules/
+dist/
+coverage/
+.vite/
+
+# Variáveis de ambiente — NUNCA versionar arquivos com credenciais reais
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Supabase local
+supabase/.branches
+supabase/.temp
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright-report/
+test-results/
