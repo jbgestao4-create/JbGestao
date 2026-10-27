@@ -33,3 +33,4 @@ describe('Quote Status FSM', () => {
     expect(getStatusLabel('expired')).toBe('Expirado')
   })
 })
+

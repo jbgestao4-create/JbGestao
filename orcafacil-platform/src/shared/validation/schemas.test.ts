@@ -35,3 +35,4 @@ describe('Validation Schemas (Zod)', () => {
     expect(quantitySchema.safeParse('0').success).toBe(false)
   })
 })
+

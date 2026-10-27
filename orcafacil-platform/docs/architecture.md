@@ -51,3 +51,4 @@ graph TD
 - **Autenticação Centralizada:** Nenhum módulo cria autenticação própria.
 - **Isolamento entre Módulos:** Os módulos de negócio não acessam tabelas internas de outros módulos. Integrações futuras (ex: AgendaPro precisando de orçamentos) utilizarão contratos públicos ou serviços compartilhados.
 - **Base de Clientes Compartilhada:** O cadastro de clientes (`customers`) é transversal dentro da organização e reaproveitado por todos os módulos.
+

@@ -37,3 +37,4 @@ export interface PlatformModuleDescriptor {
   /** Componente de entrada do módulo */
   entryComponent?: () => ReactNode
 }
+

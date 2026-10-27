@@ -12,3 +12,4 @@ Adotar um **Monólito Modular** em React/TypeScript com Supabase como backend un
 ## Consequências
 - **Positivas:** Simplicidade de deploy em um único bundle estático (Cloudflare Pages / Vercel), sem necessidade de orquestração distribuída ou mensageria complexa; type-safety ponta a ponta.
 - **Limitações:** Requer disciplina estrita de importação entre módulos para evitar acoplamento indevido.
+

@@ -110,3 +110,4 @@ Para evitar que ataques de substituição de IDs (IDOR) associem um cliente da O
 1. `customers` define `CONSTRAINT uq_customers_org_id UNIQUE (organization_id, id)`.
 2. `quotes` referencia `(organization_id, customer_id) REFERENCES customers(organization_id, id)`.
 Dessa forma, o PostgreSQL **recusa** no nível do banco qualquer tentativa de cruzamento entre organizações distintas.
+

@@ -23,3 +23,4 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   return <AppLayout>{children}</AppLayout>
 }
+

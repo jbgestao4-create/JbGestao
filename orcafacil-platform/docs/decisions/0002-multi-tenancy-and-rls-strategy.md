@@ -12,3 +12,4 @@ Implementar Row Level Security (RLS) mandatória em todas as tabelas comerciais 
 ## Consequências
 - **Positivas:** Impossibilidade de vazamento horizontal ou IDOR mesmo em caso de manipulação de requisições HTTP; aplicação do princípio de menor privilégio no banco.
 - **Limitações:** Índices adicionais necessários para suportar chaves estrangeiras compostas.
+

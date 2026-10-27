@@ -7,3 +7,4 @@ Object.assign(import.meta.env, {
   DEV: true,
   PROD: false,
 })
+

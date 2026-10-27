@@ -46,3 +46,4 @@ export function RequireModule({ moduleCode, children }: RequireModuleProps) {
 
   return <>{children}</>
 }
+

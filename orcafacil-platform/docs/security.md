@@ -41,3 +41,4 @@
 - **`.env.local`:** Arquivo ignorado pelo Git (via `.gitignore`).
 - **Validação de Startup:** [`src/app/config/env.ts`](file:///c:/Users/alexs/OneDrive/Documentos/ProjectX/orcafacil-platform/src/app/config/env.ts) confere a existência das chaves obrigatórias antes da renderização do React.
 - **Sem Segredos em Produção:** O frontend não possui acesso a chaves mestras de banco de dados nem segredos de webhook.
+

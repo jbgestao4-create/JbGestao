@@ -31,3 +31,4 @@ describe('Quote Calculations Domain', () => {
     expect(result.total).toBe('0.00')
   })
 })
+

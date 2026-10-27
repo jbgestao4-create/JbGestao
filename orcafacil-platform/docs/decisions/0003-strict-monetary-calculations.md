@@ -14,3 +14,4 @@ O cálculo de valores monetários no JavaScript utilizando o tipo nativo `Number
 ## Consequências
 - **Positivas:** Precisão contábil e fiscal absoluta; consistência em toda a suíte de testes.
 - **Limitações:** Necessidade de formatação explícita para exibição visual.
+
