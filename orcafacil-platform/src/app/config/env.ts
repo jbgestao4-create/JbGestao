@@ -10,6 +10,16 @@ export interface EnvironmentValidationResult {
 }
 
 /**
+ * Remove barras finais ou prefixos acidentais (/rest/v1) da URL do Supabase.
+ */
+function normalizeSupabaseUrl(rawUrl: string): string {
+  let cleaned = rawUrl.trim().replace(/\/+$/, '')
+  cleaned = cleaned.replace(/\/rest\/v1\/?$/, '')
+  cleaned = cleaned.replace(/\/auth\/v1\/?$/, '')
+  return cleaned
+}
+
+/**
  * Valida a presença das variáveis de ambiente obrigatórias.
  */
 export function checkEnvironment(): EnvironmentValidationResult {
@@ -23,11 +33,14 @@ export function checkEnvironment(): EnvironmentValidationResult {
   }
 }
 
+const rawUrl = (import.meta.env['VITE_SUPABASE_URL'] as string) || ''
+const rawKey = (import.meta.env['VITE_SUPABASE_ANON_KEY'] as string) || ''
+
 /** Configurações de ambiente validadas e tipadas com fallback seguro para não quebrar a inicialização */
 export const env = {
   supabase: {
-    url: (import.meta.env['VITE_SUPABASE_URL'] as string) || 'https://placeholder.supabase.co',
-    anonKey: (import.meta.env['VITE_SUPABASE_ANON_KEY'] as string) || 'placeholder-anon-key',
+    url: rawUrl ? normalizeSupabaseUrl(rawUrl) : 'https://placeholder.supabase.co',
+    anonKey: rawKey || 'placeholder-anon-key',
   },
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,
