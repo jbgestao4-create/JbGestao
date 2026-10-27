@@ -35,6 +35,17 @@ export interface OrganizationMembership {
   role: OrganizationRole
 }
 
+/** Detalhes completos do membro da organização para gestão de equipe */
+export interface OrganizationMemberDetail {
+  userId: UUID
+  organizationId: UUID
+  role: OrganizationRole
+  displayName: string
+  email: string
+  modules: ModuleCode[]
+  createdAt: string
+}
+
 /** Resultado genérico de uma operação de serviço */
 export type ServiceResult<T> =
   { success: true; data: T } | { success: false; error: string; code?: string }

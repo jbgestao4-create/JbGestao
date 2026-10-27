@@ -1,12 +1,23 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type {
+  ModuleCode,
   Organization,
+  OrganizationMemberDetail,
   OrganizationMembership,
   OrganizationRole,
   ServiceResult,
   UUID,
 } from '@shared/types/common'
+
+export interface AddMemberParams {
+  organizationId: UUID
+  email: string
+  name: string
+  password?: string
+  role: OrganizationRole
+  modules: ModuleCode[]
+}
 
 export const organizationService = {
   /**
@@ -94,7 +105,7 @@ export const organizationService = {
   },
 
   /**
-   * Lista os membros de uma organização.
+   * Lista os membros de uma organização com dados básicos.
    */
   async getMembers(orgId: UUID): Promise<ServiceResult<OrganizationMembership[]>> {
     try {
@@ -119,6 +130,111 @@ export const organizationService = {
     } catch (err) {
       logger.error('Exceção ao listar membros', err)
       return { success: false, error: 'Erro inesperado ao buscar membros.' }
+    }
+  },
+
+  /**
+   * Lista membros da organização com detalhes de perfil e módulos permitidos.
+   */
+  async getMembersWithDetails(orgId: UUID): Promise<ServiceResult<OrganizationMemberDetail[]>> {
+    try {
+      const { data, error } = await supabase.rpc('get_organization_members_with_details', {
+        p_org_id: orgId,
+      })
+
+      if (error) {
+        logger.error('Erro ao listar membros detalhados', error)
+        return { success: false, error: 'Não foi possível carregar a lista de funcionários.' }
+      }
+
+      return {
+        success: true,
+        data: (data ?? []).map((row: any) => ({
+          userId: row.user_id,
+          organizationId: row.organization_id,
+          role: row.role as OrganizationRole,
+          displayName: row.display_name,
+          email: row.email,
+          modules: (row.modules ?? []) as ModuleCode[],
+          createdAt: row.created_at,
+        })),
+      }
+    } catch (err) {
+      logger.error('Exceção ao listar detalhes dos membros', err)
+      return { success: false, error: 'Erro inesperado ao carregar membros.' }
+    }
+  },
+
+  /**
+   * Cadastra ou adiciona um funcionário/membro e concede permissões de módulos.
+   */
+  async addMember(params: AddMemberParams): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.rpc('add_organization_member', {
+        p_org_id: params.organizationId,
+        p_email: params.email.trim(),
+        p_name: params.name.trim(),
+        p_password: params.password ? params.password.trim() : null,
+        p_role: params.role,
+        p_modules: params.modules,
+      })
+
+      if (error) {
+        logger.warn('Erro ao adicionar membro', { message: error.message })
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao adicionar membro', err)
+      return { success: false, error: 'Erro inesperado ao cadastrar funcionário.' }
+    }
+  },
+
+  /**
+   * Remove um funcionário/membro da organização.
+   */
+  async removeMember(orgId: UUID, userId: UUID): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.rpc('remove_organization_member', {
+        p_org_id: orgId,
+        p_user_id: userId,
+      })
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao remover membro', err)
+      return { success: false, error: 'Erro inesperado ao remover membro.' }
+    }
+  },
+
+  /**
+   * Atualiza as permissões de módulos de um membro.
+   */
+  async updateMemberModules(
+    orgId: UUID,
+    userId: UUID,
+    modules: ModuleCode[],
+  ): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.rpc('update_member_modules', {
+        p_org_id: orgId,
+        p_user_id: userId,
+        p_modules: modules,
+      })
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao atualizar permissões de módulos do membro', err)
+      return { success: false, error: 'Erro inesperado ao atualizar permissões.' }
     }
   },
 

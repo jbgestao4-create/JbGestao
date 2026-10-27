@@ -117,3 +117,4 @@ CREATE POLICY "Membros podem excluir itens de orçamentos de sua organização"
   USING (
     public.is_org_member(organization_id, auth.uid())
   );
+
