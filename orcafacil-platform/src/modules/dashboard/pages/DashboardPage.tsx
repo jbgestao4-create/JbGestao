@@ -216,10 +216,11 @@ export function DashboardPage() {
 
             <Link
               to="/"
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              aria-label="Página Inicial"
+              title="Página Inicial"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
             >
               <Home aria-hidden="true" className="h-4 w-4" />
-              Página Inicial
             </Link>
 
             <ProfileMenu
