@@ -6,15 +6,14 @@ import { useModuleAccess } from '@modules/access-control/context/ModuleAccessCon
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
+import { BrandLogo } from '@shared/components/BrandLogo'
 import {
   LayoutDashboard,
-  Boxes,
   FileSpreadsheet,
   Users,
   Settings,
   LogOut,
   Building2,
-  Plus,
 } from 'lucide-react'
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -26,12 +25,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const isDashboard = location.pathname === '/'
 
-  const [isCreatingOrg, setIsCreatingOrg] = useState(false)
   const [newOrgName, setNewOrgName] = useState('')
   const [newOrgSlug, setNewOrgSlug] = useState('')
   const [orgError, setOrgError] = useState('')
   const [isSubmittingOrg, setIsSubmittingOrg] = useState(false)
-
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newOrgName || !newOrgSlug) {
@@ -44,7 +41,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
     const res = await createOrganization(newOrgName, newOrgSlug)
     if (res.success) {
-      setIsCreatingOrg(false)
       setNewOrgName('')
       setNewOrgSlug('')
     } else {
@@ -54,8 +50,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const handleSignOut = async () => {
-    await signOut()
-    navigate('/login')
+    const result = await signOut()
+    if (result.success) navigate('/login')
+    return result
   }
 
   // Se o usuário ainda não tiver nenhuma organização cadastrada
@@ -63,9 +60,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
         <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 mb-4">
-            <Building2 className="w-6 h-6" />
-          </div>
+          <BrandLogo size="lg" className="mb-4" />
           <h2 className="text-xl font-bold text-gray-900 mb-1">Crie sua primeira organização</h2>
           <p className="text-sm text-gray-500 mb-6">
             Para começar a usar a plataforma, informe o nome do seu negócio ou trabalho autônomo.
@@ -145,18 +140,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
           {/* LOGO & ORG SELECTOR */}
           <div className="p-4 border-b border-gray-100">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                OF
-              </div>
-              <div>
-                <span className="font-bold text-gray-900 tracking-tight block text-sm">
-                  OrçaFácil
-                </span>
-                <span className="text-[10px] text-gray-400 uppercase tracking-wider block -mt-0.5">
-                  Platform
-                </span>
-              </div>
+            <div className="mb-3">
+              <BrandLogo size="sm" />
             </div>
 
             {/* Seletor de Organização */}
@@ -186,16 +171,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 Geral
               </span>
               <div className="mt-1 space-y-0.5">
-                {navItem('/', 'Visão Geral', <LayoutDashboard className="w-4 h-4" />)}
-                {navItem('/modules', 'Módulos', <Boxes className="w-4 h-4" />)}
+                {navItem('/', 'Página Inicial', <LayoutDashboard className="w-4 h-4" />)}
               </div>
             </div>
 
-            {/* SEÇÃO ORÇAFÁCIL */}
+            {/* Módulos de gestão */}
             {hasOrcafacil && (
               <div>
                 <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                  OrçaFácil
+                  JB Software
                 </span>
                 <div className="mt-1 space-y-0.5">
                   {navItem(
@@ -224,14 +208,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
               variant="sidebar"
               displayName={profile?.displayName || 'Usuário'}
               email={user?.email}
+              avatarUrl={profile?.avatarUrl}
+              onSignOut={handleSignOut}
             />
-            <button
-              onClick={() => void handleSignOut()}
-              title="Encerrar Sessão"
-              className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
           </div>
         </aside>
       )}
@@ -248,18 +227,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCreatingOrg(true)}
-                className="text-xs"
-              >
-                <Plus className="w-3.5 h-3.5" /> Nova Organização
-              </Button>
               <ProfileMenu
                 variant="header"
                 displayName={profile?.displayName || 'Usuário'}
                 email={user?.email}
+                avatarUrl={profile?.avatarUrl}
+                onSignOut={handleSignOut}
               />
             </div>
           </header>
@@ -270,59 +243,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </main>
 
-      {/* MODAL CRIAR ORGANIZAÇÃO ADICIONAL */}
-      {isCreatingOrg && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-1">Cadastrar Nova Organização</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Cada organização possui seus próprios clientes, propostas e membros isolados.
-            </p>
-
-            <form onSubmit={(e) => void handleCreateOrg(e)} className="space-y-4">
-              {orgError && (
-                <div className="p-3 bg-red-50 text-red-700 text-xs rounded-lg">{orgError}</div>
-              )}
-              <Input
-                label="Nome da Organização"
-                placeholder="Ex: Beta Soluções"
-                value={newOrgName}
-                onChange={(e) => {
-                  setNewOrgName(e.target.value)
-                  setNewOrgSlug(
-                    e.target.value
-                      .toLowerCase()
-                      .normalize('NFD')
-                      .replace(/[\u0300-\u036f]/g, '')
-                      .replace(/[^a-z0-9]+/g, '-')
-                      .replace(/^-+|-+$/g, ''),
-                  )
-                }}
-                required
-              />
-              <Input
-                label="Slug Único"
-                value={newOrgSlug}
-                onChange={(e) => setNewOrgSlug(e.target.value)}
-                required
-              />
-              <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsCreatingOrg(false)}
-                  disabled={isSubmittingOrg}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit" isLoading={isSubmittingOrg}>
-                  Criar Organização
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

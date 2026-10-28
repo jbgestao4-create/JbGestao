@@ -1,30 +1,69 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
-import type { ServiceResult, UUID } from '@shared/types/common'
+import type { CustomerType, ServiceResult, UUID } from '@shared/types/common'
 
 export interface Customer {
   id: UUID
   organizationId: UUID
   name: string
+  personType: CustomerType
+  document: string | null
   phone: string | null
   email: string | null
   address: string | null
+  postalCode: string | null
+  addressNumber: string | null
+  notes: string | null
   createdAt: string
   updatedAt: string
 }
 
 export interface CreateCustomerParams {
   name: string
+  personType: CustomerType
+  document?: string | null
   phone?: string | null
   email?: string | null
   address?: string | null
+  postalCode?: string | null
+  addressNumber?: string | null
+  notes?: string | null
 }
 
 export interface UpdateCustomerParams {
   name?: string
+  personType?: CustomerType
+  document?: string | null
   phone?: string | null
   email?: string | null
   address?: string | null
+  postalCode?: string | null
+  addressNumber?: string | null
+  notes?: string | null
+}
+
+function getCustomerCreateErrorMessage(error: { code?: string; message?: string } | null) {
+  if (error?.code === 'PGRST204' || error?.code === '42703') {
+    return 'O esquema da tabela de clientes no Supabase está desatualizado. Sincronize as migrações e tente novamente.'
+  }
+
+  if (error?.code === '42501') {
+    return 'Sem permissão para cadastrar clientes nesta organização. Verifique se seu usuário pertence à organização selecionada.'
+  }
+
+  if (error?.code === '23502') {
+    return 'Preencha todos os campos obrigatórios antes de salvar o cliente.'
+  }
+
+  if (error?.code === '23503') {
+    return 'Não foi possível vincular o cliente à organização selecionada. Atualize a página e tente novamente.'
+  }
+
+  if (error?.code === 'PGRST116') {
+    return 'O cliente não pôde ser confirmado após o cadastro. Verifique as permissões de leitura da organização antes de tentar novamente.'
+  }
+
+  return 'Não foi possível cadastrar o cliente. Verifique sua conexão e tente novamente.'
 }
 
 export const customerService = {
@@ -50,9 +89,14 @@ export const customerService = {
           id: c.id,
           organizationId: c.organization_id,
           name: c.name,
+          personType: c.person_type ?? 'individual',
+          document: c.document ?? null,
           phone: c.phone,
           email: c.email,
           address: c.address,
+          postalCode: c.postal_code ?? null,
+          addressNumber: c.address_number ?? null,
+          notes: c.notes ?? null,
           createdAt: c.created_at,
           updatedAt: c.updated_at,
         })),
@@ -85,9 +129,14 @@ export const customerService = {
           id: data.id,
           organizationId: data.organization_id,
           name: data.name,
+          personType: data.person_type ?? 'individual',
+          document: data.document ?? null,
           phone: data.phone,
           email: data.email,
           address: data.address,
+          postalCode: data.postal_code ?? null,
+          addressNumber: data.address_number ?? null,
+          notes: data.notes ?? null,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
         },
@@ -111,16 +160,28 @@ export const customerService = {
         .insert({
           organization_id: organizationId,
           name: params.name.trim(),
+          person_type: params.personType,
+          document: params.document?.replace(/\D/g, '') || null,
           phone: params.phone?.trim() || null,
           email: params.email?.trim() || null,
           address: params.address?.trim() || null,
+          postal_code: params.postalCode?.replace(/\D/g, '') || null,
+          address_number: params.addressNumber?.trim() || null,
+          notes: params.notes?.trim() || null,
         })
         .select()
         .single()
 
       if (error || !data) {
-        logger.error('Erro ao cadastrar cliente', error)
-        return { success: false, error: 'Não foi possível cadastrar o cliente.' }
+        logger.error('Erro ao cadastrar cliente', error, {
+          code: error?.code,
+          message: error?.message,
+        })
+        return {
+          success: false,
+          error: getCustomerCreateErrorMessage(error),
+          ...(error?.code && { code: error.code }),
+        }
       }
 
       return {
@@ -129,9 +190,14 @@ export const customerService = {
           id: data.id,
           organizationId: data.organization_id,
           name: data.name,
+          personType: data.person_type ?? 'individual',
+          document: data.document ?? null,
           phone: data.phone,
           email: data.email,
           address: data.address,
+          postalCode: data.postal_code ?? null,
+          addressNumber: data.address_number ?? null,
+          notes: data.notes ?? null,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
         },
@@ -155,9 +221,20 @@ export const customerService = {
         .from('customers')
         .update({
           name: params.name?.trim(),
-          phone: params.phone?.trim() ?? null,
-          email: params.email?.trim() ?? null,
-          address: params.address?.trim() ?? null,
+          ...(params.personType !== undefined && { person_type: params.personType }),
+          ...(params.document !== undefined && {
+            document: params.document?.replace(/\D/g, '') || null,
+          }),
+          ...(params.phone !== undefined && { phone: params.phone?.trim() || null }),
+          ...(params.email !== undefined && { email: params.email?.trim() || null }),
+          ...(params.address !== undefined && { address: params.address?.trim() || null }),
+          ...(params.postalCode !== undefined && {
+            postal_code: params.postalCode?.replace(/\D/g, '') || null,
+          }),
+          ...(params.addressNumber !== undefined && {
+            address_number: params.addressNumber?.trim() || null,
+          }),
+          ...(params.notes !== undefined && { notes: params.notes?.trim() || null }),
         })
         .eq('organization_id', organizationId)
         .eq('id', customerId)

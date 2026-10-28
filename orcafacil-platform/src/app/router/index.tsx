@@ -13,7 +13,9 @@ import { OrganizationSettingsPage } from '@modules/organizations/pages/Organizat
 
 import { QuotesListPage } from '@modules/orcafacil/pages/QuotesListPage'
 import { QuoteFormPage } from '@modules/orcafacil/pages/QuoteFormPage'
+import { CustomersHomePage } from '@modules/customers/pages/CustomersHomePage'
 import { CustomersListPage } from '@modules/customers/pages/CustomersListPage'
+import { CustomerFormPage } from '@modules/customers/pages/CustomerFormPage'
 
 export const router = createBrowserRouter([
   // Rotas públicas de autenticação
@@ -64,7 +66,7 @@ export const router = createBrowserRouter([
     ),
   },
 
-  // Rotas do módulo OrçaFácil (protegidas por autenticação E concessão de módulo)
+  // Rotas do módulo JB Software (protegidas por autenticação e concessão de módulo)
   {
     path: '/orcafacil/quotes',
     element: (
@@ -90,7 +92,37 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <RequireModule moduleCode="orcafacil">
+          <CustomersHomePage />
+        </RequireModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/customers/search',
+    element: (
+      <ProtectedRoute>
+        <RequireModule moduleCode="orcafacil">
           <CustomersListPage />
+        </RequireModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/customers/new',
+    element: (
+      <ProtectedRoute>
+        <RequireModule moduleCode="orcafacil">
+          <CustomerFormPage />
+        </RequireModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/customers/:customerId/edit',
+    element: (
+      <ProtectedRoute>
+        <RequireModule moduleCode="orcafacil">
+          <CustomerFormPage />
         </RequireModule>
       </ProtectedRoute>
     ),
@@ -102,4 +134,3 @@ export const router = createBrowserRouter([
     element: <Navigate to="/" replace />,
   },
 ])
-

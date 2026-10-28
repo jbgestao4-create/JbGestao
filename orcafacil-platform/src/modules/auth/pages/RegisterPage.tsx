@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { BrandLogo } from '@shared/components/BrandLogo'
 
 export function RegisterPage() {
   const { signUp } = useAuth()
@@ -46,9 +47,7 @@ export function RegisterPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg mx-auto mb-3 shadow-md shadow-blue-500/20">
-          OF
-        </div>
+        <BrandLogo size="lg" className="mx-auto mb-3" />
         <h2 className="text-2xl font-bold tracking-tight text-gray-900">Crie sua conta</h2>
         <p className="mt-1 text-sm text-gray-500">
           Comece a gerenciar seus orçamentos e clientes de forma profissional

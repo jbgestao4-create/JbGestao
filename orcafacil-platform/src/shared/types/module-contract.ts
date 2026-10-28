@@ -3,7 +3,7 @@ import type { ModuleCode } from './database'
 import type { OrganizationRole } from './common'
 
 /**
- * Contrato formal para registro estático de módulos na OrçaFácil Platform.
+ * Contrato formal para registro estático de módulos na plataforma JB Software.
  * Garante que novos módulos (ex: AgendaPro, EstoqueLeve) possam ser adicionados
  * de maneira desacoplada, extensível e com verificação de tipo em tempo de compilação.
  */
@@ -37,4 +37,3 @@ export interface PlatformModuleDescriptor {
   /** Componente de entrada do módulo */
   entryComponent?: () => ReactNode
 }
-

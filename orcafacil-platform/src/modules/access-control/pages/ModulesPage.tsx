@@ -75,7 +75,7 @@ export function ModulesPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="w-full cursor-not-allowed"
+                    className="w-full cursor-not-allowed hover:bg-blue-100 hover:text-blue-700"
                     disabled
                   >
                     Indisponível nesta versão

@@ -13,6 +13,8 @@ import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { FileSpreadsheet, Plus, Trash2 } from 'lucide-react'
 import type { QuoteStatus } from '@shared/types/database'
+import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
+import type { ServiceResult } from '@shared/types/common'
 
 export function QuotesListPage() {
   const { currentOrganization } = useOrganization()
@@ -20,6 +22,7 @@ export function QuotesListPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [isLoading, setIsLoading] = useState(true)
   const [statusError, setStatusError] = useState<string | null>(null)
+  const [quoteToDelete, setQuoteToDelete] = useState<QuoteListItem | null>(null)
 
   const loadQuotes = async () => {
     if (!currentOrganization) return
@@ -60,16 +63,17 @@ export function QuotesListPage() {
     }
   }
 
-  const handleDelete = async (quoteId: string) => {
-    if (!currentOrganization) return
-    if (!window.confirm('Deseja realmente excluir este orçamento e seus itens?')) return
-
-    const res = await quoteService.deleteQuote(currentOrganization.id, quoteId)
-    if (res.success) {
-      await loadQuotes()
-    } else {
-      alert(res.error)
+  const handleDelete = async (): Promise<ServiceResult<void>> => {
+    if (!currentOrganization || !quoteToDelete) {
+      return { success: false, error: 'Não foi possível identificar o orçamento.' }
     }
+
+    const res = await quoteService.deleteQuote(currentOrganization.id, quoteToDelete.id)
+    if (res.success) {
+      setQuoteToDelete(null)
+      await loadQuotes()
+    }
+    return res
   }
 
   const filteredQuotes =
@@ -203,9 +207,10 @@ export function QuotesListPage() {
                             )}
 
                             <button
-                              onClick={() => void handleDelete(q.id)}
+                              onClick={() => setQuoteToDelete(q)}
                               className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors cursor-pointer"
                               title="Excluir Orçamento"
+                              aria-label={`Excluir orçamento ${q.quoteNumber}`}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -220,6 +225,14 @@ export function QuotesListPage() {
           )}
         </CardContent>
       </Card>
+      <ConfirmActionDialog
+        open={quoteToDelete !== null}
+        title="Excluir orçamento?"
+        description="Tem certeza de que deseja excluir este orçamento e seus itens?"
+        confirmLabel="Sim, excluir"
+        onCancel={() => setQuoteToDelete(null)}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

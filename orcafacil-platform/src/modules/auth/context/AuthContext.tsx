@@ -49,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile({
         id: currentUser.id,
         displayName: currentUser.user_metadata['display_name'] as string | null,
+        avatarUrl: null,
         email: currentUser.email ?? '',
         createdAt: currentUser.created_at,
       })

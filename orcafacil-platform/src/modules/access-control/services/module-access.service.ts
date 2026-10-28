@@ -26,7 +26,7 @@ export const PLATFORM_MODULES_CATALOG: PlatformModule[] = [
   {
     id: '1',
     code: 'orcafacil',
-    name: 'OrçaFácil',
+    name: 'JB Software',
     isGloballyAvailable: true,
     description: 'Gestão comercial, clientes, serviços, materiais e propostas profissionais.',
     status: 'available',
@@ -70,9 +70,9 @@ export const moduleAccessService = {
         return {
           id: m.id,
           code: m.code as ModuleCode,
-          name: m.name,
+          name: meta?.name ?? m.name,
           isGloballyAvailable: m.is_globally_available,
-          description: meta?.description ?? 'Módulo da plataforma OrçaFácil',
+          description: meta?.description ?? 'Módulo da plataforma JB Software',
           status: meta?.status ?? (m.is_globally_available ? 'available' : 'coming_soon'),
         }
       })

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { authService } from '../services/auth.service'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { BrandLogo } from '@shared/components/BrandLogo'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -22,6 +23,7 @@ export function ForgotPasswordPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
+        <BrandLogo size="lg" className="mx-auto mb-4" />
         <h2 className="text-2xl font-bold tracking-tight text-gray-900">Recuperar senha</h2>
         <p className="mt-1 text-sm text-gray-500">
           Informe seu e-mail cadastrado para receber o link de redefinição
@@ -69,4 +71,3 @@ export function ForgotPasswordPage() {
     </div>
   )
 }
-

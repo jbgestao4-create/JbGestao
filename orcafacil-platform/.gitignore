@@ -5,9 +5,7 @@ coverage/
 .vite/
 
 # Variáveis de ambiente — NUNCA versionar arquivos com credenciais reais
-.env
-.env.local
-.env.*.local
+
 
 # Logs
 *.log

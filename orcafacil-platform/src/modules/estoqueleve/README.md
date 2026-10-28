@@ -13,8 +13,8 @@ Este módulo está planejado para disponibilizar controle de estoques, movimenta
    - O EstoqueLeve **NÃO** deve implementar autenticação própria.
    - Deve consumir o contexto `useOrganization()` da plataforma.
    - Toda entidade interna (ex: `products`, `stock_movements`) pertencerá à organização e terá RLS ativada.
-2. **Integração com Orçamentos (OrçaFácil):**
-   - Não deve consultar tabelas internas do OrçaFácil diretamente.
+2. **Integração com Orçamentos (JB Software):**
+   - Não deve consultar tabelas internas do módulo JB Software diretamente.
    - A integração futura para baixa de materiais a partir de propostas aprovadas deve ocorrer via contrato de serviço ou eventos de domínio.
 3. **Controle de Acesso:**
    - O acesso deve ser verificado centralmente via `useModuleAccess().canAccess('estoqueleve')`.

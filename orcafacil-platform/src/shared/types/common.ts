@@ -9,6 +9,9 @@ export type UUID = string
 /** Papel do usuário dentro de uma organização */
 export type OrganizationRole = 'owner' | 'admin' | 'member'
 
+/** Tipo de pessoa de um cliente cadastrado */
+export type CustomerType = 'individual' | 'company'
+
 /** Código único e estável de um módulo da plataforma */
 export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 
@@ -16,6 +19,7 @@ export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 export interface UserProfile {
   id: UUID
   displayName: string | null
+  avatarUrl: string | null
   email: string
   createdAt: string
 }

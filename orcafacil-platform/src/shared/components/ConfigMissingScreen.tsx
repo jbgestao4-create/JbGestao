@@ -1,9 +1,11 @@
 import { KeyRound, ExternalLink, RefreshCw } from 'lucide-react'
+import { BrandLogo } from '@shared/components/BrandLogo'
 
 export function ConfigMissingScreen({ missing }: { missing: string[] }) {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-gray-900">
       <div className="max-w-lg w-full bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+        <BrandLogo className="mb-5" />
         <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-5">
           <KeyRound className="w-7 h-7" />
         </div>
@@ -91,4 +93,3 @@ export function ConfigMissingScreen({ missing }: { missing: string[] }) {
     </div>
   )
 }
-

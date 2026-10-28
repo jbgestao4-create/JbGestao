@@ -1,14 +1,26 @@
+import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, Settings2, UserRound } from 'lucide-react'
+import { ChevronDown, LogOut, Settings2, UserRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
+import type { ServiceResult } from '@shared/types/common'
 
 type ProfileMenuProps = {
   displayName: string
   email?: string
+  avatarUrl?: string | null
   variant?: 'dashboard' | 'header' | 'sidebar'
+  onSignOut?: () => Promise<ServiceResult<void>>
 }
 
-export function ProfileMenu({ displayName, email, variant = 'header' }: ProfileMenuProps) {
+export function ProfileMenu({
+  displayName,
+  email,
+  avatarUrl,
+  variant = 'header',
+  onSignOut,
+}: ProfileMenuProps) {
+  const [isSignOutDialogOpen, setIsSignOutDialogOpen] = useState(false)
   const initials =
     displayName
       .trim()
@@ -43,7 +55,15 @@ export function ProfileMenu({ displayName, email, variant = 'header' }: ProfileM
                   variant === 'sidebar' ? 'h-8 w-8 text-blue-700' : ''
                 }`}
               >
-                {initials}
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={`Foto de ${displayName}`}
+                    className="h-full w-full rounded-full object-cover"
+                  />
+                ) : (
+                  initials
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span
@@ -94,8 +114,34 @@ export function ProfileMenu({ displayName, email, variant = 'header' }: ProfileM
               Configurações do Perfil
             </Link>
           </DropdownMenu.Item>
+          {onSignOut && (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-slate-100" />
+              <DropdownMenu.Item
+                onSelect={() => {
+                  setIsSignOutDialogOpen(true)
+                }}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-red-600 outline-none transition-colors hover:bg-red-50 focus:bg-red-50"
+              >
+                <LogOut aria-hidden="true" className="h-4 w-4" />
+                Sair
+              </DropdownMenu.Item>
+            </>
+          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
+      {onSignOut && (
+        <ConfirmActionDialog
+          open={isSignOutDialogOpen}
+          title="Sair do sistema?"
+          description="Tem certeza de que deseja encerrar sua sessão?"
+          confirmLabel="Sim, sair"
+          onCancel={() => {
+            setIsSignOutDialogOpen(false)
+          }}
+          onConfirm={onSignOut}
+        />
+      )}
     </DropdownMenu.Root>
   )
 }

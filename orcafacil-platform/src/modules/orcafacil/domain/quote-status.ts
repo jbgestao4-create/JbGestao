@@ -1,7 +1,7 @@
 import type { QuoteStatus } from '@shared/types/database'
 
 /**
- * Máquina de estados finita (FSM) dos orçamentos da plataforma OrçaFácil.
+ * Máquina de estados finita (FSM) dos orçamentos da plataforma JB Software.
  *
  * Transições permitidas:
  * - draft: sent, rejected

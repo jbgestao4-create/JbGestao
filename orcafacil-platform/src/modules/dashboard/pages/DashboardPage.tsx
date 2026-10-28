@@ -11,7 +11,6 @@ import {
   FileSpreadsheet,
   Home,
   LockKeyhole,
-  LogOut,
   Package,
   Settings2,
   ShoppingCart,
@@ -86,8 +85,7 @@ export function DashboardPage() {
       action: 'Acessar Vendas',
       icon: ShoppingCart,
       iconStyle: 'bg-blue-50 text-blue-700',
-      isAvailable: hasOrcafacil,
-      path: '/orcafacil/quotes',
+      isAvailable: false,
     },
     {
       id: 'MOD-02',
@@ -133,10 +131,10 @@ export function DashboardPage() {
     },
     {
       id: 'MOD-06',
-      title: 'Configurações',
+      title: 'Organização',
       description:
-        'Parâmetros tributários, dados cadastrais da empresa, gestão de usuários, senhas e permissões de acesso.',
-      action: 'Acessar Configurações',
+        'Dados cadastrais e configurações da organização, membros e permissões de acesso.',
+      action: 'Acessar Organização',
       icon: Settings2,
       iconStyle: 'bg-slate-100 text-slate-700',
       isAvailable: true,
@@ -147,6 +145,7 @@ export function DashboardPage() {
   const handleSignOut = async () => {
     const result = await signOut()
     if (result.success) navigate('/login')
+    return result
   }
 
   const connectionLabel = {
@@ -227,16 +226,9 @@ export function DashboardPage() {
               variant="dashboard"
               displayName={accountName}
               email={user?.email ?? undefined}
+              avatarUrl={profile?.avatarUrl}
+              onSignOut={handleSignOut}
             />
-
-            <button
-              type="button"
-              onClick={() => void handleSignOut()}
-              className="inline-flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
-            >
-              <LogOut aria-hidden="true" className="h-4 w-4" />
-              Sair
-            </button>
           </div>
         </div>
       </header>
@@ -362,7 +354,7 @@ export function DashboardPage() {
                         className={`flex min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                           isFeatured
                             ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
-                            : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                            : 'bg-slate-50 text-slate-700 hover:bg-blue-100 hover:text-blue-800'
                         }`}
                       >
                         {module.action}
@@ -372,7 +364,7 @@ export function DashboardPage() {
                       <button
                         type="button"
                         disabled
-                        className="flex min-h-10 w-full cursor-not-allowed items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-400"
+                        className="flex min-h-10 w-full cursor-not-allowed items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-400 transition-colors hover:bg-blue-100 hover:text-blue-800"
                       >
                         Indisponível nesta versão
                         <ArrowRight aria-hidden="true" className="h-4 w-4 shrink-0" />

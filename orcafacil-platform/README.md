@@ -1,4 +1,4 @@
-# OrçaFácil Platform
+# JB Software de Gestão
 
 Fundação técnica funcional da plataforma SaaS multi-tenant, modular e extensível voltada para profissionais autônomos, prestadores de serviços e pequenos negócios.
 

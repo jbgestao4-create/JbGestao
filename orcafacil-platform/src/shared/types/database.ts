@@ -31,17 +31,20 @@ export interface Database {
         Row: {
           id: string
           display_name: string | null
+          avatar_path: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id: string
           display_name?: string | null
+          avatar_path?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           display_name?: string | null
+          avatar_path?: string | null
           updated_at?: string
         }
       }
@@ -169,9 +172,14 @@ export interface Database {
           id: string
           organization_id: string
           name: string
+          person_type: 'individual' | 'company'
+          document: string | null
           phone: string | null
           email: string | null
           address: string | null
+          postal_code: string | null
+          address_number: string | null
+          notes: string | null
           created_at: string
           updated_at: string
         }
@@ -179,17 +187,27 @@ export interface Database {
           id?: string
           organization_id: string
           name: string
+          person_type?: 'individual' | 'company'
+          document?: string | null
           phone?: string | null
           email?: string | null
           address?: string | null
+          postal_code?: string | null
+          address_number?: string | null
+          notes?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           name?: string
+          person_type?: 'individual' | 'company'
+          document?: string | null
           phone?: string | null
           email?: string | null
           address?: string | null
+          postal_code?: string | null
+          address_number?: string | null
+          notes?: string | null
           updated_at?: string
         }
       }

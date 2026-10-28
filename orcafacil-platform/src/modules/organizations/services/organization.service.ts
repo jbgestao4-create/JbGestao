@@ -69,7 +69,7 @@ export const organizationService = {
 
   /**
    * Cria uma organização de forma atômica e segura.
-   * Concede a propriedade ao criador e ativa o módulo OrçaFácil.
+   * Concede a propriedade ao criador e ativa o módulo JB Software.
    */
   async createOrganization(
     name: string,

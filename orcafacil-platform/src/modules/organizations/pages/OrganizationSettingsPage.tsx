@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Badge } from '@shared/components/ui/Badge'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import {
   ShieldCheck,
   User,
@@ -21,6 +22,7 @@ import type {
   ModuleCode,
   OrganizationMemberDetail,
   OrganizationRole,
+  ServiceResult,
 } from '@shared/types/common'
 
 export function OrganizationSettingsPage() {
@@ -43,6 +45,7 @@ export function OrganizationSettingsPage() {
   const [editingMember, setEditingMember] = useState<OrganizationMemberDetail | null>(null)
   const [editModules, setEditModules] = useState<ModuleCode[]>([])
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [memberToRemove, setMemberToRemove] = useState<OrganizationMemberDetail | null>(null)
 
   const canManageMembers = userRole === 'owner' || userRole === 'admin'
 
@@ -145,23 +148,21 @@ export function OrganizationSettingsPage() {
     setIsSavingEdit(false)
   }
 
-  const handleRemoveMember = async (member: OrganizationMemberDetail) => {
-    if (!currentOrganization) return
-    if (member.role === 'owner') {
-      alert('O proprietário da organização não pode ser removido.')
-      return
+  const handleRemoveMember = async (): Promise<ServiceResult<void>> => {
+    if (!currentOrganization || !memberToRemove) {
+      return { success: false, error: 'Não foi possível identificar o funcionário.' }
     }
 
-    const confirmMsg = `Deseja realmente remover o funcionário ${member.displayName || member.email} da organização?`
-    if (!window.confirm(confirmMsg)) return
-
-    const res = await organizationService.removeMember(currentOrganization.id, member.userId)
+    const res = await organizationService.removeMember(
+      currentOrganization.id,
+      memberToRemove.userId,
+    )
     if (res.success) {
+      setMemberToRemove(null)
       await loadMembers()
       await refreshAccess()
-    } else {
-      alert(res.error)
     }
+    return res
   }
 
   const getModuleIcon = (code: ModuleCode) => {
@@ -267,11 +268,7 @@ export function OrganizationSettingsPage() {
                           <span className="text-sm font-bold text-gray-900">
                             {member.displayName}
                           </span>
-                          <Badge
-                            variant={
-                              isOwner ? 'success' : isAdmin ? 'info' : 'default'
-                            }
-                          >
+                          <Badge variant={isOwner ? 'success' : isAdmin ? 'info' : 'default'}>
                             {isOwner
                               ? 'Proprietário'
                               : isAdmin
@@ -298,7 +295,7 @@ export function OrganizationSettingsPage() {
                               >
                                 {getModuleIcon(mCode)}
                                 {mCode === 'orcafacil'
-                                  ? 'OrçaFácil'
+                                  ? 'JB Software'
                                   : mCode === 'agendapro'
                                     ? 'AgendaPro'
                                     : 'EstoqueLeve'}
@@ -327,9 +324,11 @@ export function OrganizationSettingsPage() {
                         </Button>
 
                         <button
-                          onClick={() => void handleRemoveMember(member)}
+                          type="button"
+                          onClick={() => setMemberToRemove(member)}
                           className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                           title="Remover Funcionário"
+                          aria-label={`Remover ${member.displayName || member.email}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -522,9 +521,7 @@ export function OrganizationSettingsPage() {
       {editingMember && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-1">
-              Editar Acesso aos Módulos
-            </h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Editar Acesso aos Módulos</h3>
             <p className="text-xs text-gray-500 mb-4">
               Funcionário: <strong>{editingMember.displayName}</strong> ({editingMember.email})
             </p>
@@ -585,6 +582,14 @@ export function OrganizationSettingsPage() {
           </div>
         </div>
       )}
+      <ConfirmActionDialog
+        open={memberToRemove !== null}
+        title="Remover funcionário?"
+        description={`Tem certeza de que deseja remover ${memberToRemove?.displayName || memberToRemove?.email || 'este funcionário'} da organização?`}
+        confirmLabel="Sim, remover"
+        onCancel={() => setMemberToRemove(null)}
+        onConfirm={handleRemoveMember}
+      />
     </div>
   )
 }
