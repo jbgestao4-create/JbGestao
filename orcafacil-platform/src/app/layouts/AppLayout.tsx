@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
   Building2,
+  Home,
 } from 'lucide-react'
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -54,6 +55,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (result.success) navigate('/login')
     return result
   }
+
+  const homeShortcut = (
+    <Link
+      to="/"
+      aria-label="Ir para a página inicial"
+      aria-current={isDashboard ? 'page' : undefined}
+      title="Página inicial"
+      className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+    >
+      <Home aria-hidden="true" className="h-5 w-5" />
+    </Link>
+  )
 
   // Se o usuário ainda não tiver nenhuma organização cadastrada
   if (organizations.length === 0) {
@@ -111,6 +124,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </div>
+        {homeShortcut}
       </div>
     )
   }
@@ -243,6 +257,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </main>
 
+      {homeShortcut}
     </div>
   )
 }
