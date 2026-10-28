@@ -4,9 +4,16 @@ import { authService } from '../services/auth.service'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import type { FontSizePreference } from '../context/AuthContext'
+
+const FONT_SIZE_OPTIONS: { value: FontSizePreference; label: string; sample: string }[] = [
+  { value: 'small', label: 'Pequena', sample: 'A' },
+  { value: 'medium', label: 'Padrão', sample: 'A' },
+  { value: 'large', label: 'Grande', sample: 'A' },
+]
 
 export function ProfilePage() {
-  const { user, profile } = useAuth()
+  const { user, profile, fontSizePreference, setFontSizePreference } = useAuth()
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
@@ -64,6 +71,53 @@ export function ProfilePage() {
             <span className="block text-xs text-gray-500">E-mail de Acesso</span>
             <span className="text-sm font-medium text-gray-900">{user?.email}</span>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-sm font-semibold text-gray-900">Preferências de Exibição</h2>
+        </CardHeader>
+        <CardContent>
+          <fieldset>
+            <legend className="text-sm font-medium text-gray-800">Tamanho da fonte</legend>
+            <p className="mt-1 text-xs text-gray-500">
+              Ajuste o tamanho dos textos da plataforma. A alteração é aplicada imediatamente.
+            </p>
+            <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="Tamanho da fonte">
+              {FONT_SIZE_OPTIONS.map((option) => {
+                const isSelected = fontSizePreference === option.value
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setFontSizePreference(option.value)}
+                    className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={
+                        option.value === 'small'
+                          ? 'text-xs'
+                          : option.value === 'large'
+                            ? 'text-lg'
+                            : 'text-base'
+                      }
+                    >
+                      {option.sample}
+                    </span>
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
         </CardContent>
       </Card>
 

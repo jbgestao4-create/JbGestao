@@ -3,11 +3,26 @@ import type { Session, User } from '@supabase/supabase-js'
 import { authService, type SignInParams, type SignUpParams } from '../services/auth.service'
 import type { ServiceResult, UserProfile } from '@shared/types/common'
 
+export type FontSizePreference = 'small' | 'medium' | 'large'
+
+const FONT_SIZE_STORAGE_PREFIX = 'jb-font-size:'
+const FONT_SIZE_PIXELS: Record<FontSizePreference, string> = {
+  small: '14px',
+  medium: '16px',
+  large: '18px',
+}
+
+function isFontSizePreference(value: string | null): value is FontSizePreference {
+  return value === 'small' || value === 'medium' || value === 'large'
+}
+
 interface AuthContextType {
   user: User | null
   profile: UserProfile | null
   session: Session | null
   isLoading: boolean
+  fontSizePreference: FontSizePreference
+  setFontSizePreference: (preference: FontSizePreference) => void
   signIn: (params: SignInParams) => Promise<ServiceResult<{ user: User; session: Session }>>
   signUp: (
     params: SignUpParams,
@@ -23,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [fontSizePreference, setFontSizePreferenceState] = useState<FontSizePreference>('medium')
 
   const loadProfile = async (currentUser: User) => {
     const prof = await authService.getProfile(currentUser.id)
@@ -69,6 +85,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!user) {
+      setFontSizePreferenceState('medium')
+      document.documentElement.style.removeProperty('font-size')
+      return
+    }
+
+    const storedPreference = localStorage.getItem(`${FONT_SIZE_STORAGE_PREFIX}${user.id}`)
+    const preference = isFontSizePreference(storedPreference) ? storedPreference : 'medium'
+
+    setFontSizePreferenceState(preference)
+    document.documentElement.style.fontSize = FONT_SIZE_PIXELS[preference]
+  }, [user])
+
+  const handleSetFontSizePreference = (preference: FontSizePreference) => {
+    if (!user) return
+
+    setFontSizePreferenceState(preference)
+    localStorage.setItem(`${FONT_SIZE_STORAGE_PREFIX}${user.id}`, preference)
+    document.documentElement.style.fontSize = FONT_SIZE_PIXELS[preference]
+  }
+
   const refreshProfile = async () => {
     if (user) {
       await loadProfile(user)
@@ -106,6 +144,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         session,
         isLoading,
+        fontSizePreference,
+        setFontSizePreference: handleSetFontSizePreference,
         signIn: handleSignIn,
         signUp: handleSignUp,
         signOut: handleSignOut,

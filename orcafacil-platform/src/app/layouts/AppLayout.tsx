@@ -5,6 +5,7 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { ProfileMenu } from '@shared/components/ProfileMenu'
 import {
   LayoutDashboard,
   Boxes,
@@ -14,7 +15,6 @@ import {
   LogOut,
   Building2,
   Plus,
-  User as UserIcon,
 } from 'lucide-react'
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -24,6 +24,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { canAccess } = useModuleAccess()
   const location = useLocation()
   const navigate = useNavigate()
+  const isDashboard = location.pathname === '/'
 
   const [isCreatingOrg, setIsCreatingOrg] = useState(false)
   const [newOrgName, setNewOrgName] = useState('')
@@ -139,134 +140,134 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        {/* LOGO & ORG SELECTOR */}
-        <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-              OF
-            </div>
-            <div>
-              <span className="font-bold text-gray-900 tracking-tight block text-sm">
-                OrçaFácil
-              </span>
-              <span className="text-[10px] text-gray-400 uppercase tracking-wider block -mt-0.5">
-                Platform
-              </span>
-            </div>
-          </div>
-
-          {/* Seletor de Organização */}
-          <div className="relative">
-            <select
-              aria-label="Selecionar Organização"
-              value={currentOrganization?.id}
-              onChange={(e) => {
-                const org = organizations.find((o) => o.id === e.target.value)
-                if (org) setCurrentOrganization(org)
-              }}
-              className="w-full text-xs font-medium bg-gray-50 border border-gray-200 rounded-lg p-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* NAVEGAÇÃO MODULAR */}
-        <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
-          <div>
-            <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-              Geral
-            </span>
-            <div className="mt-1 space-y-0.5">
-              {navItem('/', 'Visão Geral', <LayoutDashboard className="w-4 h-4" />)}
-              {navItem('/modules', 'Módulos', <Boxes className="w-4 h-4" />)}
-            </div>
-          </div>
-
-          {/* SEÇÃO ORÇAFÁCIL */}
-          {hasOrcafacil && (
-            <div>
-              <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                OrçaFácil
-              </span>
-              <div className="mt-1 space-y-0.5">
-                {navItem(
-                  '/orcafacil/quotes',
-                  'Orçamentos',
-                  <FileSpreadsheet className="w-4 h-4" />,
-                )}
-                {navItem('/orcafacil/customers', 'Clientes', <Users className="w-4 h-4" />)}
+    <div className={`min-h-screen bg-gray-50 ${isDashboard ? '' : 'flex'}`}>
+      {!isDashboard && (
+        <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
+          {/* LOGO & ORG SELECTOR */}
+          <div className="p-4 border-b border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                OF
+              </div>
+              <div>
+                <span className="font-bold text-gray-900 tracking-tight block text-sm">
+                  OrçaFácil
+                </span>
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider block -mt-0.5">
+                  Platform
+                </span>
               </div>
             </div>
-          )}
 
-          <div>
-            <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-              Administração
-            </span>
-            <div className="mt-1 space-y-0.5">
-              {navItem('/settings/organization', 'Organização', <Settings className="w-4 h-4" />)}
+            {/* Seletor de Organização */}
+            <div className="relative">
+              <select
+                aria-label="Selecionar Organização"
+                value={currentOrganization?.id}
+                onChange={(e) => {
+                  const org = organizations.find((o) => o.id === e.target.value)
+                  if (org) setCurrentOrganization(org)
+                }}
+                className="w-full text-xs font-medium bg-gray-50 border border-gray-200 rounded-lg p-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        </nav>
 
-        {/* FOOTER DO USUÁRIO */}
-        <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-          <Link to="/profile" className="flex items-center gap-2.5 overflow-hidden group">
-            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-medium text-xs shrink-0">
-              {profile?.displayName?.slice(0, 2).toUpperCase() || 'U'}
-            </div>
-            <div className="overflow-hidden">
-              <span className="block text-xs font-medium text-gray-900 truncate group-hover:text-blue-600">
-                {profile?.displayName || 'Usuário'}
+          {/* NAVEGAÇÃO MODULAR */}
+          <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
+            <div>
+              <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                Geral
               </span>
-              <span className="block text-[11px] text-gray-400 truncate">{user?.email}</span>
+              <div className="mt-1 space-y-0.5">
+                {navItem('/', 'Visão Geral', <LayoutDashboard className="w-4 h-4" />)}
+                {navItem('/modules', 'Módulos', <Boxes className="w-4 h-4" />)}
+              </div>
             </div>
-          </Link>
-          <button
-            onClick={() => void handleSignOut()}
-            title="Encerrar Sessão"
-            className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </aside>
+
+            {/* SEÇÃO ORÇAFÁCIL */}
+            {hasOrcafacil && (
+              <div>
+                <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  OrçaFácil
+                </span>
+                <div className="mt-1 space-y-0.5">
+                  {navItem(
+                    '/orcafacil/quotes',
+                    'Orçamentos',
+                    <FileSpreadsheet className="w-4 h-4" />,
+                  )}
+                  {navItem('/orcafacil/customers', 'Clientes', <Users className="w-4 h-4" />)}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                Administração
+              </span>
+              <div className="mt-1 space-y-0.5">
+                {navItem('/settings/organization', 'Organização', <Settings className="w-4 h-4" />)}
+              </div>
+            </div>
+          </nav>
+
+          {/* FOOTER DO USUÁRIO */}
+          <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+            <ProfileMenu
+              variant="sidebar"
+              displayName={profile?.displayName || 'Usuário'}
+              email={user?.email}
+            />
+            <button
+              onClick={() => void handleSignOut()}
+              title="Encerrar Sessão"
+              className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </aside>
+      )}
 
       {/* CONTEÚDO PRINCIPAL */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <header className="h-14 border-b border-gray-200 bg-white px-8 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Building2 className="w-4 h-4 text-gray-400" />
-            <span className="font-semibold text-gray-900">{currentOrganization?.name}</span>
-          </div>
+      <main
+        className={isDashboard ? 'min-h-screen' : 'flex-1 flex flex-col min-w-0 overflow-y-auto'}
+      >
+        {!isDashboard && (
+          <header className="h-14 border-b border-gray-200 bg-white px-8 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Building2 className="w-4 h-4 text-gray-400" />
+              <span className="font-semibold text-gray-900">{currentOrganization?.name}</span>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCreatingOrg(true)}
-              className="text-xs"
-            >
-              <Plus className="w-3.5 h-3.5" /> Nova Organização
-            </Button>
-            <Link
-              to="/profile"
-              className="text-xs font-medium text-gray-600 hover:text-blue-600 flex items-center gap-1"
-            >
-              <UserIcon className="w-3.5 h-3.5" /> Meu Perfil
-            </Link>
-          </div>
-        </header>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCreatingOrg(true)}
+                className="text-xs"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nova Organização
+              </Button>
+              <ProfileMenu
+                variant="header"
+                displayName={profile?.displayName || 'Usuário'}
+                email={user?.email}
+              />
+            </div>
+          </header>
+        )}
 
-        <div className="flex-1 p-8 max-w-7xl w-full mx-auto">{children}</div>
+        <div className={isDashboard ? 'w-full' : 'flex-1 p-8 max-w-7xl w-full mx-auto'}>
+          {children}
+        </div>
       </main>
 
       {/* MODAL CRIAR ORGANIZAÇÃO ADICIONAL */}
