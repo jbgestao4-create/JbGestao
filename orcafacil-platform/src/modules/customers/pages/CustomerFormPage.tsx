@@ -4,6 +4,7 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { customerService } from '../services/customer.service'
 import { formatCustomerDocument } from '../utils/customer-document'
 import { formatPostalAddress, formatPostalCode, lookupPostalAddress } from '../utils/postal-code'
+import { formatPhoneNumber } from '@shared/utils/phone'
 import type { CustomerType } from '@shared/types/common'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
@@ -59,7 +60,7 @@ export function CustomerFormPage() {
             : '',
         )
         setSkipDocument(!result.data.document)
-        setPhone(result.data.phone ?? '')
+        setPhone(formatPhoneNumber(result.data.phone ?? ''))
         setPostalCode(result.data.postalCode ? formatPostalCode(result.data.postalCode) : '')
         setSkipPostalCode(!result.data.postalCode)
         setAddress(result.data.address ?? '')
@@ -301,9 +302,11 @@ export function CustomerFormPage() {
                 placeholder="(31) 90000-0000"
                 value={phone}
                 onChange={(event) => {
-                  setPhone(event.target.value)
+                  setPhone(formatPhoneNumber(event.target.value))
                 }}
+                inputMode="numeric"
                 autoComplete="tel"
+                maxLength={15}
                 required
               />
               <div>

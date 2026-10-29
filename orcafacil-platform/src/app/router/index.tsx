@@ -1,21 +1,24 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RequireModule } from './RequireModule'
-
-import { LoginPage } from '@modules/auth/pages/LoginPage'
-import { RegisterPage } from '@modules/auth/pages/RegisterPage'
-import { ForgotPasswordPage } from '@modules/auth/pages/ForgotPasswordPage'
-import { ProfilePage } from '@modules/auth/pages/ProfilePage'
-
-import { DashboardPage } from '@modules/dashboard/pages/DashboardPage'
-import { ModulesPage } from '@modules/access-control/pages/ModulesPage'
-import { OrganizationSettingsPage } from '@modules/organizations/pages/OrganizationSettingsPage'
-
-import { QuotesListPage } from '@modules/orcafacil/pages/QuotesListPage'
-import { QuoteFormPage } from '@modules/orcafacil/pages/QuoteFormPage'
-import { CustomersHomePage } from '@modules/customers/pages/CustomersHomePage'
-import { CustomersListPage } from '@modules/customers/pages/CustomersListPage'
-import { CustomerFormPage } from '@modules/customers/pages/CustomerFormPage'
+import { RequireDashboardModule } from './RequireDashboardModule'
+import {
+  CustomerFormPage,
+  CustomersHomePage,
+  CustomersListPage,
+  DashboardPage,
+  ForgotPasswordPage,
+  LoginPage,
+  ModulesPage,
+  OrganizationSettingsPage,
+  ProfilePage,
+  QuoteFormPage,
+  QuotesListPage,
+  RegisterPage,
+  SupplierFormPage,
+  SuppliersHomePage,
+  SuppliersListPage,
+} from './lazy-pages'
 
 export const router = createBrowserRouter([
   // Rotas públicas de autenticação
@@ -61,19 +64,71 @@ export const router = createBrowserRouter([
     path: '/settings/organization',
     element: (
       <ProtectedRoute>
-        <OrganizationSettingsPage />
+        <RequireDashboardModule moduleCode="MOD-07">
+          <OrganizationSettingsPage />
+        </RequireDashboardModule>
       </ProtectedRoute>
     ),
   },
 
   // Rotas do módulo JB Software (protegidas por autenticação e concessão de módulo)
   {
+    path: '/orcafacil/suppliers',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-06">
+          <RequireModule moduleCode="orcafacil">
+            <SuppliersHomePage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/suppliers/search',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-06">
+          <RequireModule moduleCode="orcafacil">
+            <SuppliersListPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/suppliers/new',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-06">
+          <RequireModule moduleCode="orcafacil">
+            <SupplierFormPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/suppliers/:supplierId/edit',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-06">
+          <RequireModule moduleCode="orcafacil">
+            <SupplierFormPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: '/orcafacil/quotes',
     element: (
       <ProtectedRoute>
-        <RequireModule moduleCode="orcafacil">
-          <QuotesListPage />
-        </RequireModule>
+        <RequireDashboardModule moduleCode="MOD-04">
+          <RequireModule moduleCode="orcafacil">
+            <QuotesListPage />
+          </RequireModule>
+        </RequireDashboardModule>
       </ProtectedRoute>
     ),
   },
@@ -81,9 +136,11 @@ export const router = createBrowserRouter([
     path: '/orcafacil/quotes/new',
     element: (
       <ProtectedRoute>
-        <RequireModule moduleCode="orcafacil">
-          <QuoteFormPage />
-        </RequireModule>
+        <RequireDashboardModule moduleCode="MOD-04">
+          <RequireModule moduleCode="orcafacil">
+            <QuoteFormPage />
+          </RequireModule>
+        </RequireDashboardModule>
       </ProtectedRoute>
     ),
   },
@@ -91,9 +148,11 @@ export const router = createBrowserRouter([
     path: '/orcafacil/customers',
     element: (
       <ProtectedRoute>
-        <RequireModule moduleCode="orcafacil">
-          <CustomersHomePage />
-        </RequireModule>
+        <RequireDashboardModule moduleCode="MOD-03">
+          <RequireModule moduleCode="orcafacil">
+            <CustomersHomePage />
+          </RequireModule>
+        </RequireDashboardModule>
       </ProtectedRoute>
     ),
   },
@@ -101,9 +160,11 @@ export const router = createBrowserRouter([
     path: '/orcafacil/customers/search',
     element: (
       <ProtectedRoute>
-        <RequireModule moduleCode="orcafacil">
-          <CustomersListPage />
-        </RequireModule>
+        <RequireDashboardModule moduleCode="MOD-03">
+          <RequireModule moduleCode="orcafacil">
+            <CustomersListPage />
+          </RequireModule>
+        </RequireDashboardModule>
       </ProtectedRoute>
     ),
   },
@@ -111,9 +172,11 @@ export const router = createBrowserRouter([
     path: '/orcafacil/customers/new',
     element: (
       <ProtectedRoute>
-        <RequireModule moduleCode="orcafacil">
-          <CustomerFormPage />
-        </RequireModule>
+        <RequireDashboardModule moduleCode="MOD-03">
+          <RequireModule moduleCode="orcafacil">
+            <CustomerFormPage />
+          </RequireModule>
+        </RequireDashboardModule>
       </ProtectedRoute>
     ),
   },
@@ -121,9 +184,11 @@ export const router = createBrowserRouter([
     path: '/orcafacil/customers/:customerId/edit',
     element: (
       <ProtectedRoute>
-        <RequireModule moduleCode="orcafacil">
-          <CustomerFormPage />
-        </RequireModule>
+        <RequireDashboardModule moduleCode="MOD-03">
+          <RequireModule moduleCode="orcafacil">
+            <CustomerFormPage />
+          </RequireModule>
+        </RequireDashboardModule>
       </ProtectedRoute>
     ),
   },

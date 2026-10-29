@@ -1,7 +1,9 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
+import { DASHBOARD_MODULES } from '@modules/access-control/services/module-access.service'
 import type {
   ModuleCode,
+  DashboardModuleCode,
   Organization,
   OrganizationMemberDetail,
   OrganizationMembership,
@@ -14,9 +16,10 @@ export interface AddMemberParams {
   organizationId: UUID
   email: string
   name: string
+  jobTitle: string | null
   password?: string
   role: OrganizationRole
-  modules: ModuleCode[]
+  dashboardModules: DashboardModuleCode[]
 }
 
 export const organizationService = {
@@ -147,6 +150,32 @@ export const organizationService = {
         return { success: false, error: 'Não foi possível carregar a lista de funcionários.' }
       }
 
+      const { data: dashboardPermissions, error: dashboardPermissionsError } = await supabase
+        .from('organization_member_dashboard_modules')
+        .select('user_id, module_code')
+        .eq('organization_id', orgId)
+
+      const { data: memberJobTitles, error: memberJobTitlesError } = await supabase
+        .from('organization_members')
+        .select('user_id, job_title')
+        .eq('organization_id', orgId)
+
+      if (memberJobTitlesError) {
+        logger.error('Erro ao carregar cargos dos funcionários', memberJobTitlesError)
+        return { success: false, error: 'Não foi possível carregar os cargos dos funcionários.' }
+      }
+
+      if (dashboardPermissionsError) {
+        logger.warn('Erro ao carregar permissões dos cartões dos membros', {
+          code: dashboardPermissionsError.code,
+          message: dashboardPermissionsError.message,
+        })
+      }
+
+      const jobTitleByUserId = new Map(
+        (memberJobTitles ?? []).map((member) => [member.user_id, member.job_title]),
+      )
+
       return {
         success: true,
         data: (data ?? []).map((row: any) => ({
@@ -155,7 +184,16 @@ export const organizationService = {
           role: row.role as OrganizationRole,
           displayName: row.display_name,
           email: row.email,
+          jobTitle: jobTitleByUserId.get(row.user_id) ?? null,
           modules: (row.modules ?? []) as ModuleCode[],
+          dashboardModules:
+            row.role !== 'member'
+              ? []
+              : dashboardPermissionsError
+                ? DASHBOARD_MODULES.map((module) => module.code)
+                : (dashboardPermissions ?? [])
+                    .filter((permission) => permission.user_id === row.user_id)
+                    .map((permission) => permission.module_code),
           createdAt: row.created_at,
         })),
       }
@@ -176,7 +214,9 @@ export const organizationService = {
         p_name: params.name.trim(),
         p_password: params.password ? params.password.trim() : null,
         p_role: params.role,
-        p_modules: params.modules,
+        p_modules: [],
+        p_job_title: params.jobTitle?.trim() || null,
+        p_dashboard_modules: params.dashboardModules,
       })
 
       if (error) {
@@ -188,6 +228,41 @@ export const organizationService = {
     } catch (err) {
       logger.error('Exceção ao adicionar membro', err)
       return { success: false, error: 'Erro inesperado ao cadastrar funcionário.' }
+    }
+  },
+
+  /**
+   * Atualiza nome, e-mail, cargo e papel de um membro da organização.
+   */
+  async updateMemberDetails(
+    orgId: UUID,
+    params: {
+      userId: UUID
+      name: string
+      jobTitle: string
+      email: string
+      role: OrganizationRole
+    },
+  ): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.rpc('update_organization_member', {
+        p_org_id: orgId,
+        p_user_id: params.userId,
+        p_name: params.name.trim(),
+        p_email: params.email.trim(),
+        p_job_title: params.jobTitle.trim() || null,
+        p_role: params.role,
+      })
+
+      if (error) {
+        logger.warn('Erro ao atualizar funcionário', { message: error.message })
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao atualizar funcionário', err)
+      return { success: false, error: 'Erro inesperado ao atualizar funcionário.' }
     }
   },
 
@@ -234,6 +309,33 @@ export const organizationService = {
       return { success: true, data: undefined }
     } catch (err) {
       logger.error('Exceção ao atualizar permissões de módulos do membro', err)
+      return { success: false, error: 'Erro inesperado ao atualizar permissões.' }
+    }
+  },
+
+  /**
+   * Atualiza os módulos da página inicial permitidos para um membro operacional.
+   */
+  async updateMemberDashboardModules(
+    orgId: UUID,
+    userId: UUID,
+    modules: DashboardModuleCode[],
+  ): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.rpc('update_member_dashboard_modules', {
+        p_org_id: orgId,
+        p_user_id: userId,
+        p_modules: modules,
+      })
+
+      if (error) {
+        logger.error('Erro ao atualizar permissões dos módulos da página inicial', error)
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao atualizar permissões dos módulos da página inicial', err)
       return { success: false, error: 'Erro inesperado ao atualizar permissões.' }
     }
   },

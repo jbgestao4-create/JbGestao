@@ -15,13 +15,14 @@ import {
   LogOut,
   Building2,
   Home,
+  Truck,
 } from 'lucide-react'
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, profile, signOut } = useAuth()
   const { currentOrganization, organizations, setCurrentOrganization, createOrganization } =
     useOrganization()
-  const { canAccess } = useModuleAccess()
+  const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const location = useLocation()
   const navigate = useNavigate()
   const isDashboard = location.pathname === '/'
@@ -130,6 +131,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const hasOrcafacil = canAccess('orcafacil')
+  const canAccessCustomers = canAccessDashboardModule('MOD-03')
+  const canAccessQuotes = canAccessDashboardModule('MOD-04')
+  const canAccessSuppliers = canAccessDashboardModule('MOD-06')
+  const canAccessOrganization = canAccessDashboardModule('MOD-07')
 
   const navItem = (to: string, label: string, icon: ReactNode) => {
     const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
@@ -190,30 +195,40 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
 
             {/* Módulos de gestão */}
-            {hasOrcafacil && (
+            {hasOrcafacil && (canAccessCustomers || canAccessQuotes || canAccessSuppliers) && (
               <div>
                 <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                   JB Software
                 </span>
                 <div className="mt-1 space-y-0.5">
-                  {navItem(
-                    '/orcafacil/quotes',
-                    'Orçamentos',
-                    <FileSpreadsheet className="w-4 h-4" />,
-                  )}
-                  {navItem('/orcafacil/customers', 'Clientes', <Users className="w-4 h-4" />)}
+                  {canAccessQuotes &&
+                    navItem(
+                      '/orcafacil/quotes',
+                      'Orçamentos',
+                      <FileSpreadsheet className="w-4 h-4" />,
+                    )}
+                  {canAccessCustomers &&
+                    navItem('/orcafacil/customers', 'Clientes', <Users className="w-4 h-4" />)}
+                  {canAccessSuppliers &&
+                    navItem('/orcafacil/suppliers', 'Fornecedores', <Truck className="w-4 h-4" />)}
                 </div>
               </div>
             )}
 
-            <div>
-              <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                Administração
-              </span>
-              <div className="mt-1 space-y-0.5">
-                {navItem('/settings/organization', 'Organização', <Settings className="w-4 h-4" />)}
+            {canAccessOrganization && (
+              <div>
+                <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Administração
+                </span>
+                <div className="mt-1 space-y-0.5">
+                  {navItem(
+                    '/settings/organization',
+                    'Organização',
+                    <Settings className="w-4 h-4" />,
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </nav>
 
           {/* FOOTER DO USUÁRIO */}

@@ -15,6 +15,7 @@ import {
   Settings2,
   ShoppingCart,
   Sparkles,
+  Truck,
   Users,
   WalletCards,
   type LucideIcon,
@@ -25,6 +26,7 @@ import { useModuleAccess } from '@modules/access-control/context/ModuleAccessCon
 import { quoteService } from '@modules/orcafacil/services/quote.service'
 import { customerService } from '@modules/customers/services/customer.service'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
+import type { DashboardModuleCode } from '@shared/types/database'
 
 type DashboardModule = {
   id: string
@@ -34,13 +36,14 @@ type DashboardModule = {
   icon: LucideIcon
   iconStyle: string
   isAvailable: boolean
+  accessModule: DashboardModuleCode
   path?: string
 }
 
 export function DashboardPage() {
   const { user, profile, signOut } = useAuth()
   const { currentOrganization, organizations, setCurrentOrganization } = useOrganization()
-  const { canAccess } = useModuleAccess()
+  const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const navigate = useNavigate()
 
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'offline'>(
@@ -86,6 +89,7 @@ export function DashboardPage() {
       icon: ShoppingCart,
       iconStyle: 'bg-blue-50 text-blue-700',
       isAvailable: false,
+      accessModule: 'MOD-01',
     },
     {
       id: 'MOD-02',
@@ -95,7 +99,8 @@ export function DashboardPage() {
       action: 'Acessar Estoque',
       icon: Package,
       iconStyle: 'bg-amber-50 text-amber-700',
-      isAvailable: canAccess('estoqueleve'),
+      isAvailable: false,
+      accessModule: 'MOD-02',
     },
     {
       id: 'MOD-03',
@@ -106,6 +111,7 @@ export function DashboardPage() {
       icon: Users,
       iconStyle: 'bg-emerald-50 text-emerald-700',
       isAvailable: hasOrcafacil,
+      accessModule: 'MOD-03',
       path: '/orcafacil/customers',
     },
     {
@@ -117,6 +123,7 @@ export function DashboardPage() {
       icon: FileSpreadsheet,
       iconStyle: 'bg-violet-50 text-violet-700',
       isAvailable: hasOrcafacil,
+      accessModule: 'MOD-04',
       path: '/orcafacil/quotes',
     },
     {
@@ -128,9 +135,22 @@ export function DashboardPage() {
       icon: WalletCards,
       iconStyle: 'bg-cyan-50 text-cyan-700',
       isAvailable: false,
+      accessModule: 'MOD-05',
     },
     {
       id: 'MOD-06',
+      title: 'Fornecedores',
+      description:
+        'Cadastro e consulta de fornecedores de mercadorias, contatos comerciais e dados cadastrais.',
+      action: 'Acessar Fornecedores',
+      icon: Truck,
+      iconStyle: 'bg-orange-50 text-orange-700',
+      isAvailable: hasOrcafacil,
+      accessModule: 'MOD-06',
+      path: '/orcafacil/suppliers',
+    },
+    {
+      id: 'MOD-07',
       title: 'Organização',
       description:
         'Dados cadastrais e configurações da organização, membros e permissões de acesso.',
@@ -138,6 +158,7 @@ export function DashboardPage() {
       icon: Settings2,
       iconStyle: 'bg-slate-100 text-slate-700',
       isAvailable: true,
+      accessModule: 'MOD-07',
       path: '/settings/organization',
     },
   ]
@@ -153,6 +174,7 @@ export function DashboardPage() {
     connected: 'Online • Sincronizado',
     offline: 'Sem conexão com o banco',
   }[connectionStatus]
+  const visibleModules = modules.filter((module) => canAccessDashboardModule(module.accessModule))
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
@@ -309,7 +331,7 @@ export function DashboardPage() {
               isModulesExpanded ? '' : 'hidden'
             }`}
           >
-            {modules.map((module, index) => {
+            {visibleModules.map((module, index) => {
               const Icon = module.icon
               const isFeatured = index === 0 && module.isAvailable
 

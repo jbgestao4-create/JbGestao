@@ -1,5 +1,3 @@
-import '@testing-library/jest-dom'
-
 // Mock para variáveis de ambiente nos testes
 Object.assign(import.meta.env, {
   VITE_SUPABASE_URL: 'https://test.supabase.co',
@@ -7,4 +5,3 @@ Object.assign(import.meta.env, {
   DEV: true,
   PROD: false,
 })
-

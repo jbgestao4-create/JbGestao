@@ -6,6 +6,20 @@ import type { Session, User } from '@supabase/supabase-js'
 const PROFILE_AVATARS_BUCKET = 'profile-avatars'
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const AUTH_CONNECTION_ERROR =
+  'Não foi possível conectar ao serviço de autenticação. Verifique a URL do Supabase e sua conexão com a internet.'
+
+function getSignInErrorMessage(error: Pick<Error, 'name' | 'message'>): string {
+  if (error.name === 'AuthRetryableFetchError') {
+    return AUTH_CONNECTION_ERROR
+  }
+
+  if (error.message.toLowerCase().includes('invalid api key')) {
+    return 'A configuração do Supabase está inválida. Confira a URL do projeto e a chave pública nas variáveis de ambiente.'
+  }
+
+  return 'E-mail ou senha incorretos.'
+}
 
 export interface SignUpParams {
   email: string
@@ -69,7 +83,7 @@ export const authService = {
 
       if (error) {
         logger.warn('Falha no login', { message: error.message })
-        return { success: false, error: 'E-mail ou senha incorretos.' }
+        return { success: false, error: getSignInErrorMessage(error) }
       }
 
       if (!data.user || !data.session) {
@@ -79,6 +93,9 @@ export const authService = {
       return { success: true, data: { user: data.user, session: data.session } }
     } catch (err) {
       logger.error('Erro inesperado no login', err)
+      if (err instanceof TypeError) {
+        return { success: false, error: AUTH_CONNECTION_ERROR }
+      }
       return { success: false, error: 'Ocorreu um erro inesperado ao realizar login.' }
     }
   },

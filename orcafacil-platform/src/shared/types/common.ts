@@ -15,6 +15,10 @@ export type CustomerType = 'individual' | 'company'
 /** Código único e estável de um módulo da plataforma */
 export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 
+/** Cartões da página inicial que podem ser liberados individualmente para operadores */
+export type DashboardModuleCode =
+  'MOD-01' | 'MOD-02' | 'MOD-03' | 'MOD-04' | 'MOD-05' | 'MOD-06' | 'MOD-07'
+
 /** Perfil do usuário autenticado */
 export interface UserProfile {
   id: UUID
@@ -46,8 +50,24 @@ export interface OrganizationMemberDetail {
   role: OrganizationRole
   displayName: string
   email: string
+  jobTitle: string | null
   modules: ModuleCode[]
+  dashboardModules: DashboardModuleCode[]
   createdAt: string
+}
+
+export interface Supplier {
+  id: UUID
+  organizationId: UUID
+  name: string
+  document: string | null
+  contactName: string | null
+  phone: string | null
+  email: string | null
+  address: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 /** Resultado genérico de uma operação de serviço */

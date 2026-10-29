@@ -15,6 +15,10 @@ export type OrganizationRole = 'owner' | 'admin' | 'member'
 /** Códigos de módulos disponíveis na plataforma */
 export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 
+/** Códigos dos módulos exibidos na página inicial */
+export type DashboardModuleCode =
+  'MOD-01' | 'MOD-02' | 'MOD-03' | 'MOD-04' | 'MOD-05' | 'MOD-06' | 'MOD-07'
+
 /** Estado de uma concessão de módulo a uma organização */
 export type ModuleGrantStatus = 'active' | 'inactive' | 'suspended'
 
@@ -48,6 +52,21 @@ export interface Database {
           updated_at?: string
         }
       }
+      organization_member_dashboard_modules: {
+        Row: {
+          organization_id: string
+          user_id: string
+          module_code: DashboardModuleCode
+          created_at: string
+        }
+        Insert: {
+          organization_id: string
+          user_id: string
+          module_code: DashboardModuleCode
+          created_at?: string
+        }
+        Update: never
+      }
       organizations: {
         Row: {
           id: string
@@ -74,6 +93,7 @@ export interface Database {
           organization_id: string
           user_id: string
           role: OrganizationRole
+          job_title: string | null
           created_at: string
           updated_at: string
         }
@@ -81,11 +101,13 @@ export interface Database {
           organization_id: string
           user_id: string
           role: OrganizationRole
+          job_title?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           role?: OrganizationRole
+          job_title?: string | null
           updated_at?: string
         }
       }
@@ -211,6 +233,74 @@ export interface Database {
           updated_at?: string
         }
       }
+      suppliers: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          document: string | null
+          contact_name: string | null
+          phone: string | null
+          email: string | null
+          address: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          document?: string | null
+          contact_name?: string | null
+          phone?: string | null
+          email?: string | null
+          address?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          document?: string | null
+          contact_name?: string | null
+          phone?: string | null
+          email?: string | null
+          address?: string | null
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+      supplier_invoices: {
+        Row: {
+          id: string
+          organization_id: string
+          supplier_id: string
+          invoice_number: string | null
+          received_at: string
+          file_path: string
+          file_name: string
+          content_type: string
+          file_size: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          supplier_id: string
+          invoice_number?: string | null
+          received_at?: string
+          file_path: string
+          file_name: string
+          content_type: string
+          file_size: number
+          created_at?: string
+        }
+        Update: {
+          invoice_number?: string | null
+          received_at?: string
+        }
+      }
       quotes: {
         Row: {
           id: string
@@ -303,10 +393,43 @@ export interface Database {
         }
         Returns: OrganizationRole | null
       }
+      add_organization_member: {
+        Args: {
+          p_org_id: string
+          p_email: string
+          p_name: string
+          p_password: string | null
+          p_role: OrganizationRole
+          p_modules: ModuleCode[]
+          p_job_title: string | null
+          p_dashboard_modules: DashboardModuleCode[]
+        }
+        Returns: Json
+      }
+      update_organization_member: {
+        Args: {
+          p_org_id: string
+          p_user_id: string
+          p_name: string
+          p_email: string
+          p_job_title: string | null
+          p_role: OrganizationRole
+        }
+        Returns: boolean
+      }
+      update_member_dashboard_modules: {
+        Args: {
+          p_org_id: string
+          p_user_id: string
+          p_modules: DashboardModuleCode[]
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       organization_role: OrganizationRole
       module_code: ModuleCode
+      dashboard_module_code: DashboardModuleCode
       module_grant_status: ModuleGrantStatus
       subscription_status: SubscriptionStatus
       quote_status: QuoteStatus

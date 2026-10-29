@@ -1,6 +1,6 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
-import type { ModuleCode } from '@shared/types/database'
+import type { DashboardModuleCode, ModuleCode } from '@shared/types/database'
 import type { ServiceResult, UUID } from '@shared/types/common'
 
 export interface PlatformModule {
@@ -20,6 +20,24 @@ export interface GrantedModule {
   activatedAt: string | null
   expiresAt: string | null
 }
+
+export const DASHBOARD_MODULES: {
+  code: DashboardModuleCode
+  name: string
+  description: string
+}[] = [
+  { code: 'MOD-01', name: 'Vendas', description: 'Pedidos, PDV e faturamento.' },
+  { code: 'MOD-02', name: 'Estoque', description: 'Produtos, saldos e inventário.' },
+  { code: 'MOD-03', name: 'Clientes', description: 'Cadastro e gestão de clientes.' },
+  { code: 'MOD-04', name: 'Orçamentos', description: 'Criação e acompanhamento de propostas.' },
+  {
+    code: 'MOD-05',
+    name: 'Gerenciamento do Caixa',
+    description: 'Abertura e fechamento do caixa.',
+  },
+  { code: 'MOD-06', name: 'Fornecedores', description: 'Cadastro de fornecedores de mercadorias.' },
+  { code: 'MOD-07', name: 'Organização', description: 'Dados da organização e equipe.' },
+]
 
 /** Catálogo estático e documentado dos módulos da plataforma */
 export const PLATFORM_MODULES_CATALOG: PlatformModule[] = [
