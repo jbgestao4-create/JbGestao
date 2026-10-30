@@ -1,0 +1,19 @@
+# Node
+node_modules/
+dist/
+coverage/
+
+# Supabase
+.temp/
+supabase/.temp/
+
+# Environment files
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
