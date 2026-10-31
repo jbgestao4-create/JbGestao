@@ -73,17 +73,7 @@ export function QuoteFormPage() {
   const [notes, setNotes] = useState('')
   const [discount, setDiscount] = useState('0.00')
 
-  const [items, setItems] = useState<FormItem[]>([
-    {
-      id: '1',
-      itemType: 'service',
-      description: '',
-      quantity: '1.0000',
-      unitPrice: '0.00',
-      inventoryItemId: '',
-      unit: '',
-    },
-  ])
+  const [items, setItems] = useState<FormItem[]>([])
 
   const [error, setError] = useState('')
   const [quoteLoadError, setQuoteLoadError] = useState('')
@@ -187,12 +177,12 @@ export function QuoteFormPage() {
     }
   }, [currentOrganization, customerReturnState, isOrganizationLoading, quoteId, userRole])
 
-  const handleAddItem = () => {
+  const handleAddItem = (itemType: FormItem['itemType']) => {
     setItems((prev) => [
       ...prev,
       {
         id: Date.now().toString(),
-        itemType: 'service',
+        itemType,
         description: '',
         quantity: '1.0000',
         unitPrice: '0.00',
@@ -203,7 +193,6 @@ export function QuoteFormPage() {
   }
 
   const handleRemoveItem = (id: string) => {
-    if (items.length <= 1) return
     setItems((prev) => prev.filter((item) => item.id !== id))
   }
 
@@ -222,21 +211,6 @@ export function QuoteFormPage() {
               description: inventoryItem?.name ?? item.description,
               unit: inventoryItem?.unit ?? '',
               unitPrice: inventoryItem?.unitPrice ?? item.unitPrice,
-            }
-          : item,
-      ),
-    )
-  }
-
-  const handleItemTypeChange = (itemId: string, itemType: FormItem['itemType']) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              itemType,
-              inventoryItemId: itemType === 'service' ? '' : item.inventoryItemId,
-              unit: itemType === 'service' ? '' : item.unit,
             }
           : item,
       ),
@@ -291,6 +265,11 @@ export function QuoteFormPage() {
 
     if (!selectedCustomerId) {
       setError('Selecione um cliente para o orçamento.')
+      return
+    }
+
+    if (items.length === 0) {
+      setError('Adicione pelo menos um material ou serviço ao orçamento.')
       return
     }
 
@@ -578,18 +557,35 @@ export function QuoteFormPage() {
 
             {/* ITENS DO ORÇAMENTO */}
             <Card>
-              <CardHeader>
-                <h2 className="text-sm font-semibold text-gray-900">Itens e Serviços</h2>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    handleAddItem()
-                  }}
-                >
-                  <Plus className="w-3.5 h-3.5" /> Adicionar Item
-                </Button>
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900">Itens e Serviços</h2>
+                  <p className="text-xs text-gray-500">
+                    Materiais vinculados ao estoque e serviços prestados
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      handleAddItem('material')
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Adicionar Material
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      handleAddItem('service')
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Adicionar Serviço
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {inventoryLoadError && (
@@ -612,143 +608,166 @@ export function QuoteFormPage() {
                     .
                   </p>
                 )}
-                {items.map((item, itemIndex) => {
-                  const lineTotal = calculateItemTotal(item.quantity, item.unitPrice)
-                  const linkedInventoryItem = inventoryItems.find(
-                    (inventoryItem) => inventoryItem.id === item.inventoryItemId,
-                  )
-                  const minimumPriceViolation = minimumPriceViolationsByIndex.get(itemIndex)
 
-                  return (
-                    <div
-                      key={item.id}
-                      className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/75 p-4"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="w-full sm:max-w-xs">
-                          <ListBox
-                            label="Tipo do item"
-                            searchable={false}
-                            value={item.itemType}
-                            onChange={(val) => {
-                              handleItemTypeChange(item.id, val as FormItem['itemType'])
-                            }}
-                            options={[
-                              { value: 'service', label: 'Serviço' },
-                              { value: 'material', label: 'Material' },
-                            ]}
-                          />
-                        </div>
-                        {items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleRemoveItem(item.id)
-                            }}
-                            className="inline-flex items-center gap-2 self-end rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 sm:self-center"
-                            aria-label={`Remover item ${String(itemIndex + 1)}`}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                            Remover
-                          </button>
-                        )}
-                      </div>
+                {items.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 py-10 text-center text-sm text-gray-500">
+                    Nenhum item adicionado ao orçamento. Use os botões acima para adicionar um material ou serviço.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-xs">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                      <thead className="border-b border-gray-200 bg-gray-50/75 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        <tr>
+                          <th className="py-2.5 pl-3 pr-2 w-28">Tipo</th>
+                          <th className="py-2.5 px-2">Descrição / Material</th>
+                          <th className="py-2.5 px-2 w-28 text-right">Qtd</th>
+                          <th className="py-2.5 px-2 w-36 text-right">Preço Unit.</th>
+                          <th className="py-2.5 px-2 w-28 text-right">Total</th>
+                          <th className="py-2.5 pl-2 pr-3 w-12 text-center">
+                            <span className="sr-only">Ações</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {items.map((item, itemIndex) => {
+                          const lineTotal = calculateItemTotal(item.quantity, item.unitPrice)
+                          const linkedInventoryItem = inventoryItems.find(
+                            (inventoryItem) => inventoryItem.id === item.inventoryItemId,
+                          )
+                          const minimumPriceViolation = minimumPriceViolationsByIndex.get(itemIndex)
 
-                      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-12">
-                        <div
-                          className={
-                            item.itemType === 'material' ? 'sm:col-span-5' : 'sm:col-span-8'
-                          }
-                        >
-                          <Input
-                            label="Descrição"
-                            placeholder="Descrição do serviço ou material"
-                            value={item.description}
-                            onChange={(e) => {
-                              handleUpdateItem(item.id, 'description', e.target.value)
-                            }}
-                            required
-                          />
-                        </div>
-                        {item.itemType === 'material' && (
-                          <div className="sm:col-span-3">
-                            <ListBox
-                              id={`quote-inventory-${item.id}`}
-                              label="Referência do material *"
-                              placeholder="Selecione do estoque"
-                              searchPlaceholder="Buscar material..."
-                              value={item.inventoryItemId}
-                              onChange={(val) => {
-                                handleSelectInventoryItem(item.id, val as string)
-                              }}
-                              options={inventoryItems
-                                .filter(
-                                  (inventoryItem) =>
-                                    (inventoryItem.canSell && inventoryItem.isActive) ||
-                                    inventoryItem.id === item.inventoryItemId,
-                                )
-                                .map((inventoryItem) => ({
-                                  value: inventoryItem.id,
-                                  label: `${inventoryItem.name}${!inventoryItem.isActive ? ' (inativo)' : ''}`,
-                                  description: `${inventoryItem.sku} · saldo ${Number(inventoryItem.quantityOnHand).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${inventoryItem.unit}`,
-                                }))}
-                              helperText={
-                                item.unit
-                                  ? `Unidade: ${item.unit}`
-                                  : 'Vincule ao cadastro do estoque.'
-                              }
-                            />
-                          </div>
-                        )}
-                        <div className="sm:col-span-2">
-                          <Input
-                            label="Quantidade"
-                            type="number"
-                            step="0.0001"
-                            min="0.0001"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              handleUpdateItem(item.id, 'quantity', e.target.value)
-                            }}
-                            required
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <Input
-                            label="Valor unitário (R$)"
-                            type="number"
-                            step="0.0001"
-                            min="0"
-                            value={item.unitPrice}
-                            helperText={
-                              linkedInventoryItem?.minimumSalePrice
-                                ? `Preço mínimo: ${formatCurrency(linkedInventoryItem.minimumSalePrice)}`
-                                : undefined
-                            }
-                            error={
-                              minimumPriceViolation
-                                ? `Mínimo: ${formatCurrency(minimumPriceViolation.minimumSalePrice)}`
-                                : undefined
-                            }
-                            onChange={(e) => {
-                              handleUpdateItem(item.id, 'unitPrice', e.target.value)
-                            }}
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end border-t border-gray-200 pt-3">
-                        <p className="text-sm text-gray-600">
-                          Total do item:{' '}
-                          <span className="ml-1 font-semibold text-gray-900">
-                            {formatCurrency(lineTotal)}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })}
+                          return (
+                            <tr key={item.id} className="transition-colors hover:bg-gray-50/50">
+                              <td className="py-2 pl-3 pr-2 align-top">
+                                {item.itemType === 'material' ? (
+                                  <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                    Material
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-700/10">
+                                    Serviço
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 align-top">
+                                {item.itemType === 'material' ? (
+                                  <div className="space-y-1">
+                                    <ListBox
+                                      id={`quote-inventory-${item.id}`}
+                                      placeholder="Selecione o material..."
+                                      searchPlaceholder="Buscar material..."
+                                      value={item.inventoryItemId}
+                                      onChange={(val) => {
+                                        handleSelectInventoryItem(item.id, val as string)
+                                      }}
+                                      options={inventoryItems
+                                        .filter(
+                                          (inventoryItem) =>
+                                            inventoryItem.canSell ||
+                                            inventoryItem.id === item.inventoryItemId,
+                                        )
+                                        .map((inventoryItem) => ({
+                                          value: inventoryItem.id,
+                                          label: inventoryItem.name,
+                                          description: `${inventoryItem.sku} · Estoque: ${Number(inventoryItem.quantityOnHand).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${inventoryItem.unit}`,
+                                        }))}
+                                    />
+                                    {item.inventoryItemId && (
+                                      <input
+                                        type="text"
+                                        className="w-full text-xs text-gray-500 bg-transparent border-b border-dashed border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 px-1"
+                                        placeholder="Descrição complementar / observação"
+                                        value={item.description}
+                                        onChange={(e) => {
+                                          handleUpdateItem(item.id, 'description', e.target.value)
+                                        }}
+                                      />
+                                    )}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Descrição do serviço"
+                                    value={item.description}
+                                    onChange={(e) => {
+                                      handleUpdateItem(item.id, 'description', e.target.value)
+                                    }}
+                                    required
+                                  />
+                                )}
+                              </td>
+                              <td className="py-2 px-2 align-top">
+                                <div className="flex flex-col items-end">
+                                  <input
+                                    type="number"
+                                    step="0.0001"
+                                    min="0.0001"
+                                    className="h-10 w-full rounded-lg border border-gray-300 px-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      handleUpdateItem(item.id, 'quantity', e.target.value)
+                                    }}
+                                    required
+                                  />
+                                  {item.unit && (
+                                    <span className="text-[11px] text-gray-400 mt-0.5">
+                                      {item.unit}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 align-top">
+                                <div className="flex flex-col items-end">
+                                  <input
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                    className={`h-10 w-full rounded-lg border px-2 text-right text-sm focus:outline-none focus:ring-2 ${
+                                      minimumPriceViolation
+                                        ? 'border-red-400 text-red-600 focus:ring-red-400'
+                                        : 'border-gray-300 focus:ring-blue-500'
+                                    }`}
+                                    value={item.unitPrice}
+                                    onChange={(e) => {
+                                      handleUpdateItem(item.id, 'unitPrice', e.target.value)
+                                    }}
+                                    required
+                                  />
+                                  {minimumPriceViolation ? (
+                                    <span className="text-[11px] text-red-500 mt-0.5 text-right">
+                                      Mín: {formatCurrency(minimumPriceViolation.minimumSalePrice)}
+                                    </span>
+                                  ) : linkedInventoryItem?.minimumSalePrice ? (
+                                    <span className="text-[11px] text-gray-400 mt-0.5 text-right">
+                                      Mín: {formatCurrency(linkedInventoryItem.minimumSalePrice)}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 align-middle text-right font-medium text-gray-900 whitespace-nowrap">
+                                {formatCurrency(lineTotal)}
+                              </td>
+                              <td className="py-2 pl-2 pr-3 align-middle text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleRemoveItem(item.id)
+                                  }}
+                                  className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                  title="Remover item"
+                                  aria-label={`Remover item ${String(itemIndex + 1)}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* TOTAIS E DESCONTO */}
                 <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-end sm:justify-between gap-4">

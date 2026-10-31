@@ -82,6 +82,10 @@ export function InventoryMovementsPage() {
     }
     setItem(itemResult.data)
     setMovements(movementsResult.data)
+    if (!itemResult.data.canPurchase) {
+      setDirection('out')
+      setType('exit')
+    }
     if (suppliersResult.success) setSuppliers(suppliersResult.data)
     setSupplierError(suppliersResult.success ? '' : suppliersResult.error)
     setLoadedKey(`${organizationId}:${itemId}`)
@@ -105,6 +109,10 @@ export function InventoryMovementsPage() {
         } else {
           setItem(itemResult.data)
           setMovements(movementsResult.data)
+          if (!itemResult.data.canPurchase) {
+            setDirection('out')
+            setType('exit')
+          }
           if (suppliersResult.success) {
             setSuppliers(suppliersResult.data)
             setSupplierError('')
@@ -128,6 +136,7 @@ export function InventoryMovementsPage() {
   const expectedKey = `${currentOrganization?.id ?? ''}:${inventoryItemId ?? ''}`
   const isLoading = loadedKey !== expectedKey
   const handleDirectionChange = (nextDirection: MovementDirection) => {
+    if (!item?.canPurchase && nextDirection === 'in') return
     setDirection(nextDirection)
     setType(nextDirection === 'in' ? 'entry' : 'exit')
   }
@@ -135,6 +144,11 @@ export function InventoryMovementsPage() {
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!currentOrganization || !inventoryItemId || !item) return
+
+    if (!item.canPurchase && direction === 'in') {
+      setFormError('Este material não permite compras nem acréscimos de estoque.')
+      return
+    }
 
     const parsedQuantity = Number(quantity)
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
@@ -248,19 +262,28 @@ export function InventoryMovementsPage() {
                     Este produto está inativo e não pode receber movimentações.
                   </div>
                 )}
+                {!item.canPurchase && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    Este produto está configurado para não permitir compras. Não é permitido acrescentar estoque nem realizar entradas.
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <ListBox
                     label="Direção"
                     searchable={false}
-                    disabled={!item.isActive}
-                    value={direction}
+                    disabled={!item.isActive || !item.canPurchase}
+                    value={item.canPurchase ? direction : 'out'}
                     onChange={(val) => {
                       handleDirectionChange(val as MovementDirection)
                     }}
-                    options={[
-                      { value: 'in', label: 'Entrada' },
-                      { value: 'out', label: 'Saída' },
-                    ]}
+                    options={
+                      item.canPurchase
+                        ? [
+                            { value: 'in', label: 'Entrada' },
+                            { value: 'out', label: 'Saída' },
+                          ]
+                        : [{ value: 'out', label: 'Saída' }]
+                    }
                   />
                   <ListBox
                     label="Tipo"
@@ -357,7 +380,11 @@ export function InventoryMovementsPage() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit" isLoading={isSaving} disabled={!item.isActive}>
+                  <Button
+                    type="submit"
+                    isLoading={isSaving}
+                    disabled={!item.isActive || (!item.canPurchase && direction === 'in')}
+                  >
                     Registrar movimentação
                   </Button>
                 </div>

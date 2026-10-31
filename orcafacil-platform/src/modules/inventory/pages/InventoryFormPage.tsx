@@ -5,6 +5,7 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { supplierService } from '@modules/suppliers/services/supplier.service'
 import { Button } from '@shared/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
+import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import type { InventoryItem, Supplier } from '@shared/types/common'
@@ -165,6 +166,14 @@ export function InventoryFormPage() {
   const [newWarehouseName, setNewWarehouseName] = useState('')
   const [warehouseError, setWarehouseError] = useState('')
   const [isSavingWarehouse, setIsSavingWarehouse] = useState(false)
+  const [pendingFlagChange, setPendingFlagChange] = useState<{
+    field: 'canSell' | 'canPurchase'
+    nextValue: boolean
+  } | null>(null)
+
+  const handleFlagToggle = (field: 'canSell' | 'canPurchase', nextValue: boolean) => {
+    setPendingFlagChange({ field, nextValue })
+  }
 
   useEffect(() => {
     if (!organizationId) return
@@ -755,6 +764,30 @@ export function InventoryFormPage() {
                 />
                 Permitir saldo negativo para este produto
               </label>
+              <div className="flex flex-col gap-2.5 sm:col-span-2 border-t border-gray-100 pt-3">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={form.canSell}
+                    onChange={(event) => {
+                      handleFlagToggle('canSell', event.target.checked)
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Permitir venda
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={form.canPurchase}
+                    onChange={(event) => {
+                      handleFlagToggle('canPurchase', event.target.checked)
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Permitir compra
+                </label>
+              </div>
             </CardContent>
           </Card>
 
@@ -1105,28 +1138,7 @@ export function InventoryFormPage() {
                 </div>
               </div>
 
-              <div className="grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-3">
-                {[
-                  ['isActive', 'Produto ativo'],
-                  ['canSell', 'Permitir venda'],
-                  ['canPurchase', 'Permitir compra'],
-                ].map(([field, label]) => (
-                  <label key={field} className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={form[field as 'isActive' | 'canSell' | 'canPurchase']}
-                      onChange={(event) => {
-                        updateForm(
-                          field as 'isActive' | 'canSell' | 'canPurchase',
-                          event.target.checked,
-                        )
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
+
               <div>
                 <label
                   htmlFor="inventory-notes"
@@ -1159,6 +1171,25 @@ export function InventoryFormPage() {
           </div>
         </form>
       )}
+
+      <ConfirmActionDialog
+        open={pendingFlagChange !== null}
+        title="Confirmar alteração"
+        description={`Ao realizar alteração o sistema não vai deixar mais realizar a ${
+          pendingFlagChange?.field === 'canPurchase' ? 'Compra' : 'Venda'
+        } deseja continuar?`}
+        confirmLabel="Continuar"
+        onCancel={() => {
+          setPendingFlagChange(null)
+        }}
+        onConfirm={() => {
+          if (pendingFlagChange) {
+            updateForm(pendingFlagChange.field, pendingFlagChange.nextValue)
+          }
+          setPendingFlagChange(null)
+          return Promise.resolve({ success: true, data: undefined })
+        }}
+      />
     </div>
   )
 }
