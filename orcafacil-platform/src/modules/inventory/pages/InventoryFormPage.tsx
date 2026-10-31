@@ -6,6 +6,7 @@ import { supplierService } from '@modules/suppliers/services/supplier.service'
 import { Button } from '@shared/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Input } from '@shared/components/ui/Input'
+import { ListBox } from '@shared/components/ui/ListBox'
 import type { InventoryItem, Supplier } from '@shared/types/common'
 import { logger } from '@shared/lib/logger'
 import { ArrowLeft, Barcode, Package, Plus, ShoppingBag, Tag, Warehouse } from 'lucide-react'
@@ -668,46 +669,37 @@ export function InventoryFormPage() {
                 }}
               />
               <div className="space-y-1.5">
-                <label
-                  htmlFor="inventory-warehouse"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  Depósito
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    id="inventory-warehouse"
-                    value={form.warehouse}
-                    onChange={(event) => {
-                      updateForm('warehouse', event.target.value)
-                    }}
-                    className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Selecione um depósito</option>
-                    {form.warehouse &&
-                      !warehouses.some((w) => w.name === form.warehouse) && (
-                        <option value={form.warehouse}>{form.warehouse}</option>
-                      )}
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.name}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setIsCreatingWarehouse((open) => !open)
-                      setWarehouseError('')
-                    }}
-                    aria-label="Criar novo depósito"
-                    title="Criar novo depósito"
-                    className="px-3"
-                  >
-                    <Plus className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </div>
+                <ListBox
+                  id="inventory-warehouse"
+                  label="Depósito"
+                  placeholder="Selecione um depósito"
+                  searchPlaceholder="Buscar depósito..."
+                  value={form.warehouse}
+                  onChange={(val) => {
+                    updateForm('warehouse', val as string)
+                  }}
+                  options={[
+                    ...(form.warehouse && !warehouses.some((w) => w.name === form.warehouse)
+                      ? [{ value: form.warehouse, label: form.warehouse }]
+                      : []),
+                    ...warehouses.map((w) => ({ value: w.name, label: w.name })),
+                  ]}
+                  actionButton={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setIsCreatingWarehouse((open) => !open)
+                        setWarehouseError('')
+                      }}
+                      aria-label="Criar novo depósito"
+                      title="Criar novo depósito"
+                      className="px-3"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  }
+                />
                 {isCreatingWarehouse && (
                   <div className="flex gap-2 pt-1">
                     <input
@@ -910,30 +902,26 @@ export function InventoryFormPage() {
                   Nenhum fornecedor cadastrado. Você pode vincular um depois.
                 </p>
               ) : (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {suppliers.map((supplier) => (
-                    <label
-                      key={supplier.id}
-                      className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.supplierIds.includes(supplier.id)}
-                        onChange={(event) => {
-                          const supplierIds = event.target.checked
-                            ? [...form.supplierIds, supplier.id]
-                            : form.supplierIds.filter((id) => id !== supplier.id)
-                          updateFormFields({
-                            supplierIds,
-                            supplierId: supplierIds[0] ?? '',
-                          })
-                        }}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      {supplier.name}
-                    </label>
-                  ))}
-                </div>
+                <ListBox
+                  label="Selecionar fornecedores"
+                  placeholder="Selecione um ou mais fornecedores..."
+                  searchPlaceholder="Buscar fornecedor por nome ou documento..."
+                  multiple
+                  value={form.supplierIds}
+                  onChange={(val) => {
+                    const supplierIds = val as string[]
+                    updateFormFields({
+                      supplierIds,
+                      supplierId: supplierIds[0] ?? '',
+                    })
+                  }}
+                  options={suppliers.map((s) => ({
+                    value: s.id,
+                    label: s.name,
+                    description: s.document ?? undefined,
+                  }))}
+                  helperText="Clique para selecionar ou desmarcar. O primeiro fornecedor será o principal."
+                />
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
@@ -1093,21 +1081,20 @@ export function InventoryFormPage() {
                       updateForm('gtin', event.target.value)
                     }}
                   />
-                  <label className="space-y-1.5 text-sm font-medium text-gray-700">
-                    Origem da mercadoria
-                    <select
-                      value={form.fiscalOrigin}
-                      onChange={(event) => {
-                        updateForm('fiscalOrigin', event.target.value)
-                      }}
-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal"
-                    >
-                      <option value="">Não informado</option>
-                      <option value="0">0 · Nacional</option>
-                      <option value="1">1 · Importação direta</option>
-                      <option value="2">2 · Adquirida no mercado interno</option>
-                    </select>
-                  </label>
+                  <ListBox
+                    label="Origem da mercadoria"
+                    placeholder="Selecione a origem"
+                    value={form.fiscalOrigin}
+                    onChange={(val) => {
+                      updateForm('fiscalOrigin', val as string)
+                    }}
+                    options={[
+                      { value: '', label: 'Não informado' },
+                      { value: '0', label: '0 · Nacional' },
+                      { value: '1', label: '1 · Importação direta' },
+                      { value: '2', label: '2 · Adquirida no mercado interno' },
+                    ]}
+                  />
                   <Input
                     label="Unidade comercial"
                     value={form.commercialUnit}

@@ -5,6 +5,7 @@ import { supplierService } from '@modules/suppliers/services/supplier.service'
 import { Button } from '@shared/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Input } from '@shared/components/ui/Input'
+import { ListBox } from '@shared/components/ui/ListBox'
 import type { InventoryItem, InventoryMovement, Supplier } from '@shared/types/common'
 import { ArrowLeft, ArrowLeftRight, History, Package } from 'lucide-react'
 import { inventoryService } from '../services/inventory.service'
@@ -248,50 +249,42 @@ export function InventoryMovementsPage() {
                   </div>
                 )}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <label className="space-y-1.5 text-sm font-medium text-gray-700">
-                    Direção
-                    <select
-                      value={direction}
-                      onChange={(event) => {
-                        handleDirectionChange(event.target.value as MovementDirection)
-                      }}
-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal"
-                      disabled={!item.isActive}
-                    >
-                      <option value="in">Entrada</option>
-                      <option value="out">Saída</option>
-                    </select>
-                  </label>
-                  <label className="space-y-1.5 text-sm font-medium text-gray-700">
-                    Tipo
-                    <select
-                      value={type}
-                      onChange={(event) => {
-                        setType(event.target.value as MovementType)
-                      }}
-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal"
-                      disabled={!item.isActive}
-                    >
-                      {(direction === 'in'
-                        ? [
-                            ['entry', 'Entrada'],
-                            ['purchase', 'Compra'],
-                            ['return', 'Devolução'],
-                            ['adjustment', 'Ajuste positivo'],
-                          ]
-                        : [
-                            ['exit', 'Saída'],
-                            ['loss', 'Perda'],
-                            ['damaged', 'Avaria'],
-                            ['adjustment', 'Ajuste negativo'],
-                          ]
-                      ).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <ListBox
+                    label="Direção"
+                    searchable={false}
+                    disabled={!item.isActive}
+                    value={direction}
+                    onChange={(val) => {
+                      handleDirectionChange(val as MovementDirection)
+                    }}
+                    options={[
+                      { value: 'in', label: 'Entrada' },
+                      { value: 'out', label: 'Saída' },
+                    ]}
+                  />
+                  <ListBox
+                    label="Tipo"
+                    searchable={false}
+                    disabled={!item.isActive}
+                    value={type}
+                    onChange={(val) => {
+                      setType(val as MovementType)
+                    }}
+                    options={(direction === 'in'
+                      ? [
+                          { value: 'entry', label: 'Entrada' },
+                          { value: 'purchase', label: 'Compra' },
+                          { value: 'return', label: 'Devolução' },
+                          { value: 'adjustment', label: 'Ajuste positivo' },
+                        ]
+                      : [
+                          { value: 'exit', label: 'Saída' },
+                          { value: 'loss', label: 'Perda' },
+                          { value: 'damaged', label: 'Avaria' },
+                          { value: 'adjustment', label: 'Ajuste negativo' },
+                        ]
+                    )}
+                  />
                   <Input
                     label={`Quantidade (${item.unit}) *`}
                     type="number"
@@ -317,24 +310,20 @@ export function InventoryMovementsPage() {
                     disabled={!item.isActive}
                   />
                   {direction === 'in' && (
-                    <label className="space-y-1.5 text-sm font-medium text-gray-700">
-                      Fornecedor
-                      <select
-                        value={supplierId}
-                        onChange={(event) => {
-                          setSupplierId(event.target.value)
-                        }}
-                        className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal"
-                        disabled={!item.isActive}
-                      >
-                        <option value="">Não informado</option>
-                        {suppliers.map((supplier) => (
-                          <option key={supplier.id} value={supplier.id}>
-                            {supplier.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <ListBox
+                      label="Fornecedor"
+                      placeholder="Não informado"
+                      searchPlaceholder="Buscar fornecedor..."
+                      value={supplierId}
+                      onChange={(val) => {
+                        setSupplierId(val as string)
+                      }}
+                      options={[
+                        { value: '', label: 'Não informado' },
+                        ...suppliers.map((s) => ({ value: s.id, label: s.name })),
+                      ]}
+                      disabled={!item.isActive}
+                    />
                   )}
                   <Input
                     label="Documento de referência"

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Badge } from '@shared/components/ui/Badge'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import {
   ShieldCheck,
@@ -503,39 +504,32 @@ export function OrganizationSettingsPage() {
               autoComplete="off"
             >
               <div>
-                <label
-                  htmlFor="employee-organization"
-                  className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2"
-                >
-                  Organização
-                </label>
-                <select
+                <ListBox
                   id="employee-organization"
+                  label="Organização"
+                  placeholder={
+                    isLoadingManageableOrganizations
+                      ? 'Carregando...'
+                      : manageableOrganizations.length === 0
+                        ? 'Nenhuma organização disponível'
+                        : 'Selecione uma organização...'
+                  }
+                  searchPlaceholder="Buscar organização..."
                   value={selectedOrganizationId}
-                  onChange={(e) => {
-                    setSelectedOrganizationId(e.target.value)
+                  onChange={(val) => {
+                    setSelectedOrganizationId(val as string)
                     setSelectedDashboardModules([])
                     setFormError('')
                   }}
                   disabled={
                     isLoadingManageableOrganizations || manageableOrganizations.length === 0
                   }
-                  required
-                  className="flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isLoadingManageableOrganizations && <option value="">Carregando...</option>}
-                  {!isLoadingManageableOrganizations && manageableOrganizations.length === 0 && (
-                    <option value="">Nenhuma organização disponível</option>
-                  )}
-                  {manageableOrganizations.map((organization) => (
-                    <option key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1.5 text-xs text-gray-500">
-                  O funcionário será vinculado à organização selecionada.
-                </p>
+                  options={manageableOrganizations.map((o) => ({
+                    value: o.id,
+                    label: o.name,
+                  }))}
+                  helperText="O funcionário será vinculado à organização selecionada."
+                />
               </div>
               <Input
                 label="Nome Completo *"
@@ -759,21 +753,17 @@ export function OrganizationSettingsPage() {
                 helperText="O novo e-mail será usado imediatamente para entrar na plataforma."
               />
               <div>
-                <label
-                  htmlFor="edit-employee-role"
-                  className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2"
-                >
-                  Papel na Organização
-                </label>
-                <select
+                <ListBox
                   id="edit-employee-role"
+                  label="Papel na Organização"
+                  searchable={false}
                   value={editMemberRole}
-                  onChange={(e) => setEditMemberRole(e.target.value as OrganizationRole)}
-                  className="flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="member">Membro Operacional</option>
-                  <option value="admin">Administrador</option>
-                </select>
+                  onChange={(val) => setEditMemberRole(val as OrganizationRole)}
+                  options={[
+                    { value: 'member', label: 'Membro Operacional' },
+                    { value: 'admin', label: 'Administrador' },
+                  ]}
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">

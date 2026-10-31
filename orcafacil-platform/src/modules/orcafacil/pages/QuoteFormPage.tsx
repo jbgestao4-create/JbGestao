@@ -18,6 +18,7 @@ import {
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { ListBox } from '@shared/components/ui/ListBox'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import { Plus, Trash2, ArrowLeft, Search, UserRoundPlus } from 'lucide-react'
 
@@ -624,23 +625,20 @@ export function QuoteFormPage() {
                       className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/75 p-4"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <label className="w-full space-y-1.5 text-sm font-medium text-gray-700 sm:max-w-xs">
-                          Tipo do item
-                          <select
-                            aria-label={`Tipo do item ${String(itemIndex + 1)}`}
+                        <div className="w-full sm:max-w-xs">
+                          <ListBox
+                            label="Tipo do item"
+                            searchable={false}
                             value={item.itemType}
-                            onChange={(event) => {
-                              handleItemTypeChange(
-                                item.id,
-                                event.target.value as FormItem['itemType'],
-                              )
+                            onChange={(val) => {
+                              handleItemTypeChange(item.id, val as FormItem['itemType'])
                             }}
-                            className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="service">Serviço</option>
-                            <option value="material">Material</option>
-                          </select>
-                        </label>
+                            options={[
+                              { value: 'service', label: 'Serviço' },
+                              { value: 'material', label: 'Material' },
+                            ]}
+                          />
+                        </div>
                         {items.length > 1 && (
                           <button
                             type="button"
@@ -674,45 +672,32 @@ export function QuoteFormPage() {
                         </div>
                         {item.itemType === 'material' && (
                           <div className="sm:col-span-3">
-                            <label
-                              htmlFor={`quote-inventory-${item.id}`}
-                              className="mb-1.5 block text-sm font-medium text-gray-700"
-                            >
-                              Referência do material *
-                            </label>
-                            <select
+                            <ListBox
                               id={`quote-inventory-${item.id}`}
+                              label="Referência do material *"
+                              placeholder="Selecione do estoque"
+                              searchPlaceholder="Buscar material..."
                               value={item.inventoryItemId}
-                              onChange={(event) => {
-                                handleSelectInventoryItem(item.id, event.target.value)
+                              onChange={(val) => {
+                                handleSelectInventoryItem(item.id, val as string)
                               }}
-                              required
-                              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">Selecione do estoque</option>
-                              {inventoryItems
+                              options={inventoryItems
                                 .filter(
                                   (inventoryItem) =>
                                     (inventoryItem.canSell && inventoryItem.isActive) ||
                                     inventoryItem.id === item.inventoryItemId,
                                 )
-                                .map((inventoryItem) => (
-                                  <option key={inventoryItem.id} value={inventoryItem.id}>
-                                    {inventoryItem.name}
-                                    {!inventoryItem.isActive ? ' (inativo)' : ''} ·{' '}
-                                    {inventoryItem.sku} · saldo{' '}
-                                    {Number(inventoryItem.quantityOnHand).toLocaleString('pt-BR', {
-                                      maximumFractionDigits: 4,
-                                    })}{' '}
-                                    {inventoryItem.unit}
-                                  </option>
-                                ))}
-                            </select>
-                            <p className="mt-1 text-xs text-gray-500">
-                              {item.unit
-                                ? `Unidade: ${item.unit}`
-                                : 'Vincule ao cadastro do estoque.'}
-                            </p>
+                                .map((inventoryItem) => ({
+                                  value: inventoryItem.id,
+                                  label: `${inventoryItem.name}${!inventoryItem.isActive ? ' (inativo)' : ''}`,
+                                  description: `${inventoryItem.sku} · saldo ${Number(inventoryItem.quantityOnHand).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${inventoryItem.unit}`,
+                                }))}
+                              helperText={
+                                item.unit
+                                  ? `Unidade: ${item.unit}`
+                                  : 'Vincule ao cadastro do estoque.'
+                              }
+                            />
                           </div>
                         )}
                         <div className="sm:col-span-2">

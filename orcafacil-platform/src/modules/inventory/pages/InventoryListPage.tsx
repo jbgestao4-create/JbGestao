@@ -6,6 +6,7 @@ import type { InventoryItem, ServiceResult } from '@shared/types/common'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { ArrowLeft, ArrowLeftRight, Archive, Package, Pencil, Plus, Search, X } from 'lucide-react'
 
@@ -174,21 +175,23 @@ export function InventoryListPage() {
             <p className="text-xs text-gray-500">
               Pesquise por nome, SKU, código de barras, marca ou fornecedor.
             </p>
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-              <span>Mostrar</span>
-              <select
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span className="shrink-0">Mostrar:</span>
+              <ListBox
+                className="w-40"
+                searchable={false}
                 value={inventoryFilter}
-                onChange={(event) => {
-                  setInventoryFilter(event.target.value as 'all' | 'active' | 'inactive' | 'low')
+                onChange={(val) => {
+                  setInventoryFilter(val as 'all' | 'active' | 'inactive' | 'low')
                 }}
-                className="h-9 rounded-lg border border-gray-300 bg-white px-2 text-sm"
-              >
-                <option value="all">Todos</option>
-                <option value="active">Ativos</option>
-                <option value="inactive">Inativos</option>
-                <option value="low">Estoque baixo</option>
-              </select>
-            </label>
+                options={[
+                  { value: 'all', label: 'Todos' },
+                  { value: 'active', label: 'Ativos' },
+                  { value: 'inactive', label: 'Inativos' },
+                  { value: 'low', label: 'Estoque baixo' },
+                ]}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
