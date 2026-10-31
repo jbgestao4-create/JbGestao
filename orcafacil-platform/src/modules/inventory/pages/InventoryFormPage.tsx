@@ -703,9 +703,9 @@ export function InventoryFormPage() {
                     }}
                     aria-label="Criar novo depósito"
                     title="Criar novo depósito"
+                    className="px-3"
                   >
                     <Plus className="h-4 w-4" aria-hidden="true" />
-                    Novo
                   </Button>
                 </div>
                 {isCreatingWarehouse && (
