@@ -8,8 +8,9 @@ import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Input } from '@shared/components/ui/Input'
 import type { InventoryItem, Supplier } from '@shared/types/common'
 import { logger } from '@shared/lib/logger'
-import { ArrowLeft, Barcode, Package, ShoppingBag, Tag, Warehouse } from 'lucide-react'
+import { ArrowLeft, Barcode, Package, Plus, ShoppingBag, Tag, Warehouse } from 'lucide-react'
 import { inventoryService, type InventoryItemParams } from '../services/inventory.service'
+import { warehouseService, type Warehouse as WarehouseOption } from '../services/warehouse.service'
 import { generateSku, getSalesIndicators, isValidBarcode } from '../domain/product-identification'
 import {
   clearInventoryDraft,
@@ -157,6 +158,28 @@ export function InventoryFormPage() {
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const hasLoggedStorageError = useRef(false)
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
+  const [isCreatingWarehouse, setIsCreatingWarehouse] = useState(false)
+  const [newWarehouseName, setNewWarehouseName] = useState('')
+  const [warehouseError, setWarehouseError] = useState('')
+  const [isSavingWarehouse, setIsSavingWarehouse] = useState(false)
+
+  useEffect(() => {
+    if (!organizationId) return
+    let active = true
+    void warehouseService.list(organizationId).then((result) => {
+      if (!active) return
+      if (result.success) {
+        setWarehouses(result.data)
+        setWarehouseError('')
+      } else {
+        setWarehouseError(result.error)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [organizationId])
 
   useEffect(() => {
     if (!organizationId || !userId) return
@@ -269,6 +292,37 @@ export function InventoryFormPage() {
     value: InventoryItemParams[K],
   ) => {
     updateFormFields({ [field]: value })
+  }
+
+  const handleCreateWarehouse = async () => {
+    if (!organizationId) return
+    const name = newWarehouseName.trim()
+    if (!name) {
+      setWarehouseError('Informe o nome do depósito.')
+      return
+    }
+    const existing = warehouses.find((w) => w.name.toLowerCase() === name.toLowerCase())
+    if (existing) {
+      updateForm('warehouse', existing.name)
+      setIsCreatingWarehouse(false)
+      setNewWarehouseName('')
+      setWarehouseError('')
+      return
+    }
+    setIsSavingWarehouse(true)
+    const result = await warehouseService.create(organizationId, name)
+    setIsSavingWarehouse(false)
+    if (!result.success) {
+      setWarehouseError(result.error)
+      return
+    }
+    setWarehouses((current) =>
+      [...current, result.data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    )
+    updateForm('warehouse', result.data.name)
+    setIsCreatingWarehouse(false)
+    setNewWarehouseName('')
+    setWarehouseError('')
   }
 
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
@@ -612,14 +666,83 @@ export function InventoryFormPage() {
                   updateForm('idealRestockQuantity', event.target.value)
                 }}
               />
-              <Input
-                label="Depósito"
-                placeholder="Ex.: Loja principal"
-                value={form.warehouse}
-                onChange={(event) => {
-                  updateForm('warehouse', event.target.value)
-                }}
-              />
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="inventory-warehouse"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Depósito
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    id="inventory-warehouse"
+                    value={form.warehouse}
+                    onChange={(event) => {
+                      updateForm('warehouse', event.target.value)
+                    }}
+                    className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Selecione um depósito</option>
+                    {form.warehouse &&
+                      !warehouses.some((w) => w.name === form.warehouse) && (
+                        <option value={form.warehouse}>{form.warehouse}</option>
+                      )}
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.name}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsCreatingWarehouse((open) => !open)
+                      setWarehouseError('')
+                    }}
+                    aria-label="Criar novo depósito"
+                    title="Criar novo depósito"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Novo
+                  </Button>
+                </div>
+                {isCreatingWarehouse && (
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      autoFocus
+                      value={newWarehouseName}
+                      placeholder="Ex.: Loja principal"
+                      maxLength={100}
+                      onChange={(event) => {
+                        setNewWarehouseName(event.target.value)
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void handleCreateWarehouse()
+                        }
+                        if (event.key === 'Escape') setIsCreatingWarehouse(false)
+                      }}
+                      className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <Button
+                      type="button"
+                      isLoading={isSavingWarehouse}
+                      onClick={() => void handleCreateWarehouse()}
+                    >
+                      Salvar
+                    </Button>
+                  </div>
+                )}
+                {warehouseError ? (
+                  <p className="text-xs text-red-600">{warehouseError}</p>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    Depósitos criados ficam salvos para os próximos materiais.
+                  </p>
+                )}
+              </div>
               <Input
                 label="Localização"
                 placeholder="Ex.: Corredor 2, prateleira A"
