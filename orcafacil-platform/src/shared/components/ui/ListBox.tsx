@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@shared/lib/cn'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 
@@ -44,6 +53,40 @@ export function ListBox({
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const [coords, setCoords] = useState<{
+    top: number
+    left: number
+    width: number
+    placement: 'bottom' | 'top'
+  }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    placement: 'bottom',
+  })
+
+  const updateCoords = useCallback(() => {
+    if (!buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const fitsBelow = spaceBelow >= 220 || spaceBelow > rect.top
+    const width = Math.max(rect.width, 220)
+    let left = rect.left
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - width - 8)
+    }
+
+    setCoords({
+      top: fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - 4),
+      left,
+      width,
+      placement: fitsBelow ? 'bottom' : 'top',
+    })
+  }, [])
 
   const selectedValues: string[] = Array.isArray(value)
     ? value
@@ -52,8 +95,30 @@ export function ListBox({
       : []
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+    if (!isOpen) return
+    updateCoords()
+
+    const handleScrollOrResize = () => {
+      updateCoords()
+    }
+
+    window.addEventListener('scroll', handleScrollOrResize, true)
+    window.addEventListener('resize', handleScrollOrResize)
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true)
+      window.removeEventListener('resize', handleScrollOrResize)
+    }
+  }, [isOpen, updateCoords])
+
+  useEffect(() => {
+    function handleClickOutside(event: globalThis.MouseEvent) {
+      const target = event.target as Node
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
         setIsOpen(false)
       }
     }
@@ -64,6 +129,17 @@ export function ListBox({
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (isOpen && searchable) {
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus()
+      }, 50)
+      return () => {
+        clearTimeout(timer)
+      }
+    }
+  }, [isOpen, searchable])
 
   const filteredOptions = options.filter(
     (opt) =>
@@ -84,12 +160,21 @@ export function ListBox({
     }
   }
 
-  const handleRemove = (optionValue: string, e: React.MouseEvent) => {
+  const handleRemove = (optionValue: string, e: MouseEvent) => {
     e.stopPropagation()
     if (multiple) {
       onChange(selectedValues.filter((v) => v !== optionValue))
     } else {
       onChange('')
+    }
+  }
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setIsOpen(false)
+    } else if (e.key === 'Enter' && search && filteredOptions.length > 0) {
+      e.preventDefault()
+      handleSelect(filteredOptions[0].value)
     }
   }
 
@@ -106,6 +191,7 @@ export function ListBox({
       <div className="flex gap-2">
         <div className="relative flex-1">
           <button
+            ref={buttonRef}
             type="button"
             id={id}
             disabled={disabled}
@@ -138,7 +224,7 @@ export function ListBox({
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
-                          handleRemove(opt.value, e as unknown as React.MouseEvent)
+                          handleRemove(opt.value, e as unknown as MouseEvent)
                         }
                       }}
                       className="hover:text-blue-900 focus:outline-none"
@@ -162,65 +248,81 @@ export function ListBox({
             />
           </button>
 
-          {isOpen && (
-            <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
-              {searchable && options.length > 5 && (
-                <div className="border-b border-gray-100 p-2">
-                  <div className="relative flex items-center">
-                    <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      autoFocus
-                      placeholder={searchPlaceholder}
-                      value={search}
-                      onChange={(e) => {
-                        setSearch(e.target.value)
-                      }}
-                      className="w-full rounded-md border border-gray-200 py-1.5 pl-8 pr-3 text-xs placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              )}
-
+          {isOpen &&
+            createPortal(
               <div
-                role="listbox"
-                aria-multiselectable={multiple}
-                className="max-h-48 overflow-y-auto p-1 text-sm"
+                ref={dropdownRef}
+                style={{
+                  position: 'fixed',
+                  top: coords.placement === 'bottom' ? coords.top : undefined,
+                  bottom: coords.placement === 'top' ? window.innerHeight - coords.top : undefined,
+                  left: coords.left,
+                  width: coords.width,
+                  zIndex: 9999,
+                }}
+                className="max-h-60 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl animate-in fade-in-50 duration-100"
               >
-                {filteredOptions.length === 0 ? (
-                  <p className="p-3 text-center text-xs text-gray-500">Nenhuma opção encontrada</p>
-                ) : (
-                  filteredOptions.map((opt) => {
-                    const isSelected = selectedValues.includes(opt.value)
-                    return (
-                      <div
-                        key={opt.value}
-                        role="option"
-                        aria-selected={isSelected}
-                        onClick={() => {
-                          handleSelect(opt.value)
+                {searchable && (
+                  <div className="border-b border-gray-100 p-2">
+                    <div className="relative flex items-center">
+                      <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder={searchPlaceholder}
+                        value={search}
+                        onKeyDown={handleKeyDown}
+                        onChange={(e) => {
+                          setSearch(e.target.value)
                         }}
-                        className={cn(
-                          'flex cursor-pointer items-center justify-between rounded-md px-3 py-2 transition-colors text-sm',
-                          isSelected
-                            ? 'bg-blue-50 font-medium text-blue-900'
-                            : 'text-gray-700 hover:bg-gray-100',
-                        )}
-                      >
-                        <div className="flex flex-col">
-                          <span>{opt.label}</span>
-                          {opt.description && (
-                            <span className="text-xs text-gray-500">{opt.description}</span>
-                          )}
-                        </div>
-                        {isSelected && <Check className="h-4 w-4 shrink-0 text-blue-600" />}
-                      </div>
-                    )
-                  })
+                        className="h-8 w-full rounded-md border border-gray-200 py-1 pl-8 pr-3 text-xs placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                 )}
-              </div>
-            </div>
-          )}
+
+                <div
+                  role="listbox"
+                  aria-multiselectable={multiple}
+                  className="max-h-48 overflow-y-auto p-1 text-sm"
+                >
+                  {filteredOptions.length === 0 ? (
+                    <p className="p-3 text-center text-xs text-gray-500">
+                      Nenhuma opção encontrada
+                    </p>
+                  ) : (
+                    filteredOptions.map((opt) => {
+                      const isSelected = selectedValues.includes(opt.value)
+                      return (
+                        <div
+                          key={opt.value}
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            handleSelect(opt.value)
+                          }}
+                          className={cn(
+                            'flex cursor-pointer items-center justify-between rounded-md px-3 py-2 transition-colors text-sm',
+                            isSelected
+                              ? 'bg-blue-50 font-medium text-blue-900'
+                              : 'text-gray-700 hover:bg-gray-100',
+                          )}
+                        >
+                          <div className="flex flex-col">
+                            <span>{opt.label}</span>
+                            {opt.description && (
+                              <span className="text-xs text-gray-500">{opt.description}</span>
+                            )}
+                          </div>
+                          {isSelected && <Check className="h-4 w-4 shrink-0 text-blue-600" />}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>,
+              document.body,
+            )}
         </div>
 
         {actionButton}

@@ -1,4 +1,5 @@
-import { useEffect, useState, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -21,6 +22,139 @@ import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import { Plus, Trash2, ArrowLeft, Search, UserRoundPlus } from 'lucide-react'
+
+function ProductCodeSearch({
+  value,
+  inventoryItems,
+  onSelect,
+}: {
+  value: string
+  inventoryItems: InventoryItem[]
+  onSelect: (inventoryItemId: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [isFocused, setIsFocused] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+  })
+
+  const updateCoords = useCallback(() => {
+    if (!inputRef.current) return
+    const rect = inputRef.current.getBoundingClientRect()
+    setCoords({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: Math.max(rect.width, 240),
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isFocused) return
+    updateCoords()
+    const handleScrollOrResize = () => {
+      updateCoords()
+    }
+    window.addEventListener('scroll', handleScrollOrResize, true)
+    window.addEventListener('resize', handleScrollOrResize)
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true)
+      window.removeEventListener('resize', handleScrollOrResize)
+    }
+  }, [isFocused, updateCoords])
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const matches = normalizedQuery
+    ? inventoryItems.filter(
+        (inv) =>
+          inv.sku.toLowerCase().includes(normalizedQuery) ||
+          (inv.barcode && inv.barcode.toLowerCase().includes(normalizedQuery)),
+      )
+    : []
+
+  const showDropdown = isFocused && query.trim().length > 0
+
+  return (
+    <div className="relative w-full">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder="Cód / SKU"
+        value={isFocused ? query : value}
+        onFocus={() => {
+          setIsFocused(true)
+          setQuery('')
+          updateCoords()
+        }}
+        onBlur={() => {
+          setTimeout(() => {
+            setIsFocused(false)
+            setQuery('')
+          }, 200)
+        }}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          updateCoords()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && matches.length > 0) {
+            e.preventDefault()
+            onSelect(matches[0].id)
+            setIsFocused(false)
+            setQuery('')
+            inputRef.current?.blur()
+          } else if (e.key === 'Escape') {
+            setIsFocused(false)
+            setQuery('')
+          }
+        }}
+        className="h-10 w-full rounded-lg border border-gray-300 px-2.5 text-xs font-mono uppercase text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      {showDropdown &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: 'fixed',
+              top: coords.top,
+              left: coords.left,
+              width: coords.width,
+              zIndex: 9999,
+            }}
+            className="max-h-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-xl animate-in fade-in-50 duration-100"
+          >
+            {matches.length === 0 ? (
+              <div className="p-2 text-center text-xs text-gray-500">
+                Nenhum código correspondente
+              </div>
+            ) : (
+              matches.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    onSelect(item.id)
+                    setIsFocused(false)
+                    setQuery('')
+                  }}
+                  className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-blue-50 focus:bg-blue-50"
+                >
+                  <span className="font-mono font-semibold text-blue-700">{item.sku}</span>
+                  <span className="truncate text-gray-700">{item.name}</span>
+                </button>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
+    </div>
+  )
+}
 
 interface FormItem {
   id: string
@@ -618,7 +752,8 @@ export function QuoteFormPage() {
                     <table className="w-full min-w-[640px] text-left text-sm">
                       <thead className="border-b border-gray-200 bg-gray-50/75 text-xs font-semibold uppercase tracking-wider text-gray-500">
                         <tr>
-                          <th className="py-2.5 pl-3 pr-2 w-28">Tipo</th>
+                          <th className="py-2.5 pl-3 pr-2 w-24">Tipo</th>
+                          <th className="py-2.5 px-2 w-36">Código</th>
                           <th className="py-2.5 px-2">Descrição / Material</th>
                           <th className="py-2.5 px-2 w-28 text-right">Qtd</th>
                           <th className="py-2.5 px-2 w-36 text-right">Preço Unit.</th>
@@ -651,11 +786,29 @@ export function QuoteFormPage() {
                               </td>
                               <td className="py-2 px-2 align-top">
                                 {item.itemType === 'material' ? (
+                                  <ProductCodeSearch
+                                    value={linkedInventoryItem?.sku || ''}
+                                    inventoryItems={inventoryItems.filter(
+                                      (inv) =>
+                                        inv.canSell || inv.id === item.inventoryItemId,
+                                    )}
+                                    onSelect={(selectedId) => {
+                                      handleSelectInventoryItem(item.id, selectedId)
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="flex h-10 items-center pl-2">
+                                    <span className="text-xs text-gray-400">—</span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 align-top">
+                                {item.itemType === 'material' ? (
                                   <div className="space-y-1">
                                     <ListBox
                                       id={`quote-inventory-${item.id}`}
                                       placeholder="Selecione o material..."
-                                      searchPlaceholder="Buscar material..."
+                                      searchPlaceholder="Buscar por nome ou código..."
                                       value={item.inventoryItemId}
                                       onChange={(val) => {
                                         handleSelectInventoryItem(item.id, val as string)

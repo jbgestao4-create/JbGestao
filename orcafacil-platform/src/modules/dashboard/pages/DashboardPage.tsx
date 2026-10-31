@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
-  Building2,
   ChartNoAxesCombined,
   ChevronDown,
   ChevronUp,
@@ -25,6 +24,7 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { quoteService } from '@modules/orcafacil/services/quote.service'
 import { customerService } from '@modules/customers/services/customer.service'
+import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import type { DashboardModuleCode } from '@shared/types/database'
 
@@ -197,29 +197,21 @@ export function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <label className="relative flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
-              <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
-              <span className="sr-only">Filial selecionada</span>
-              <select
-                aria-label="Selecionar filial"
+            <div className="w-56">
+              <ListBox
+                searchable={organizations.length > 4}
+                searchPlaceholder="Buscar filial..."
                 value={currentOrganization?.id ?? ''}
-                onChange={(event) => {
-                  const organization = organizations.find((item) => item.id === event.target.value)
+                onChange={(val) => {
+                  const organization = organizations.find((item) => item.id === val)
                   if (organization) setCurrentOrganization(organization)
                 }}
-                className="max-w-[220px] appearance-none truncate bg-transparent pr-4 outline-none"
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                aria-hidden="true"
-                className="pointer-events-none absolute right-3 h-3.5 w-3.5 text-slate-400"
+                options={organizations.map((organization) => ({
+                  value: organization.id,
+                  label: organization.name,
+                }))}
               />
-            </label>
+            </div>
 
             <div
               className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600"

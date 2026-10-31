@@ -13,6 +13,7 @@ import {
 import { formatCurrency } from '@shared/utils/monetary'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
+import { ListBox } from '@shared/components/ui/ListBox'
 import { FileSpreadsheet, Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react'
 import type { QuoteStatus } from '@shared/types/database'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
@@ -315,29 +316,26 @@ export function QuotesListPage() {
                         <td className="px-3 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {filterStatus !== 'all' && allowedNext.length > 0 && (
-                              <select
-                                aria-label="Alterar Status"
-                                value=""
-                                onChange={(e) => {
-                                  if (e.target.value) {
-                                    void handleStatusChange(
-                                      q.id,
-                                      q.status,
-                                      e.target.value as QuoteStatus,
-                                    )
-                                  }
-                                }}
-                                className="w-[128px] max-w-full text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 text-gray-700 cursor-pointer"
-                              >
-                                <option value="" disabled>
-                                  Mudar status...
-                                </option>
-                                {allowedNext.map((st) => (
-                                  <option key={st} value={st}>
-                                    → {getStatusLabel(st)}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="w-36 text-left">
+                                <ListBox
+                                  placeholder="Mudar status..."
+                                  searchable={false}
+                                  value=""
+                                  onChange={(val) => {
+                                    if (val) {
+                                      void handleStatusChange(
+                                        q.id,
+                                        q.status,
+                                        val as QuoteStatus,
+                                      )
+                                    }
+                                  }}
+                                  options={allowedNext.map((st) => ({
+                                    value: st,
+                                    label: `→ ${getStatusLabel(st)}`,
+                                  }))}
+                                />
+                              </div>
                             )}
                             {canEditQuote(q.status, userRole) && (
                               <Link

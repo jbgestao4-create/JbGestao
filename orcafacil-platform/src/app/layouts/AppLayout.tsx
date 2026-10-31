@@ -5,6 +5,7 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
 import {
@@ -153,21 +154,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             {/* Seletor de Organização */}
             <div className="relative">
-              <select
-                aria-label="Selecionar Organização"
-                value={currentOrganization?.id}
-                onChange={(e) => {
-                  const org = organizations.find((o) => o.id === e.target.value)
+              <ListBox
+                searchable={organizations.length > 4}
+                searchPlaceholder="Buscar empresa..."
+                value={currentOrganization?.id ?? ''}
+                onChange={(val) => {
+                  const org = organizations.find((o) => o.id === val)
                   if (org) setCurrentOrganization(org)
                 }}
-                className="w-full text-xs font-medium bg-gray-50 border border-gray-200 rounded-lg p-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
-                  </option>
-                ))}
-              </select>
+                options={organizations.map((org) => ({
+                  value: org.id,
+                  label: org.name,
+                }))}
+              />
             </div>
           </div>
 
