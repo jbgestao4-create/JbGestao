@@ -12,6 +12,7 @@ import { ArrowLeft, Barcode, Package, Plus, ShoppingBag, Tag, Warehouse } from '
 import { inventoryService, type InventoryItemParams } from '../services/inventory.service'
 import { warehouseService, type Warehouse as WarehouseOption } from '../services/warehouse.service'
 import { generateSku, getSalesIndicators, isValidBarcode } from '../domain/product-identification'
+import { calculateMarginPercent, calculateSalePrice } from '../domain/pricing'
 import {
   clearInventoryDraft,
   getInventoryDraftKey,
@@ -778,34 +779,77 @@ export function InventoryFormPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Input
-                  label="Preço de compra atual (R$)"
+                  label="1. Preço de compra (R$)"
                   type="number"
                   min="0"
-                  step="0.0001"
+                  step="0.01"
                   placeholder="0.00"
+                  helperText="Quanto você paga ao fornecedor."
                   value={form.purchasePrice}
                   onChange={(event) => {
-                    updateForm('purchasePrice', event.target.value)
+                    const purchasePrice = event.target.value
+                    const salePrice = calculateSalePrice(purchasePrice, form.targetMarginPercent)
+                    updateFormFields(
+                      salePrice ? { purchasePrice, unitPrice: salePrice } : { purchasePrice },
+                    )
                   }}
                 />
                 <Input
-                  label="Preço de venda (R$)"
+                  label="2. Margem desejada (%)"
                   type="number"
                   min="0"
-                  step="0.0001"
+                  step="0.01"
+                  placeholder="0"
+                  helperText="Percentual somado ao preço de compra."
+                  value={form.targetMarginPercent}
+                  onChange={(event) => {
+                    const targetMarginPercent = event.target.value
+                    const salePrice = calculateSalePrice(form.purchasePrice, targetMarginPercent)
+                    updateFormFields(
+                      salePrice
+                        ? { targetMarginPercent, unitPrice: salePrice }
+                        : { targetMarginPercent },
+                    )
+                  }}
+                />
+                <Input
+                  label="3. Preço de venda (R$)"
+                  type="number"
+                  min="0"
+                  step="0.01"
                   placeholder="0.00"
+                  helperText="Calculado automaticamente. Se alterar, a margem é recalculada."
                   value={form.unitPrice}
                   onChange={(event) => {
-                    updateForm('unitPrice', event.target.value)
+                    const unitPrice = event.target.value
+                    const margin = calculateMarginPercent(form.purchasePrice, unitPrice)
+                    const hasPurchasePrice = Number(form.purchasePrice) > 0
+                    updateFormFields(
+                      hasPurchasePrice ? { unitPrice, targetMarginPercent: margin } : { unitPrice },
+                    )
+                  }}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Input
+                  label="Outros custos de compra (R$)"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  helperText="Ex.: frete ou despesas adicionais."
+                  value={form.extraPurchaseCost}
+                  onChange={(event) => {
+                    updateForm('extraPurchaseCost', event.target.value)
                   }}
                 />
                 <Input
                   label="Preço promocional (R$)"
                   type="number"
                   min="0"
-                  step="0.0001"
+                  step="0.01"
                   placeholder="0.00"
                   value={form.promotionalPrice}
                   onChange={(event) => {
@@ -816,34 +860,11 @@ export function InventoryFormPage() {
                   label="Preço mínimo de venda (R$)"
                   type="number"
                   min="0"
-                  step="0.0001"
+                  step="0.01"
                   placeholder="0.00"
                   value={form.minimumSalePrice}
                   onChange={(event) => {
                     updateForm('minimumSalePrice', event.target.value)
-                  }}
-                />
-                <Input
-                  label="Margem desejada (%)"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0"
-                  value={form.targetMarginPercent}
-                  onChange={(event) => {
-                    updateForm('targetMarginPercent', event.target.value)
-                  }}
-                />
-                <Input
-                  label="Outros custos de compra (R$)"
-                  type="number"
-                  min="0"
-                  step="0.0001"
-                  placeholder="0.00"
-                  helperText="Por exemplo: frete ou despesas adicionais."
-                  value={form.extraPurchaseCost}
-                  onChange={(event) => {
-                    updateForm('extraPurchaseCost', event.target.value)
                   }}
                 />
               </div>
@@ -852,23 +873,22 @@ export function InventoryFormPage() {
                 <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-emerald-800">
                   <span>Lucro bruto: R$ {salesIndicators.grossProfit}</span>
                   <span>
-                    Margem sobre venda:{' '}
-                    {salesIndicators.marginPercent.toLocaleString('pt-BR', {
+                    Margem sobre a compra:{' '}
+                    {salesIndicators.markupPercent.toLocaleString('pt-BR', {
                       maximumFractionDigits: 2,
                     })}
                     %
                   </span>
                   <span>
-                    Markup sobre compra:{' '}
-                    {salesIndicators.markupPercent.toLocaleString('pt-BR', {
+                    Participação do lucro na venda:{' '}
+                    {salesIndicators.marginPercent.toLocaleString('pt-BR', {
                       maximumFractionDigits: 2,
                     })}
                     %
                   </span>
                 </div>
                 <p className="mt-2 text-xs text-emerald-700">
-                  Estimativa antes de impostos e despesas operacionais. O sistema não altera preços
-                  automaticamente.
+                  Estimativa antes de impostos e despesas operacionais.
                 </p>
               </div>
             </CardContent>
