@@ -24,9 +24,9 @@ const EMPTY_FORM: InventoryItemParams = {
   supplierIds: [],
   name: '',
   unit: '',
-  quantityOnHand: '0',
-  minimumQuantity: '0',
-  unitPrice: '0.00',
+  quantityOnHand: '',
+  minimumQuantity: '',
+  unitPrice: '',
   sku: '',
   barcode: '',
   description: '',
@@ -36,15 +36,15 @@ const EMPTY_FORM: InventoryItemParams = {
   manufacturer: '',
   model: '',
   manufacturerReference: '',
-  purchasePrice: '0.00',
-  extraPurchaseCost: '0.00',
+  purchasePrice: '',
+  extraPurchaseCost: '',
   supplierProductCode: '',
   leadTimeDays: '',
   promotionalPrice: '',
   targetMarginPercent: '',
   minimumSalePrice: '',
-  maximumQuantity: '0',
-  idealRestockQuantity: '0',
+  maximumQuantity: '',
+  idealRestockQuantity: '',
   location: '',
   warehouse: '',
   allowNegativeStock: false,
@@ -62,7 +62,7 @@ const EMPTY_FORM: InventoryItemParams = {
   canPurchase: true,
   notes: '',
   purchaseUnit: '',
-  purchaseUnitFactor: '1',
+  purchaseUnitFactor: '',
   attributes: {},
 }
 
@@ -140,12 +140,13 @@ export function InventoryFormPage() {
   const organizationId = currentOrganization?.id
   const userId = user?.id
   const draftKey =
-    organizationId && userId ? getInventoryDraftKey(userId, organizationId, inventoryItemId) : null
+    organizationId && userId && isEditing
+      ? getInventoryDraftKey(userId, organizationId, inventoryItemId)
+      : null
   const resourceKey =
     organizationId && inventoryItemId ? `${organizationId}:${inventoryItemId}` : null
   const [form, setForm] = useState<InventoryItemParams>(() => ({
     ...EMPTY_FORM,
-    sku: generateSku(),
   }))
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [currentQuantity, setCurrentQuantity] = useState('0')
@@ -165,24 +166,15 @@ export function InventoryFormPage() {
 
     const loadForm = async () => {
       setFormError('')
-      const savedDraft = readInventoryDraft(activeDraftKey)
-      if (savedDraft.status === 'unavailable') {
-        setDraftStorageWarning(
-          'O armazenamento desta aba está indisponível; o rascunho não poderá ser preservado.',
-        )
-      } else if (savedDraft.status === 'invalid' || savedDraft.status === 'expired') {
-        setDraftStorageWarning('O rascunho anterior expirou ou estava inválido e foi descartado.')
-      } else {
-        setDraftStorageWarning('')
-      }
 
       try {
         if (inventoryItemId === undefined) {
-          setForm(
-            savedDraft.status === 'draft' ? savedDraft.form : { ...EMPTY_FORM, sku: generateSku() },
-          )
+          clearInventoryDraft(activeDraftKey)
+          setForm({ ...EMPTY_FORM })
           setCurrentQuantity('0')
-          setDraftHydratedKey(activeDraftKey)
+          setDraftHydratedKey(null)
+          setDraftStorageWarning('')
+
           const suppliersResult = await supplierService.list(organizationId)
           if (!isActive()) return
           if (suppliersResult.success) {
@@ -192,6 +184,17 @@ export function InventoryFormPage() {
             setSupplierError(suppliersResult.error)
           }
           return
+        }
+
+        const savedDraft = readInventoryDraft(activeDraftKey)
+        if (savedDraft.status === 'unavailable') {
+          setDraftStorageWarning(
+            'O armazenamento desta aba está indisponível; o rascunho não poderá ser preservado.',
+          )
+        } else if (savedDraft.status === 'invalid' || savedDraft.status === 'expired') {
+          setDraftStorageWarning('O rascunho anterior expirou ou estava inválido e foi descartado.')
+        } else {
+          setDraftStorageWarning('')
         }
 
         const [suppliersResult, result] = await Promise.all([
@@ -212,7 +215,7 @@ export function InventoryFormPage() {
         } else {
           setCurrentQuantity('0')
           setForm(
-            savedDraft.status === 'draft' ? savedDraft.form : { ...EMPTY_FORM, sku: generateSku() },
+            savedDraft.status === 'draft' ? savedDraft.form : { ...EMPTY_FORM },
           )
           setFormError(result.error)
         }
@@ -233,7 +236,7 @@ export function InventoryFormPage() {
   }, [organizationId, userId, inventoryItemId])
 
   const persistDraft = (nextForm: InventoryItemParams) => {
-    if (!draftKey || draftHydratedKey !== draftKey) return
+    if (!isEditing || !draftKey || draftHydratedKey !== draftKey) return
     if (!writeInventoryDraft(draftKey, nextForm)) {
       setDraftStorageWarning(
         'O salvamento automático do rascunho nesta aba falhou. Isso não impede salvar o material; clique em “Salvar alterações” para enviar.',
@@ -249,7 +252,7 @@ export function InventoryFormPage() {
   }
 
   const isLoading =
-    !!draftKey && (draftHydratedKey !== draftKey || (isEditing && loadedKey !== resourceKey))
+    isEditing && !!draftKey && (draftHydratedKey !== draftKey || loadedKey !== resourceKey)
   const salesIndicators = useMemo(
     () => getSalesIndicators(form.purchasePrice, form.unitPrice),
     [form.purchasePrice, form.unitPrice],
@@ -285,10 +288,7 @@ export function InventoryFormPage() {
       setFormError('Informe o nome do material e sua unidade de medida.')
       return
     }
-    if (!submittedForm.sku.trim()) {
-      setFormError('Informe um código interno para identificar este produto.')
-      return
-    }
+    const finalSku = submittedForm.sku.trim() || generateSku()
     if (!isValidBarcode(submittedForm.barcode)) {
       setFormError(
         'Confira o código de barras. EAN-8, UPC e EAN-13 precisam ter dígito verificador válido.',
@@ -325,9 +325,10 @@ export function InventoryFormPage() {
       )
       return
     }
+    const purchaseUnitFactor = submittedForm.purchaseUnitFactor.trim() || '1'
     if (
-      !Number.isFinite(Number(submittedForm.purchaseUnitFactor)) ||
-      Number(submittedForm.purchaseUnitFactor) <= 0
+      !Number.isFinite(Number(purchaseUnitFactor)) ||
+      Number(purchaseUnitFactor) <= 0
     ) {
       setFormError('O fator da unidade de compra deve ser maior que zero.')
       return
@@ -342,6 +343,15 @@ export function InventoryFormPage() {
     try {
       const params = {
         ...submittedForm,
+        sku: finalSku,
+        quantityOnHand: submittedForm.quantityOnHand.trim() || '0',
+        minimumQuantity: submittedForm.minimumQuantity.trim() || '0',
+        unitPrice: submittedForm.unitPrice.trim() || '0.00',
+        purchasePrice: submittedForm.purchasePrice.trim() || '0.00',
+        extraPurchaseCost: submittedForm.extraPurchaseCost.trim() || '0.00',
+        maximumQuantity: submittedForm.maximumQuantity.trim() || '0',
+        idealRestockQuantity: submittedForm.idealRestockQuantity.trim() || '0',
+        purchaseUnitFactor,
         supplierId: submittedForm.supplierIds[0] ?? submittedForm.supplierId,
       }
       const result =
@@ -440,13 +450,13 @@ export function InventoryFormPage() {
                 required
               />
               <Input
-                label="Código interno (SKU) *"
-                helperText="Código exclusivo para localizar o produto. Você pode editá-lo."
+                label="Código interno (SKU)"
+                placeholder="Ex.: PRD-001 (ou deixe em branco para gerar automaticamente)"
+                helperText="Código exclusivo para localizar o produto. Se deixar vazio, será gerado automaticamente."
                 value={form.sku}
                 onChange={(event) => {
                   updateForm('sku', event.target.value)
                 }}
-                required
               />
               <Input
                 label="Código de barras"
@@ -560,7 +570,8 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="0.0001"
-                  helperText="Se estiver começando agora, pode deixar zero e registrar a entrada depois."
+                  placeholder="0"
+                  helperText="Se estiver começando agora, pode deixar em branco (zero) e registrar a entrada depois."
                   value={form.quantityOnHand}
                   onChange={(event) => {
                     updateForm('quantityOnHand', event.target.value)
@@ -572,6 +583,7 @@ export function InventoryFormPage() {
                 type="number"
                 min="0"
                 step="0.0001"
+                placeholder="0"
                 helperText="O sistema destaca o produto quando atingir esse saldo."
                 value={form.minimumQuantity}
                 onChange={(event) => {
@@ -583,6 +595,7 @@ export function InventoryFormPage() {
                 type="number"
                 min="0"
                 step="0.0001"
+                placeholder="0"
                 value={form.maximumQuantity}
                 onChange={(event) => {
                   updateForm('maximumQuantity', event.target.value)
@@ -593,6 +606,7 @@ export function InventoryFormPage() {
                 type="number"
                 min="0"
                 step="0.0001"
+                placeholder="0"
                 value={form.idealRestockQuantity}
                 onChange={(event) => {
                   updateForm('idealRestockQuantity', event.target.value)
@@ -647,6 +661,7 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="0.0001"
+                  placeholder="0.00"
                   value={form.purchasePrice}
                   onChange={(event) => {
                     updateForm('purchasePrice', event.target.value)
@@ -657,6 +672,7 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="0.0001"
+                  placeholder="0.00"
                   value={form.unitPrice}
                   onChange={(event) => {
                     updateForm('unitPrice', event.target.value)
@@ -667,6 +683,7 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="0.0001"
+                  placeholder="0.00"
                   value={form.promotionalPrice}
                   onChange={(event) => {
                     updateForm('promotionalPrice', event.target.value)
@@ -677,6 +694,7 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="0.0001"
+                  placeholder="0.00"
                   value={form.minimumSalePrice}
                   onChange={(event) => {
                     updateForm('minimumSalePrice', event.target.value)
@@ -687,6 +705,7 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="0.01"
+                  placeholder="0"
                   value={form.targetMarginPercent}
                   onChange={(event) => {
                     updateForm('targetMarginPercent', event.target.value)
@@ -697,6 +716,7 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="0.0001"
+                  placeholder="0.00"
                   helperText="Por exemplo: frete ou despesas adicionais."
                   value={form.extraPurchaseCost}
                   onChange={(event) => {
@@ -785,6 +805,7 @@ export function InventoryFormPage() {
                   type="number"
                   min="0"
                   step="1"
+                  placeholder="0"
                   value={form.leadTimeDays}
                   onChange={(event) => {
                     updateForm('leadTimeDays', event.target.value)
@@ -833,7 +854,8 @@ export function InventoryFormPage() {
                   type="number"
                   min="0.0001"
                   step="0.0001"
-                  helperText="Ex.: 1 caixa contém 12 unidades."
+                  placeholder="1"
+                  helperText="Ex.: 1 caixa contém 12 unidades. Se não informado, o padrão é 1."
                   value={form.purchaseUnitFactor}
                   onChange={(event) => {
                     updateForm('purchaseUnitFactor', event.target.value)
