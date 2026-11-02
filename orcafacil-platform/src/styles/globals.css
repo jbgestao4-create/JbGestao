@@ -15,12 +15,41 @@
     border-color: oklch(90% 0 0);
   }
 
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    width: 100%;
+  }
+
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
+    overflow-x: hidden;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
+  }
+
+  [class~='overflow-x-auto'] {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
   }
 
   /* Foco visível para acessibilidade */
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-blue-500;
+  }
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 }

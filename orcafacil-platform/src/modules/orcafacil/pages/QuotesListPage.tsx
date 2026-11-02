@@ -163,7 +163,7 @@ export function QuotesListPage() {
         </div>
       )}
 
-      <div className="sticky top-0 z-20 -mx-8 space-y-3 border-b border-gray-200 bg-gray-50/95 px-8 py-3 shadow-sm backdrop-blur">
+      <div className="sticky top-0 z-20 -mx-4 space-y-3 border-b border-gray-200 bg-gray-50/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {(['all', 'draft', 'sent', 'approved', 'completed', 'rejected', 'expired'] as const).map(
             (st) => {

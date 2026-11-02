@@ -233,7 +233,7 @@ export function DashboardPage() {
               to="/"
               aria-label="Página Inicial"
               title="Página Inicial"
-              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
             >
               <Home aria-hidden="true" className="h-4 w-4" />
             </Link>
@@ -307,7 +307,7 @@ export function DashboardPage() {
               aria-expanded={isModulesExpanded}
               aria-controls="dashboard-modules"
               onClick={() => setIsModulesExpanded((expanded) => !expanded)}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
             >
               {isModulesExpanded ? 'Minimize Módulos' : 'Mostrar Módulos'}
               {isModulesExpanded ? (

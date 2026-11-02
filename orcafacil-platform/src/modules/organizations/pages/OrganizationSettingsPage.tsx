@@ -480,8 +480,8 @@ export function OrganizationSettingsPage() {
 
       {/* MODAL CADASTRAR FUNCIONÁRIO */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
             <div className="flex items-center gap-2.5 mb-1">
               <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
                 <UserPlus className="w-5 h-5" />
@@ -714,8 +714,8 @@ export function OrganizationSettingsPage() {
 
       {/* MODAL EDITAR FUNCIONÁRIO */}
       {memberToEdit && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-gray-900 mb-1">Editar Funcionário</h3>
             <p className="text-xs text-gray-500 mb-5">
               Atualize os dados e o papel de {memberToEdit.displayName}.
@@ -786,8 +786,8 @@ export function OrganizationSettingsPage() {
 
       {/* MODAL EDITAR PERMISSÕES DE MÓDULOS */}
       {editingMember && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-gray-900 mb-1">Editar Acesso aos Módulos</h3>
             <p className="text-xs text-gray-500 mb-4">
               Funcionário: <strong>{editingMember.displayName}</strong> ({editingMember.email})

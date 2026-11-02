@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -17,6 +17,10 @@ import {
   Building2,
   Truck,
   Package,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
 } from 'lucide-react'
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -28,10 +32,30 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const isDashboard = location.pathname === '/'
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null)
+  const isMobileMenuOpen = mobileMenuPath === location.pathname
   const [newOrgName, setNewOrgName] = useState('')
   const [newOrgSlug, setNewOrgSlug] = useState('')
   const [orgError, setOrgError] = useState('')
   const [isSubmittingOrg, setIsSubmittingOrg] = useState(false)
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuPath(null)
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isMobileMenuOpen])
+
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newOrgName || !newOrgSlug) {
@@ -130,14 +154,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return (
       <Link
         to={to}
-        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        title={sidebarCollapsed ? label : undefined}
+        onClick={() => {
+          setMobileMenuPath(null)
+        }}
+        className={`flex min-h-11 items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
           isActive
             ? 'bg-blue-50 text-blue-700 font-semibold'
             : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-        }`}
+        } ${sidebarCollapsed ? 'justify-center' : ''}`}
       >
-        <span className={isActive ? 'text-blue-600' : 'text-gray-400'}>{icon}</span>
-        {label}
+        <span className={`shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>{icon}</span>
+        {!sidebarCollapsed && label}
       </Link>
     )
   }
@@ -145,37 +173,86 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className={`min-h-screen bg-gray-50 ${isDashboard ? '' : 'flex'}`}>
       {!isDashboard && (
-        <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
+        <>
+          {isMobileMenuOpen && (
+            <button
+              type="button"
+              aria-label="Fechar menu"
+              onClick={() => {
+                setMobileMenuPath(null)
+              }}
+              className="fixed inset-0 z-40 bg-gray-950/40 md:hidden"
+            />
+          )}
+        <aside
+          id="mobile-navigation"
+          className={`relative shrink-0 flex-col border-r border-gray-200 bg-white transition-all duration-300 ${
+            isMobileMenuOpen
+              ? 'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shadow-xl md:static md:z-auto md:max-w-none md:shadow-none'
+              : 'hidden md:flex'
+          } ${sidebarCollapsed ? 'md:w-[68px]' : 'md:w-64'}`}
+        >
+          {/* BOTÃO DE COLAPSAR/EXPANDIR */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-7 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm transition-colors hover:bg-gray-50 hover:shadow md:flex md:h-6 md:w-6"
+            title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+            ) : (
+              <ChevronLeft className="w-3.5 h-3.5 text-gray-500" />
+            )}
+          </button>
+
           {/* LOGO & ORG SELECTOR */}
           <div className="p-4 border-b border-gray-100">
-            <div className="mb-3">
-              <BrandLogo size="sm" />
+            <div className={`mb-3 flex items-center justify-between ${sidebarCollapsed ? 'md:justify-center' : ''}`}>
+              <BrandLogo size="sm" showName={!sidebarCollapsed} />
+              <button
+                type="button"
+                aria-label="Fechar menu"
+                onClick={() => {
+                  setMobileMenuPath(null)
+                }}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden"
+              >
+                <X aria-hidden="true" className="h-5 w-5" />
+              </button>
             </div>
 
             {/* Seletor de Organização */}
-            <div className="relative">
-              <ListBox
-                searchable={organizations.length > 4}
-                searchPlaceholder="Buscar empresa..."
-                value={currentOrganization?.id ?? ''}
-                onChange={(val) => {
-                  const org = organizations.find((o) => o.id === val)
-                  if (org) setCurrentOrganization(org)
-                }}
-                options={organizations.map((org) => ({
-                  value: org.id,
-                  label: org.name,
-                }))}
-              />
-            </div>
+            {!sidebarCollapsed && (
+              <div className="relative">
+                <ListBox
+                  searchable={organizations.length > 4}
+                  searchPlaceholder="Buscar empresa..."
+                  value={currentOrganization?.id ?? ''}
+                  onChange={(val) => {
+                    const org = organizations.find((o) => o.id === val)
+                    if (org) setCurrentOrganization(org)
+                  }}
+                  options={organizations.map((org) => ({
+                    value: org.id,
+                    label: org.name,
+                  }))}
+                />
+              </div>
+            )}
           </div>
 
           {/* NAVEGAÇÃO MODULAR */}
-          <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
+          <nav
+            aria-label="Navegação principal"
+            className={`flex-1 p-3 space-y-6 overflow-y-auto ${sidebarCollapsed ? 'px-2' : ''}`}
+          >
             <div>
-              <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                Geral
-              </span>
+              {!sidebarCollapsed && (
+                <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Geral
+                </span>
+              )}
               <div className="mt-1 space-y-0.5">
                 {navItem('/', 'Página Inicial', <LayoutDashboard className="w-4 h-4" />)}
               </div>
@@ -188,9 +265,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 canAccessQuotes ||
                 canAccessSuppliers) && (
                 <div>
-                  <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                    JB Software
-                  </span>
+                  {!sidebarCollapsed && (
+                    <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                      JB Software
+                    </span>
+                  )}
                   <div className="mt-1 space-y-0.5">
                     {canAccessQuotes &&
                       navItem(
@@ -214,9 +293,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             {canAccessOrganization && (
               <div>
-                <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Administração
-                </span>
+                {!sidebarCollapsed && (
+                  <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Administração
+                  </span>
+                )}
                 <div className="mt-1 space-y-0.5">
                   {navItem(
                     '/settings/organization',
@@ -229,16 +310,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </nav>
 
           {/* FOOTER DO USUÁRIO */}
-          <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-            <ProfileMenu
-              variant="sidebar"
-              displayName={profile?.displayName || 'Usuário'}
-              email={user?.email}
-              avatarUrl={profile?.avatarUrl}
-              onSignOut={handleSignOut}
-            />
+          <div className={`p-3 border-t border-gray-100 bg-gray-50/50 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+            {sidebarCollapsed ? (
+              <ProfileMenu
+                variant="header"
+                displayName={profile?.displayName || 'Usuário'}
+                email={user?.email}
+                avatarUrl={profile?.avatarUrl}
+                onSignOut={handleSignOut}
+              />
+            ) : (
+              <ProfileMenu
+                variant="sidebar"
+                displayName={profile?.displayName || 'Usuário'}
+                email={user?.email}
+                avatarUrl={profile?.avatarUrl}
+                onSignOut={handleSignOut}
+              />
+            )}
           </div>
         </aside>
+        </>
       )}
 
       {/* CONTEÚDO PRINCIPAL */}
@@ -246,10 +338,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
         className={isDashboard ? 'min-h-screen' : 'flex-1 flex flex-col min-w-0 overflow-y-auto'}
       >
         {!isDashboard && (
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Building2 className="w-4 h-4 text-gray-400" />
-              <span className="font-semibold text-gray-900">{currentOrganization?.name}</span>
+          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 sm:px-6 lg:px-8">
+            <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500">
+              <button
+                type="button"
+                aria-label="Abrir menu"
+                aria-controls="mobile-navigation"
+                aria-expanded={isMobileMenuOpen}
+                onClick={() => {
+                  setSidebarCollapsed(false)
+                  setMobileMenuPath(location.pathname)
+                }}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-blue-600 md:hidden"
+              >
+                {isMobileMenuOpen ? (
+                  <X aria-hidden="true" className="h-5 w-5" />
+                ) : (
+                  <Menu aria-hidden="true" className="h-5 w-5" />
+                )}
+              </button>
+              <Building2 className="hidden h-4 w-4 shrink-0 text-gray-400 md:block" />
+              <span className="truncate font-semibold text-gray-900">
+                {currentOrganization?.name}
+              </span>
             </div>
 
             <div className="flex items-center gap-3">

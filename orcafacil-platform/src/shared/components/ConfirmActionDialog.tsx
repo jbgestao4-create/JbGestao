@@ -42,13 +42,13 @@ export function ConfirmActionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs">
       <section
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-action-title"
         aria-describedby="confirm-action-description"
-        className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl"
       >
         <h2 id="confirm-action-title" className="mb-2 text-lg font-bold text-gray-900">
           {title}

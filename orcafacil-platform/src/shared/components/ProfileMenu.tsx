@@ -32,10 +32,11 @@ export function ProfileMenu({
 
   const triggerClassName = {
     dashboard:
-      'flex items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-slate-50',
+      'flex min-h-11 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-slate-50',
     header:
-      'inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-600',
-    sidebar: 'flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden rounded-lg text-left group',
+      'inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-600',
+    sidebar:
+      'flex min-h-11 min-w-0 flex-1 items-center gap-2.5 overflow-hidden rounded-lg text-left group',
   }[variant]
 
   return (
