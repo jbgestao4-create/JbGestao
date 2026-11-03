@@ -15,13 +15,15 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Strict mode obrigatório */
+    /* Strict mode */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Path aliases sem baseUrl depreciado */
+    "types": ["node", "vite/client"],
+
+    /* Path aliases */
     "paths": {
       "@/*": ["./src/*"],
       "@app/*": ["./src/app/*"],

@@ -1,0 +1,1820 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@modules/auth/context/AuthContext'
+import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { customerService, type Customer } from '@modules/customers/services/customer.service'
+import { inventoryService } from '@modules/inventory/services/inventory.service'
+import { cashSessionService } from '@modules/cash/services/cash-session.service'
+import {
+  reconcileCash,
+  type CashSession,
+} from '@modules/cash/domain/cash-session'
+import {
+  salesService,
+  type PaymentMethod,
+  type SaleDetail,
+} from '../services/sales.service'
+import { SaleReceiptModal } from '../components/SaleReceiptModal'
+import { pdvSound } from '../utils/pdv-sound'
+import type { InventoryItem } from '@shared/types/common'
+import {
+  calculateItemTotal,
+  calculateSubtotal,
+  calculateTotal,
+  formatCurrency,
+} from '@shared/utils/monetary'
+import {
+  AlertTriangle,
+  Barcode,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  DollarSign,
+  Lock,
+  Printer,
+  QrCode,
+  Receipt,
+  ShoppingCart,
+  Store,
+  Trash2,
+  User,
+  X,
+} from 'lucide-react'
+
+interface CartItem {
+  id: string
+  inventoryItemId?: string
+  description: string
+  unit: string
+  quantity: string
+  unitPrice: string
+  total: string
+  barcode?: string
+  sku?: string
+  availableStock?: string
+  allowNegativeStock?: boolean
+}
+
+export function PdvTerminalPage() {
+  const { user, profile } = useAuth()
+  const { currentOrganization } = useOrganization()
+  const navigate = useNavigate()
+
+  // Sessão de Caixa
+  const [session, setSession] = useState<CashSession | null>(null)
+  const [isLoadingSession, setIsLoadingSession] = useState(true)
+  const [showOpenSessionModal, setShowOpenSessionModal] = useState(false)
+  const [openingBalanceInput, setOpeningBalanceInput] = useState('0,00')
+  const [openSessionError, setOpenSessionError] = useState<string | null>(null)
+
+  // Dados do Sistema (Clientes & Produtos)
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+
+  // Venda Atual
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
+  const [customerName, setCustomerName] = useState('Consumidor Final')
+  const [customerDocument, setCustomerDocument] = useState('')
+  const [discount, setDiscount] = useState('0,00')
+  const [lastScannedItem, setLastScannedItem] = useState<CartItem | null>(null)
+
+  // Input de Leitura de Código de Barras
+  const [barcodeQuery, setBarcodeQuery] = useState('')
+  const [scanFeedback, setScanFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const barcodeInputRef = useRef<HTMLInputElement>(null)
+
+  // Modais do PDV
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('money')
+  const [cardType, setCardType] = useState<'credit' | 'debit'>('credit')
+  const [showCardTypeSelection, setShowCardTypeSelection] = useState(false)
+  const [amountReceivedInput, setAmountReceivedInput] = useState('')
+  const [isSubmittingSale, setIsSubmittingSale] = useState(false)
+  const [saleError, setSaleError] = useState<string | null>(null)
+
+  // Fechamento de Caixa (Tecla 9)
+  const [showCloseModal, setShowCloseModal] = useState(false)
+  const [countedMoneyInput, setCountedMoneyInput] = useState('')
+  const [closureJustification, setClosureJustification] = useState('')
+  const [supervisorAuthInput, setSupervisorAuthInput] = useState('')
+  const [conferenceAttempts, setConferenceAttempts] = useState(1)
+  const [isClosingSession, setIsClosingSession] = useState(false)
+  const [closureError, setClosureError] = useState<string | null>(null)
+  const [closedSessionReport, setClosedSessionReport] = useState<CashSession | null>(null)
+
+  // Modais de Ação Rápida (Cliente, Desconto, Cancelar, Suprimento, Sangria)
+  const [showCustomerModal, setShowCustomerModal] = useState(false)
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('')
+  const [showDiscountModal, setShowDiscountModal] = useState(false)
+  const [discountInput, setDiscountInput] = useState('')
+  const [showCancelSaleModal, setShowCancelSaleModal] = useState(false)
+  const [showMovementModal, setShowMovementModal] = useState(false)
+  const [movementType, setMovementType] = useState<'supply' | 'bleed'>('supply')
+  const [movementAmountInput, setMovementAmountInput] = useState('')
+  const [movementReasonInput, setMovementReasonInput] = useState('')
+
+  // Comprovante de Venda
+  const [completedSale, setCompletedSale] = useState<SaleDetail | null>(null)
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
+
+  // Relógio do Terminal
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Carrega Sessão de Caixa Atual
+  const loadActiveSession = useCallback(async () => {
+    if (!currentOrganization) return
+    setIsLoadingSession(true)
+    const res = await cashSessionService.getOpenSession(currentOrganization.id, 'Caixa 01')
+    if (res.success && res.data) {
+      setSession(res.data)
+      setShowOpenSessionModal(false)
+    } else {
+      setSession(null)
+      setShowOpenSessionModal(true)
+    }
+    setIsLoadingSession(false)
+  }, [currentOrganization])
+
+  useEffect(() => {
+    void loadActiveSession()
+  }, [loadActiveSession])
+
+  // Carrega Estoque e Clientes
+  useEffect(() => {
+    if (!currentOrganization) return
+    let active = true
+
+    void Promise.all([
+      inventoryService.list(currentOrganization.id),
+      customerService.list(currentOrganization.id),
+    ]).then(([invRes, custRes]) => {
+      if (!active) return
+      if (invRes.success) {
+        setInventoryItems(
+          invRes.data.filter(
+            (item: InventoryItem) =>
+              item.isActive && item.canSell && item.registrationStatus !== 'awaiting_information',
+          ),
+        )
+      }
+      if (custRes.success) {
+        setCustomers(custRes.data)
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [currentOrganization])
+
+  // Foco automático no leitor de código de barras
+  const focusBarcodeInput = useCallback(() => {
+    setTimeout(() => {
+      barcodeInputRef.current?.focus()
+      barcodeInputRef.current?.select()
+    }, 50)
+  }, [])
+
+  useEffect(() => {
+    if (session && !showPaymentModal && !showCloseModal && !showCustomerModal && !showDiscountModal && !showCancelSaleModal && !showMovementModal && !showReceiptModal && !closedSessionReport) {
+      focusBarcodeInput()
+    }
+  }, [session, showPaymentModal, showCloseModal, showCustomerModal, showDiscountModal, showCancelSaleModal, showMovementModal, showReceiptModal, closedSessionReport, focusBarcodeInput])
+
+  // Cálculo dos Totais
+  const subtotal = useMemo(() => {
+    return calculateSubtotal(cart.map((item) => item.total))
+  }, [cart])
+
+  const discountValue = useMemo(() => {
+    const clean = discount.replace(',', '.')
+    const parsed = parseFloat(clean)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(2) : '0.00'
+  }, [discount])
+
+  const grandTotal = useMemo(() => {
+    return calculateTotal(subtotal, discountValue)
+  }, [subtotal, discountValue])
+
+  const totalItemsCount = useMemo(() => {
+    return cart.reduce((acc, item) => acc + parseInt(item.quantity || '0', 10), 0)
+  }, [cart])
+
+  // Cálculo do Troco em Dinheiro
+  const cashChange = useMemo(() => {
+    const received = parseFloat(amountReceivedInput.replace(',', '.')) || 0
+    const total = parseFloat(grandTotal) || 0
+    const diff = received - total
+    return {
+      received,
+      total,
+      change: Math.max(0, diff),
+      isSufficient: received >= total,
+      missing: diff < 0 ? Math.abs(diff) : 0,
+    }
+  }, [amountReceivedInput, grandTotal])
+
+  // Proteção contra saída acidental (beforeunload)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (session && session.status === 'open') {
+        e.preventDefault()
+        e.returnValue = 'O caixa do PDV continua aberto. É obrigatório realizar o fechamento do caixa (Tecla 9) antes de sair.'
+        return e.returnValue
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [session])
+
+  // Abertura de Caixa
+  const handleOpenSession = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!currentOrganization || !user) return
+
+    setOpenSessionError(null)
+    const opName = profile?.displayName || user.email?.split('@')[0] || 'Operador'
+    const cleanBalance = openingBalanceInput.replace(',', '.')
+
+    const res = await cashSessionService.openSession(currentOrganization.id, {
+      registerId: 'Caixa 01',
+      operatorId: user.id,
+      operatorName: opName,
+      openingBalance: cleanBalance,
+    })
+
+    if (res.success) {
+      setSession(res.data)
+      setShowOpenSessionModal(false)
+      pdvSound.playSuccess()
+      focusBarcodeInput()
+    } else {
+      setOpenSessionError(res.error)
+      pdvSound.playError()
+    }
+  }
+
+  // Bipar / Adicionar Produto pelo Código de Barras ou SKU
+  const handleScanBarcode = (e: React.FormEvent) => {
+    e.preventDefault()
+    const code = barcodeQuery.trim()
+    if (!code) return
+
+    // Busca exata por barcode, depois sku, depois nome
+    const found = inventoryItems.find((item) => {
+      if (item.barcode && item.barcode.trim().toLowerCase() === code.toLowerCase()) return true
+      if (item.sku && item.sku.trim().toLowerCase() === code.toLowerCase()) return true
+      return false
+    }) || inventoryItems.find((item) => item.name.toLowerCase().includes(code.toLowerCase()))
+
+    if (!found) {
+      pdvSound.playError()
+      setScanFeedback({
+        type: 'error',
+        message: `Código "${code}" não cadastrado no estoque.`,
+      })
+      setBarcodeQuery('')
+      return
+    }
+
+    // Valida estoque disponível
+    const existingIndex = cart.findIndex((item) => item.inventoryItemId === found.id)
+    const currentQtyInCart = existingIndex >= 0 ? parseInt(cart[existingIndex].quantity, 10) : 0
+    const available = parseFloat(found.quantityOnHand)
+
+    if (!found.allowNegativeStock && available < currentQtyInCart + 1) {
+      pdvSound.playError()
+      setScanFeedback({
+        type: 'error',
+        message: `Estoque insuficiente para "${found.name}". Saldo disponível: ${found.quantityOnHand} ${found.unit}.`,
+      })
+      setBarcodeQuery('')
+      return
+    }
+
+    pdvSound.playScan()
+
+    let updatedCart: CartItem[]
+    let scannedItem: CartItem
+
+    if (existingIndex >= 0) {
+      // Incrementa quantidade
+      const current = cart[existingIndex]
+      const newQty = String(parseInt(current.quantity, 10) + 1)
+      const newTotal = calculateItemTotal(newQty, current.unitPrice)
+      scannedItem = { ...current, quantity: newQty, total: newTotal }
+
+      updatedCart = [...cart]
+      updatedCart[existingIndex] = scannedItem
+    } else {
+      // Novo item
+      scannedItem = {
+        id: `pdv-item-${Date.now()}-${Math.random().toString().slice(2, 6)}`,
+        inventoryItemId: found.id,
+        description: found.name,
+        unit: found.unit || 'UN',
+        quantity: '1',
+        unitPrice: found.unitPrice,
+        total: calculateItemTotal('1', found.unitPrice),
+        barcode: found.barcode || undefined,
+        sku: found.sku || undefined,
+        availableStock: found.quantityOnHand,
+        allowNegativeStock: found.allowNegativeStock,
+      }
+      updatedCart = [scannedItem, ...cart]
+    }
+
+    setCart(updatedCart)
+    setLastScannedItem(scannedItem)
+    setScanFeedback({
+      type: 'success',
+      message: `+1 ${found.name} (${formatCurrency(found.unitPrice)})`,
+    })
+    setBarcodeQuery('')
+    focusBarcodeInput()
+  }
+
+  // Remover Item do Carrinho
+  const handleRemoveItem = (itemId: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== itemId))
+    pdvSound.playScan()
+    focusBarcodeInput()
+  }
+
+  // Abrir Modal de Pagamento
+  const handleOpenPayment = () => {
+    if (cart.length === 0) {
+      pdvSound.playError()
+      setScanFeedback({ type: 'error', message: 'Adicione pelo menos um item antes de finalizar.' })
+      return
+    }
+    setAmountReceivedInput(grandTotal)
+    setSelectedPaymentMethod('money')
+    setShowPaymentModal(true)
+  }
+
+  // Confirmar Venda
+  const handleConfirmSale = async () => {
+    if (!currentOrganization || !session || cart.length === 0 || isSubmittingSale) return
+
+    if (selectedPaymentMethod === 'money' && !cashChange.isSufficient) {
+      setSaleError('O valor recebido em dinheiro é inferior ao total da venda.')
+      pdvSound.playError()
+      return
+    }
+
+    setIsSubmittingSale(true)
+    setSaleError(null)
+
+    const finalMethod: PaymentMethod =
+      selectedPaymentMethod === 'credit_card' && cardType === 'debit'
+        ? 'debit_card'
+        : selectedPaymentMethod
+
+    const res = await salesService.createSale(currentOrganization.id, {
+      customerId: selectedCustomerId || null,
+      customerName,
+      customerDocument: customerDocument || undefined,
+      items: cart.map((item) => ({
+        inventoryItemId: item.inventoryItemId || null,
+        description: item.description,
+        unit: item.unit,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      discount: discountValue,
+      paymentMethod: finalMethod,
+      isPdv: true,
+      sessionId: session.id,
+      amountReceived: selectedPaymentMethod === 'money' ? amountReceivedInput : grandTotal,
+      changeAmount: selectedPaymentMethod === 'money' ? cashChange.change.toFixed(2) : '0.00',
+      operatorId: user?.id,
+      operatorName: session.operatorName,
+    })
+
+    if (res.success) {
+      pdvSound.playSuccess()
+
+      // Busca dados completos para o cupom
+      const saleDetailRes = await salesService.getSaleById(currentOrganization.id, res.data.saleId)
+      if (saleDetailRes.success) {
+        setCompletedSale(saleDetailRes.data)
+        setShowReceiptModal(true)
+      }
+
+      // Atualiza estado da sessão localmente
+      const saleTotal = grandTotal
+      const payment = finalMethod
+      void cashSessionService.recordSaleInSession(currentOrganization.id, session.id, {
+        total: saleTotal,
+        paymentMethod: payment,
+        amountReceived: selectedPaymentMethod === 'money' ? amountReceivedInput : grandTotal,
+      }).then((sRes) => {
+        if (sRes.success && sRes.data) setSession(sRes.data)
+      })
+
+      // Limpa carrinho para a próxima venda
+      setCart([])
+      setDiscount('0,00')
+      setSelectedCustomerId('')
+      setCustomerName('Consumidor Final')
+      setCustomerDocument('')
+      setLastScannedItem(null)
+      setShowPaymentModal(false)
+      setScanFeedback({ type: 'success', message: `Venda ${res.data.saleNumber} concluída!` })
+    } else {
+      pdvSound.playError()
+      setSaleError(res.error)
+    }
+
+    setIsSubmittingSale(false)
+  }
+
+  // Tecla 9 — Abrir Fechamento de Caixa
+  const handleOpenCloseSession = () => {
+    if (!session) return
+    setCountedMoneyInput('')
+    setClosureJustification('')
+    setSupervisorAuthInput('')
+    setClosureError(null)
+    setShowCloseModal(true)
+  }
+
+  // Confirmar Fechamento de Caixa
+  const handleConfirmCloseSession = async () => {
+    if (!currentOrganization || !session || !user || isClosingSession) return
+
+    const countedVal = countedMoneyInput.replace(',', '.')
+    if (countedVal.trim() === '') {
+      setClosureError('Informe o valor físico existente em dinheiro na gaveta.')
+      pdvSound.playError()
+      return
+    }
+
+    setIsClosingSession(true)
+    setClosureError(null)
+
+    const res = await cashSessionService.closeSession(currentOrganization.id, session.id, {
+      countedMoney: countedVal,
+      justification: closureJustification,
+      supervisorAuth: supervisorAuthInput,
+      closedBy: user.id,
+    })
+
+    if (res.success) {
+      pdvSound.playSuccess()
+      setClosedSessionReport(res.data)
+      setShowCloseModal(false)
+      setSession(null)
+    } else {
+      pdvSound.playError()
+      setClosureError(res.error)
+      setConferenceAttempts((prev) => prev + 1)
+    }
+
+    setIsClosingSession(false)
+  }
+
+  // Registrar Sangria / Suprimento
+  const handleConfirmMovement = async () => {
+    if (!currentOrganization || !session || !user) return
+    const cleanAmount = movementAmountInput.replace(',', '.')
+    if (!cleanAmount || parseFloat(cleanAmount) <= 0) {
+      pdvSound.playError()
+      return
+    }
+    if (!movementReasonInput.trim()) {
+      pdvSound.playError()
+      return
+    }
+
+    const res = await cashSessionService.recordMovement(currentOrganization.id, session.id, {
+      type: movementType,
+      amount: cleanAmount,
+      reason: movementReasonInput.trim(),
+      userId: user.id,
+    })
+
+    if (res.success) {
+      setSession(res.data)
+      setShowMovementModal(false)
+      setMovementAmountInput('')
+      setMovementReasonInput('')
+      pdvSound.playSuccess()
+      focusBarcodeInput()
+    }
+  }
+
+  // Atalhos Globais de Teclado
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement
+      const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || activeEl?.tagName === 'SELECT'
+
+      // Quando nenhum modal estiver aberto
+      const anyModalOpen =
+        showPaymentModal ||
+        showCloseModal ||
+        showOpenSessionModal ||
+        showCustomerModal ||
+        showDiscountModal ||
+        showCancelSaleModal ||
+        showMovementModal ||
+        showReceiptModal ||
+        Boolean(closedSessionReport)
+
+      if (!anyModalOpen) {
+        // Tecla 1 — Iniciar leitura / Foco no código de barras
+        if (e.key === '1' && !isInput) {
+          e.preventDefault()
+          focusBarcodeInput()
+          return
+        }
+
+        // Tecla 9 — Fechamento de Caixa
+        if (e.key === '9' && !isInput) {
+          e.preventDefault()
+          handleOpenCloseSession()
+          return
+        }
+
+        // Enter — Finalizar Venda
+        if (e.key === 'Enter' && !isInput) {
+          e.preventDefault()
+          handleOpenPayment()
+          return
+        }
+
+        // F2 — Selecionar Cliente
+        if (e.key === 'F2') {
+          e.preventDefault()
+          setShowCustomerModal(true)
+          return
+        }
+
+        // F3 — Desconto
+        if (e.key === 'F3') {
+          e.preventDefault()
+          setDiscountInput(discount)
+          setShowDiscountModal(true)
+          return
+        }
+
+        // F4 — Cancelar Venda
+        if (e.key === 'F4') {
+          e.preventDefault()
+          if (cart.length > 0) setShowCancelSaleModal(true)
+          return
+        }
+
+        // F7 — Suprimento de Caixa
+        if (e.key === 'F7') {
+          e.preventDefault()
+          setMovementType('supply')
+          setShowMovementModal(true)
+          return
+        }
+
+        // F8 — Sangria de Caixa
+        if (e.key === 'F8') {
+          e.preventDefault()
+          setMovementType('bleed')
+          setShowMovementModal(true)
+          return
+        }
+      } else if (showPaymentModal) {
+        // Atalhos do Modal de Pagamento: D (Dinheiro), P (Pix), C (Cartão)
+        if (!showCardTypeSelection) {
+          if (e.key.toLowerCase() === 'd' && !isInput) {
+            e.preventDefault()
+            setSelectedPaymentMethod('money')
+            return
+          }
+          if (e.key.toLowerCase() === 'p' && !isInput) {
+            e.preventDefault()
+            setSelectedPaymentMethod('pix')
+            return
+          }
+          if (e.key.toLowerCase() === 'c' && !isInput) {
+            e.preventDefault()
+            setSelectedPaymentMethod('credit_card')
+            setShowCardTypeSelection(true)
+            return
+          }
+        } else {
+          // Submenu Cartão: C (Crédito), D (Débito)
+          if (e.key.toLowerCase() === 'c') {
+            e.preventDefault()
+            setCardType('credit')
+            setShowCardTypeSelection(false)
+            return
+          }
+          if (e.key.toLowerCase() === 'd') {
+            e.preventDefault()
+            setCardType('debit')
+            setShowCardTypeSelection(false)
+            return
+          }
+        }
+
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowPaymentModal(false)
+          setShowCardTypeSelection(false)
+          focusBarcodeInput()
+          return
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    showPaymentModal,
+    showCloseModal,
+    showOpenSessionModal,
+    showCustomerModal,
+    showDiscountModal,
+    showCancelSaleModal,
+    showMovementModal,
+    showReceiptModal,
+    closedSessionReport,
+    showCardTypeSelection,
+    cart,
+    discount,
+    focusBarcodeInput,
+  ])
+
+  // Dados de conciliação para o fechamento
+  const reconciliation = useMemo(() => {
+    if (!session) return null
+    return reconcileCash(countedMoneyInput.replace(',', '.'), session.expectedMoney)
+  }, [session, countedMoneyInput])
+
+  if (isLoadingSession) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 text-slate-100">
+        <Store className="h-12 w-12 animate-pulse text-emerald-400 mb-4" />
+        <h2 className="text-xl font-bold">Iniciando Terminal PDV...</h2>
+        <p className="text-sm text-slate-400 mt-1">Verificando sessões de caixa e estoque da loja</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
+      {/* ============================================================== */}
+      {/* 1. BARRA SUPERIOR DO TERMINAL (STATUS, CAIXA, OPERADOR, HORÁRIO) */}
+      {/* ============================================================== */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-6 backdrop-blur-md">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="rounded-lg bg-emerald-500/20 p-1.5 text-emerald-400 ring-1 ring-emerald-500/40">
+              <Store className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                JB SOFTWARE
+              </span>
+              <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+                PONTO DE VENDA (PDV)
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 ring-1 ring-emerald-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  ONLINE
+                </span>
+              </h1>
+            </div>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2 border-l border-slate-800 pl-4 text-xs text-slate-400">
+            <span className="font-semibold text-slate-200">{session?.registerId || 'Caixa 01'}</span>
+            <span>•</span>
+            <span className="flex items-center gap-1 text-slate-300">
+              <User className="h-3.5 w-3.5 text-slate-400" />
+              {session?.operatorName || profile?.displayName || 'Operador'}
+            </span>
+            <span>•</span>
+            <span className="text-slate-400">
+              Vendas no Turno: <b className="text-emerald-400">{session?.salesCount || 0}</b>
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs">
+          <div className="hidden sm:flex items-center gap-2 rounded-lg bg-slate-800/80 px-3 py-1.5 text-slate-300 border border-slate-700/50">
+            <User className="h-3.5 w-3.5 text-blue-400" />
+            <span>Cliente: <b className="text-white">{customerName}</b></span>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg bg-slate-800/80 px-3 py-1.5 text-slate-300 border border-slate-700/50 font-mono">
+            <Clock className="h-3.5 w-3.5 text-emerald-400" />
+            <span>{currentTime.toLocaleTimeString('pt-BR')}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* ============================================================== */}
+      {/* 2. ÁREA CENTRAL (GRADE PRINCIPAL DO PDV)                         */}
+      {/* ============================================================== */}
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 overflow-hidden">
+        {/* COLUNA ESQUERDA: LEITURA DE CÓDIGO DE BARRAS E TABELA DE PRODUTOS (8/12) */}
+        <section className="lg:col-span-8 flex flex-col gap-4 overflow-hidden">
+          {/* CAMPO DE LEITURA DE CÓDIGO DE BARRAS */}
+          <div className="rounded-2xl border-2 border-emerald-500/40 bg-slate-900 p-3 shadow-lg relative">
+            <form onSubmit={handleScanBarcode} className="relative flex items-center">
+              <div className="absolute left-3.5 flex items-center pointer-events-none text-emerald-400">
+                <Barcode className="h-6 w-6 animate-pulse" />
+              </div>
+              <input
+                ref={barcodeInputRef}
+                type="text"
+                value={barcodeQuery}
+                onChange={(e) => setBarcodeQuery(e.target.value)}
+                placeholder="Pressione [1] ou aponte o leitor de código de barras / digite o SKU..."
+                className="w-full rounded-xl bg-slate-950 py-3.5 pl-12 pr-28 text-base font-semibold text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 tracking-wide"
+                autoComplete="off"
+              />
+              <button
+                type="submit"
+                className="absolute right-2.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white uppercase hover:bg-emerald-500 transition-colors"
+              >
+                Enter (Bipar)
+              </button>
+            </form>
+
+            {/* FEEDBACK DA LEITURA */}
+            {scanFeedback && (
+              <div
+                className={`mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  scanFeedback.type === 'success'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                }`}
+              >
+                {scanFeedback.type === 'success' ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                )}
+                <span>{scanFeedback.message}</span>
+              </div>
+            )}
+          </div>
+
+          {/* TABELA DE PRODUTOS DA VENDA ATUAL */}
+          <div className="flex-1 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-inner">
+            <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4 text-emerald-400" />
+                <span>CARRINHO DE COMPRAS ({cart.length} itens)</span>
+              </div>
+              <span className="text-slate-400">Total Volumes: {totalItemsCount}</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {cart.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-500">
+                  <div className="rounded-2xl bg-slate-800/50 p-4 mb-3 border border-slate-800">
+                    <Barcode className="h-10 w-10 text-slate-600" />
+                  </div>
+                  <p className="text-base font-semibold text-slate-400">Caixa Livre • Aguardando Leitura</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                    Pressione <kbd className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-400 font-mono">1</kbd> para ativar o leitor USB ou digite o código de barras e pressione <kbd className="rounded bg-slate-800 px-1.5 py-0.5 text-white font-mono">Enter</kbd>.
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="sticky top-0 bg-slate-950/90 backdrop-blur-xs text-slate-400 border-b border-slate-800 uppercase font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-3 w-12 text-center">#</th>
+                      <th className="py-2.5 px-3">Produto</th>
+                      <th className="py-2.5 px-3">Cód / SKU</th>
+                      <th className="py-2.5 px-3 text-center">Qtd</th>
+                      <th className="py-2.5 px-3 text-right">Unitário</th>
+                      <th className="py-2.5 px-3 text-right">Total</th>
+                      <th className="py-2.5 px-3 text-center w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-mono text-slate-200">
+                    {cart.map((item, index) => {
+                      const isLast = lastScannedItem?.id === item.id
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`hover:bg-slate-800/40 transition-colors ${
+                            isLast ? 'bg-emerald-950/30 text-emerald-300 font-bold' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-3 text-center text-slate-500 font-sans">{index + 1}</td>
+                          <td className="py-3 px-3 font-sans font-medium text-slate-100">
+                            {item.description}
+                          </td>
+                          <td className="py-3 px-3 text-slate-400 text-[11px]">
+                            {item.barcode || item.sku || '—'}
+                          </td>
+                          <td className="py-3 px-3 text-center font-bold text-white">
+                            {item.quantity} {item.unit}
+                          </td>
+                          <td className="py-3 px-3 text-right text-slate-300">
+                            {formatCurrency(item.unitPrice)}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-emerald-400">
+                            {formatCurrency(item.total)}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.id)}
+                              title="Remover Item"
+                              className="rounded-lg p-1 text-slate-500 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* COLUNA DIREITA: DISPLAY DE VALORES, ÚLTIMO ITEM E BOTÃO FINALIZAR (4/12) */}
+        <section className="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
+          {/* ÚLTIMO PRODUTO BIPADO */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-md">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Último Item Registrado
+            </span>
+            {lastScannedItem ? (
+              <div className="mt-2 space-y-1">
+                <h3 className="text-base font-bold text-white truncate">
+                  {lastScannedItem.description}
+                </h3>
+                <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                  <span>
+                    {lastScannedItem.quantity} {lastScannedItem.unit} x {formatCurrency(lastScannedItem.unitPrice)}
+                  </span>
+                  <span className="text-sm font-bold text-emerald-400">
+                    {formatCurrency(lastScannedItem.total)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500 italic">Nenhum produto registrado ainda.</p>
+            )}
+          </div>
+
+          {/* CARD DE VALORES & TOTAL (ESTILO DISPLAY DE SUPERMERCADO) */}
+          <div className="flex-1 flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-sm text-slate-400 font-mono">
+                <span>Subtotal:</span>
+                <span className="text-base font-bold text-slate-200">
+                  {formatCurrency(subtotal)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-sm text-slate-400 font-mono">
+                <span>Desconto:</span>
+                <span className="text-base font-bold text-rose-400">
+                  - {formatCurrency(discountValue)}
+                </span>
+              </div>
+
+              {/* DISPLAY GIGANTE DO TOTAL (DESTAQUE VERDE SUPERMERCADO) */}
+              <div className="pt-2">
+                <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+                  TOTAL A PAGAR
+                </span>
+                <div className="mt-1.5 rounded-xl border-2 border-emerald-500/50 bg-emerald-950/80 p-4 text-right shadow-[inset_0_0_20px_rgba(16,185,129,0.2)]">
+                  <div className="font-mono text-4xl xl:text-5xl font-black text-emerald-400 tracking-tight">
+                    {formatCurrency(grandTotal)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* BOTÃO FINALIZAR VENDA */}
+            <div className="pt-4">
+              <button
+                type="button"
+                onClick={handleOpenPayment}
+                disabled={cart.length === 0}
+                className="w-full flex items-center justify-center gap-3 rounded-xl bg-emerald-600 py-4 text-base font-black tracking-wide text-white uppercase shadow-lg shadow-emerald-900/40 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                <CheckCircle2 className="h-6 w-6" />
+                <span>[Enter] Finalizar Venda</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ============================================================== */}
+      {/* 3. BARRA INFERIOR DE ATALHOS DO TECLADO                         */}
+      {/* ============================================================== */}
+      <footer className="h-14 shrink-0 border-t border-slate-800 bg-slate-900 px-4 flex items-center justify-between overflow-x-auto text-xs">
+        <div className="flex items-center gap-2 font-mono">
+          <button
+            type="button"
+            onClick={focusBarcodeInput}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+          >
+            <kbd className="rounded bg-emerald-500/20 px-1 text-emerald-400 font-bold">1</kbd>
+            <span>Bipar Produto</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenPayment}
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-900/40 hover:bg-emerald-900/60 px-3 py-1.5 text-emerald-300 font-semibold border border-emerald-600/40 transition-colors"
+          >
+            <kbd className="rounded bg-emerald-500/20 px-1 text-emerald-400 font-bold">Enter</kbd>
+            <span>Finalizar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowCustomerModal(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+          >
+            <kbd className="rounded bg-blue-500/20 px-1 text-blue-400 font-bold">F2</kbd>
+            <span>Cliente</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setDiscountInput(discount)
+              setShowDiscountModal(true)
+            }}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+          >
+            <kbd className="rounded bg-amber-500/20 px-1 text-amber-400 font-bold">F3</kbd>
+            <span>Desconto</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (cart.length > 0) setShowCancelSaleModal(true)
+            }}
+            disabled={cart.length === 0}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 disabled:opacity-40 transition-colors"
+          >
+            <kbd className="rounded bg-rose-500/20 px-1 text-rose-400 font-bold">F4</kbd>
+            <span>Cancelar Venda</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMovementType('supply')
+              setShowMovementModal(true)
+            }}
+            className="hidden xl:flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+          >
+            <kbd className="rounded bg-cyan-500/20 px-1 text-cyan-400 font-bold">F7</kbd>
+            <span>Suprimento</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMovementType('bleed')
+              setShowMovementModal(true)
+            }}
+            className="hidden xl:flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+          >
+            <kbd className="rounded bg-purple-500/20 px-1 text-purple-400 font-bold">F8</kbd>
+            <span>Sangria</span>
+          </button>
+        </div>
+
+        {/* ATALHO TECLA 9: FECHAMENTO DE CAIXA */}
+        <div className="font-mono">
+          <button
+            type="button"
+            onClick={handleOpenCloseSession}
+            className="flex items-center gap-2 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 px-4 py-2 text-rose-300 font-bold border border-rose-600/50 shadow-md transition-all"
+          >
+            <Lock className="h-4 w-4 text-rose-400" />
+            <kbd className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-300 font-bold">9</kbd>
+            <span>FECHAMENTO DE CAIXA</span>
+          </button>
+        </div>
+      </footer>
+
+      {/* ============================================================== */}
+      {/* 4. MODAL DE ABERTURA DE CAIXA (OBRIGATÓRIO QUANDO NÃO HOUVER)   */}
+      {/* ============================================================== */}
+      {showOpenSessionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="rounded-xl bg-emerald-500/20 p-2 text-emerald-400">
+                <Store className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Abertura de Caixa (PDV)</h3>
+                <p className="text-xs text-slate-400">Inicie um novo turno para operar o terminal</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleOpenSession} className="mt-5 space-y-4">
+              {openSessionError && (
+                <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-400 border border-rose-500/20 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{openSessionError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400">Terminal</label>
+                <input
+                  type="text"
+                  readOnly
+                  value="Caixa 01"
+                  className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm text-slate-300 border border-slate-800 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400">Operador Logado</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={profile?.displayName || user?.email?.split('@')[0] || 'Operador'}
+                  className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm text-slate-300 border border-slate-800 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400">
+                  Saldo Inicial / Fundo de Troco (R$)
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={openingBalanceInput}
+                  onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                  placeholder="0,00"
+                  className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2.5 text-lg font-bold text-emerald-400 font-mono border border-slate-800 focus:border-emerald-500 focus:outline-hidden"
+                />
+                <span className="text-[11px] text-slate-500">
+                  Informe o valor das moedas e cédulas deixadas na gaveta para troco.
+                </span>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="h-5 w-5" />
+                  <span>Abrir Caixa e Iniciar Operação</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 5. MODAL DE FINALIZAÇÃO DA VENDA (FORMAS DE PAGAMENTO)         */}
+      {/* ============================================================== */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-white">Finalização de Venda</h3>
+                <p className="text-xs text-slate-400">Selecione a forma de pagamento pelo teclado</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* TOTAL DA VENDA */}
+            <div className="my-4 rounded-xl bg-slate-950 p-4 border border-slate-800 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase">Total a Receber:</span>
+              <span className="font-mono text-3xl font-black text-emerald-400">
+                {formatCurrency(grandTotal)}
+              </span>
+            </div>
+
+            {saleError && (
+              <div className="mb-4 rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-400 border border-rose-500/20 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{saleError}</span>
+              </div>
+            )}
+
+            {/* SELEÇÃO DAS FORMAS DE PAGAMENTO */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPaymentMethod('money')
+                  setShowCardTypeSelection(false)
+                }}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl p-3 border font-semibold text-xs transition-all ${
+                  selectedPaymentMethod === 'money'
+                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <DollarSign className="h-6 w-6" />
+                <span>[D] Dinheiro</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPaymentMethod('pix')
+                  setShowCardTypeSelection(false)
+                }}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl p-3 border font-semibold text-xs transition-all ${
+                  selectedPaymentMethod === 'pix'
+                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <QrCode className="h-6 w-6" />
+                <span>[P] Pix</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPaymentMethod('credit_card')
+                  setShowCardTypeSelection(true)
+                }}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl p-3 border font-semibold text-xs transition-all ${
+                  selectedPaymentMethod === 'credit_card' || selectedPaymentMethod === 'debit_card'
+                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <Receipt className="h-6 w-6" />
+                <span>[C] Cartão</span>
+              </button>
+            </div>
+
+            {/* DETALHES POR FORMA DE PAGAMENTO */}
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {/* SELEÇÃO DO CARTÃO: CRÉDITO OU DÉBITO */}
+              {showCardTypeSelection && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2">
+                  <span className="text-xs font-bold text-slate-300">Modalidade do Cartão:</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCardType('credit')
+                        setShowCardTypeSelection(false)
+                      }}
+                      className={`rounded-lg p-2 text-xs font-bold border ${
+                        cardType === 'credit'
+                          ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
+                          : 'border-slate-800 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      [C] Crédito
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCardType('debit')
+                        setShowCardTypeSelection(false)
+                      }}
+                      className={`rounded-lg p-2 text-xs font-bold border ${
+                        cardType === 'debit'
+                          ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
+                          : 'border-slate-800 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      [D] Débito
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* DETALHE DINHEIRO: VALOR RECEBIDO E TROCO */}
+              {selectedPaymentMethod === 'money' && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400">
+                      Valor Recebido em Dinheiro (R$)
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={amountReceivedInput}
+                      onChange={(e) => setAmountReceivedInput(e.target.value)}
+                      placeholder="0,00"
+                      className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-white border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                    />
+                  </div>
+
+                  {/* DISPLAY DE TROCO */}
+                  <div className="flex items-center justify-between rounded-lg bg-slate-900 p-3 border border-slate-800">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Troco:</span>
+                    <span
+                      className={`font-mono text-2xl font-black ${
+                        cashChange.isSufficient ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {cashChange.isSufficient
+                        ? formatCurrency(cashChange.change)
+                        : `Faltam ${formatCurrency(cashChange.missing)}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* DETALHE PIX */}
+              {selectedPaymentMethod === 'pix' && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-center space-y-2">
+                  <QrCode className="h-16 w-16 text-emerald-400 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-300">
+                    Chave Pix disponível no balcão da loja
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Confirme o recebimento do comprovante no aplicativo bancário do cliente antes de liberar.
+                  </p>
+                </div>
+              )}
+
+              {/* DETALHE CARTÃO CONFIRMADO */}
+              {(selectedPaymentMethod === 'credit_card' || selectedPaymentMethod === 'debit_card') && !showCardTypeSelection && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-center space-y-1">
+                  <Receipt className="h-12 w-12 text-blue-400 mx-auto" />
+                  <p className="text-sm font-bold text-slate-200">
+                    Cartão de {cardType === 'credit' ? 'Crédito' : 'Débito'}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Insira ou aproxime o cartão na maquininha de pagamento.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* BOTÃO CONFIRMAR PAGAMENTO */}
+            <div className="pt-4 border-t border-slate-800 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                [Esc] Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSale}
+                disabled={isSubmittingSale || (selectedPaymentMethod === 'money' && !cashChange.isSufficient)}
+                className="flex-2 rounded-xl bg-emerald-600 py-3 text-sm font-black text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/40 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+              >
+                {isSubmittingSale ? (
+                  <span>Registrando Venda...</span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span>[Enter] Confirmar Venda</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 6. MODAL DE FECHAMENTO DE CAIXA (TECLA 9 — PROCEDIMENTO OFICIAL)*/}
+      {/* ============================================================== */}
+      {showCloseModal && session && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-rose-500/20 p-2 text-rose-400">
+                  <Lock className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Fechamento de Caixa — Tecla 9</h3>
+                  <p className="text-xs text-slate-400">
+                    Conferência obrigatória dos valores físicos antes de encerrar o turno
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCloseModal(false)
+                  focusBarcodeInput()
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 text-xs">
+              {closureError && (
+                <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-400 border border-rose-500/20 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{closureError}</span>
+                </div>
+              )}
+
+              {/* CABEÇALHO DO TURNO */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-xl bg-slate-950 p-3 border border-slate-800 text-[11px]">
+                <div>
+                  <span className="text-slate-400">Operador:</span>
+                  <p className="font-bold text-white truncate">{session.operatorName}</p>
+                </div>
+                <div>
+                  <span className="text-slate-400">Terminal:</span>
+                  <p className="font-bold text-white">{session.registerId}</p>
+                </div>
+                <div>
+                  <span className="text-slate-400">Abertura:</span>
+                  <p className="font-bold text-white">
+                    {new Date(session.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-slate-400">Fechamento:</span>
+                  <p className="font-bold text-emerald-400">{currentTime.toLocaleTimeString('pt-BR')}</p>
+                </div>
+              </div>
+
+              {/* RESUMO FINANCEIRO DO TURNO */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Resumo Financeiro da Sessão
+                </span>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-xs pt-1">
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Saldo Inicial (Troco):</span>
+                    <span className="text-slate-200">{formatCurrency(session.openingBalance)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Total Vendas ({session.salesCount}):</span>
+                    <span className="text-emerald-400 font-bold">{formatCurrency(session.totalSales)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Recebido em Dinheiro:</span>
+                    <span className="text-slate-200">{formatCurrency(session.totalMoney)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Recebido via Pix:</span>
+                    <span className="text-slate-200">{formatCurrency(session.totalPix)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Cartão de Crédito:</span>
+                    <span className="text-slate-200">{formatCurrency(session.totalCreditCard)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Cartão de Débito:</span>
+                    <span className="text-slate-200">{formatCurrency(session.totalDebitCard)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Entradas / Suprimentos (+):</span>
+                    <span className="text-cyan-400">{formatCurrency(session.totalAdditionalEntries)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800 pb-1">
+                    <span className="text-slate-400">Retiradas / Sangrias (-):</span>
+                    <span className="text-rose-400">{formatCurrency(session.totalWithdrawals)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* VALOR ESPERADO EM DINHEIRO */}
+              <div className="flex items-center justify-between rounded-xl bg-slate-950 p-4 border border-slate-800">
+                <div>
+                  <span className="text-xs font-bold text-slate-300 uppercase">
+                    Valor Esperado em Dinheiro na Gaveta:
+                  </span>
+                  <p className="text-[10px] text-slate-500">
+                    Saldo inicial + vendas dinheiro + suprimentos - sangrias
+                  </p>
+                </div>
+                <span className="font-mono text-2xl font-black text-emerald-400">
+                  {formatCurrency(session.expectedMoney)}
+                </span>
+              </div>
+
+              {/* CONTAGEM FÍSICA INFORMADA PELO OPERADOR */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-white uppercase">
+                    Informe o Valor Físico Contado em Dinheiro (R$)
+                  </label>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={countedMoneyInput}
+                    onChange={(e) => setCountedMoneyInput(e.target.value)}
+                    placeholder="0,00"
+                    className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-emerald-400 border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                  />
+                  <span className="text-[11px] text-slate-500">
+                    Conte todas as notas e moedas presentes na gaveta e digite o valor total.
+                  </span>
+                </div>
+
+                {/* RESULTADO DA CONCILIAÇÃO EM TEMPO REAL */}
+                {reconciliation && countedMoneyInput.trim() !== '' && (
+                  <div
+                    className={`rounded-xl p-3 border flex items-center justify-between ${
+                      reconciliation.discrepancyType === 'correct'
+                        ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
+                        : reconciliation.discrepancyType === 'surplus'
+                        ? 'border-amber-500/40 bg-amber-950/40 text-amber-300'
+                        : 'border-rose-500/40 bg-rose-950/40 text-rose-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {reconciliation.discrepancyType === 'correct' ? (
+                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                      ) : (
+                        <AlertTriangle className="h-5 w-5 text-amber-400" />
+                      )}
+                      <div>
+                        <p className="font-bold">
+                          {reconciliation.discrepancyType === 'correct' && 'Caixa Correto: valores conferidos!'}
+                          {reconciliation.discrepancyType === 'surplus' && 'Sobra de Caixa identificada'}
+                          {reconciliation.discrepancyType === 'shortage' && 'Falta de Caixa identificada'}
+                        </p>
+                        <p className="text-[11px] opacity-80">
+                          Tentativa de conferência: #{conferenceAttempts}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-base font-black">
+                      {reconciliation.discrepancyType === 'correct'
+                        ? 'R$ 0,00'
+                        : `${reconciliation.discrepancyType === 'surplus' ? '+' : '-'} ${formatCurrency(
+                            reconciliation.formattedDifference,
+                          )}`}
+                    </span>
+                  </div>
+                )}
+
+                {/* JUSTIFICATIVA OBRIGATÓRIA SE HOUVER DIVERGÊNCIA */}
+                {reconciliation && !reconciliation.isBalanced && countedMoneyInput.trim() !== '' && (
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <div>
+                      <label className="block text-xs font-bold text-amber-400">
+                        Justificativa da Divergência (Obrigatória):
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={closureJustification}
+                        onChange={(e) => setClosureJustification(e.target.value)}
+                        placeholder="Explique o motivo da sobra ou falta de caixa encontrada..."
+                        className="mt-1 w-full rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:border-amber-500 focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400">
+                        Autorização do Supervisor / Gerente (Opcional):
+                      </label>
+                      <input
+                        type="text"
+                        value={supervisorAuthInput}
+                        onChange={(e) => setSupervisorAuthInput(e.target.value)}
+                        placeholder="Nome ou código do supervisor autorizador"
+                        className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-1.5 text-xs text-white border border-slate-700 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* BOTÕES DE AÇÃO DO FECHAMENTO */}
+            <div className="pt-3 border-t border-slate-800 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCloseModal(false)
+                  focusBarcodeInput()
+                }}
+                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                [Esc] Retornar ao PDV
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCloseSession}
+                disabled={isClosingSession}
+                className="flex-2 rounded-xl bg-rose-600 py-3 text-xs font-black text-white hover:bg-rose-500 shadow-lg shadow-rose-900/40 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+              >
+                {isClosingSession ? (
+                  <span>Fechando Turno...</span>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4" />
+                    <span>[Enter] Confirmar e Encerrar Caixa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 7. RELATÓRIO DO FECHAMENTO DE CAIXA APÓS CONCLUSÃO             */}
+      {/* ============================================================== */}
+      {closedSessionReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-center space-y-4">
+            <div className="rounded-full bg-emerald-500/20 p-3 text-emerald-400 w-12 h-12 mx-auto flex items-center justify-center">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Caixa Encerrado com Sucesso!</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                A sessão do operador foi fechada e os registros foram persistidos no sistema.
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-slate-950 p-4 border border-slate-800 text-left font-mono text-xs space-y-1.5">
+              <p><span className="text-slate-400">Terminal:</span> {closedSessionReport.registerId}</p>
+              <p><span className="text-slate-400">Operador:</span> {closedSessionReport.operatorName}</p>
+              <p><span className="text-slate-400">Vendas:</span> {closedSessionReport.salesCount} ({formatCurrency(closedSessionReport.totalSales)})</p>
+              <p><span className="text-slate-400">Dinheiro Físico:</span> {formatCurrency(closedSessionReport.countedMoney || '0')}</p>
+              <p><span className="text-slate-400">Divergência:</span> {closedSessionReport.difference || '0.00'}</p>
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Imprimir Resumo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/orcafacil/sales')}
+                className="flex-1 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white hover:bg-emerald-500 transition-colors"
+              >
+                Sair para Vendas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 8. MODAL SELECIONAR CLIENTE (F2)                               */}
+      {/* ============================================================== */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white">[F2] Selecionar Cliente</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCustomerModal(false)
+                  focusBarcodeInput()
+                }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="my-3">
+              <input
+                type="text"
+                autoFocus
+                placeholder="Buscar cliente por nome ou CPF..."
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                className="w-full rounded-xl bg-slate-950 px-3 py-2 text-xs text-white border border-slate-700 focus:outline-hidden"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCustomerId('')
+                  setCustomerName('Consumidor Final')
+                  setCustomerDocument('')
+                  setShowCustomerModal(false)
+                  focusBarcodeInput()
+                }}
+                className="w-full py-2.5 px-3 text-left hover:bg-slate-800/50 flex items-center justify-between text-emerald-400 font-semibold"
+              >
+                <span>Consumidor Final (Padrão)</span>
+                <span className="text-[10px] text-slate-500">Sem cadastro</span>
+              </button>
+
+              {customers
+                .filter((c) =>
+                  c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                  (c.document && c.document.includes(customerSearchQuery)),
+                )
+                .slice(0, 15)
+                .map((cust) => (
+                  <button
+                    key={cust.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomerId(cust.id)
+                      setCustomerName(cust.name)
+                      setCustomerDocument(cust.document || '')
+                      setShowCustomerModal(false)
+                      focusBarcodeInput()
+                    }}
+                    className="w-full py-2.5 px-3 text-left hover:bg-slate-800/50 flex items-center justify-between text-slate-200"
+                  >
+                    <div>
+                      <p className="font-semibold">{cust.name}</p>
+                      {cust.document && <p className="text-[11px] text-slate-400">{cust.document}</p>}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-600" />
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 9. MODAL DE DESCONTO (F3)                                      */}
+      {/* ============================================================== */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-white">[F3] Aplicar Desconto</h3>
+            <div>
+              <label className="block text-xs text-slate-400">Valor do Desconto (R$)</label>
+              <input
+                type="text"
+                autoFocus
+                value={discountInput}
+                onChange={(e) => setDiscountInput(e.target.value)}
+                placeholder="0,00"
+                className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-rose-400 border border-slate-700 focus:outline-hidden"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDiscountModal(false)
+                  focusBarcodeInput()
+                }}
+                className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscount(discountInput)
+                  setShowDiscountModal(false)
+                  focusBarcodeInput()
+                }}
+                className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 10. MODAL CANCELAR VENDA (F4)                                  */}
+      {/* ============================================================== */}
+      {showCancelSaleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl text-center space-y-4">
+            <div className="rounded-full bg-rose-500/20 p-3 text-rose-400 w-12 h-12 mx-auto flex items-center justify-center">
+              <Trash2 className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-bold text-white">Cancelar Venda Atual?</h3>
+            <p className="text-xs text-slate-400">
+              Todos os {cart.length} itens serão removidos do carrinho e a operação será cancelada.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCancelSaleModal(false)
+                  focusBarcodeInput()
+                }}
+                className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300"
+              >
+                [Esc] Não
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCart([])
+                  setDiscount('0,00')
+                  setLastScannedItem(null)
+                  setShowCancelSaleModal(false)
+                  pdvSound.playError()
+                  focusBarcodeInput()
+                }}
+                className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white hover:bg-rose-500"
+              >
+                [Enter] Sim, Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 11. MODAL SUPRIMENTO (F7) / SANGRIA (F8)                       */}
+      {/* ============================================================== */}
+      {showMovementModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-white">
+              {movementType === 'supply' ? '[F7] Suprimento de Caixa (Troco)' : '[F8] Sangria de Caixa (Retirada)'}
+            </h3>
+            <div>
+              <label className="block text-xs text-slate-400">Valor (R$)</label>
+              <input
+                type="text"
+                autoFocus
+                value={movementAmountInput}
+                onChange={(e) => setMovementAmountInput(e.target.value)}
+                placeholder="0,00"
+                className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-white border border-slate-700 focus:outline-hidden"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400">Motivo</label>
+              <input
+                type="text"
+                value={movementReasonInput}
+                onChange={(e) => setMovementReasonInput(e.target.value)}
+                placeholder={movementType === 'supply' ? 'Ex: Reforço de troco da manhã' : 'Ex: Recolhimento para o cofre'}
+                className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-xs text-white border border-slate-700 focus:outline-hidden"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMovementModal(false)
+                  focusBarcodeInput()
+                }}
+                className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmMovement}
+                className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 12. COMPROVANTE DE VENDA (INTEGRADO COM SALERECEIPTMODAL)      */}
+      {/* ============================================================== */}
+      <SaleReceiptModal
+        open={showReceiptModal}
+        sale={completedSale}
+        onClose={() => {
+          setShowReceiptModal(false)
+          focusBarcodeInput()
+        }}
+      />
+    </div>
+  )
+}

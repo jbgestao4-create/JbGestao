@@ -48,6 +48,8 @@ interface InventoryMinimumPriceRow {
   id: string
   name: string
   minimum_sale_price: string | null
+  can_sell?: boolean | null
+  attributes?: Record<string, unknown> | null
 }
 
 export interface QuoteItemInput extends QuoteItemCalculationInput {
@@ -89,7 +91,7 @@ async function validateMinimumSalePrices(
 
   const { data, error } = await supabase
     .from('inventory_items')
-    .select('id, name, minimum_sale_price')
+    .select('id, name, minimum_sale_price, can_sell, attributes')
     .eq('organization_id', organizationId)
     .in('id', inventoryItemIds)
     // The shared Supabase client is untyped; this keeps the response typed locally.
@@ -101,6 +103,16 @@ async function validateMinimumSalePrices(
     return {
       success: false,
       error: 'Não foi possível validar os preços mínimos do estoque. Tente novamente.',
+    }
+  }
+
+  const pendingItem = data.find(
+    (item) => item.can_sell === false || item.attributes?.registration_status === 'awaiting_information',
+  )
+  if (pendingItem) {
+    return {
+      success: false,
+      error: `O material "${pendingItem.name}" está com status "Aguardando informação" e não pode ser utilizado em orçamentos até que o cadastro esteja concluído no estoque.`,
     }
   }
 

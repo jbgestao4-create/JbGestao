@@ -128,6 +128,8 @@ export interface InventoryItem {
   deletedAt?: string | null
   deleteReason?: string | null
   suppliers: InventoryItemSupplier[]
+  registrationStatus?: 'completed' | 'awaiting_information'
+  pendingFields?: string[]
   createdAt: string
   updatedAt: string
 }

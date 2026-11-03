@@ -339,6 +339,16 @@ export function QuoteFormPage() {
 
   const handleSelectInventoryItem = (itemId: string, inventoryItemId: string) => {
     const inventoryItem = inventoryItems.find((item) => item.id === inventoryItemId)
+    if (
+      inventoryItem &&
+      (inventoryItem.registrationStatus === 'awaiting_information' || !inventoryItem.canSell)
+    ) {
+      setError(
+        `O material "${inventoryItem.name}" está com status "Aguardando informação" e não pode ser utilizado em orçamentos até que o cadastro esteja concluído no estoque.`,
+      )
+      return
+    }
+
     setItems((prev) =>
       prev.map((item) =>
         item.id === itemId
@@ -796,7 +806,9 @@ export function QuoteFormPage() {
                                     value={linkedInventoryItem?.sku || ''}
                                     inventoryItems={inventoryItems.filter(
                                       (inv) =>
-                                        inv.canSell || inv.id === item.inventoryItemId,
+                                        (inv.canSell &&
+                                          inv.registrationStatus !== 'awaiting_information') ||
+                                        inv.id === item.inventoryItemId,
                                     )}
                                     onSelect={(selectedId) => {
                                       handleSelectInventoryItem(item.id, selectedId)
@@ -822,7 +834,9 @@ export function QuoteFormPage() {
                                       options={inventoryItems
                                         .filter(
                                           (inventoryItem) =>
-                                            inventoryItem.canSell ||
+                                            (inventoryItem.canSell &&
+                                              inventoryItem.registrationStatus !==
+                                                'awaiting_information') ||
                                             inventoryItem.id === item.inventoryItemId,
                                         )
                                         .map((inventoryItem) => ({

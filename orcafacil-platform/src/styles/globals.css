@@ -1,6 +1,8 @@
 /* Importa Tailwind CSS v4 */
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Variáveis de design do sistema */
 @layer base {
   :root {
@@ -25,6 +27,7 @@
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
     overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   img,
@@ -44,6 +47,235 @@
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-blue-500;
   }
+}
+
+/* ==========================================================================
+   TEMA ESCURO GLOBAL DO SISTEMA (DARK MODE)
+   Garante adaptação profunda de todas as páginas, componentes, formulários e modais
+   ========================================================================== */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0b0f19 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Bordas padrão no dark mode */
+html.dark * {
+  border-color: #1e293b;
+}
+
+/* Headers, Asides, Navs e Footers */
+html.dark header {
+  background-color: #111827 !important;
+  border-color: #1f2937 !important;
+}
+
+html.dark aside {
+  background-color: #111827 !important;
+  border-color: #1f2937 !important;
+}
+
+/* Superfícies brancas viram superfícies escuras elegantes */
+html.dark .bg-white {
+  background-color: #111827 !important;
+}
+
+html.dark .bg-gray-50,
+html.dark .bg-slate-50,
+html.dark .bg-zinc-50 {
+  background-color: #0b0f19 !important;
+}
+
+html.dark .bg-gray-100,
+html.dark .bg-slate-100 {
+  background-color: #1f2937 !important;
+}
+
+html.dark .bg-gray-200,
+html.dark .bg-slate-200 {
+  background-color: #374151 !important;
+}
+
+/* Tipografia e Textos */
+html.dark .text-gray-900,
+html.dark .text-slate-900,
+html.dark .text-zinc-900 {
+  color: #f9fafb !important;
+}
+
+html.dark .text-gray-800,
+html.dark .text-slate-800 {
+  color: #f3f4f6 !important;
+}
+
+html.dark .text-gray-700,
+html.dark .text-slate-700 {
+  color: #d1d5db !important;
+}
+
+html.dark .text-gray-600,
+html.dark .text-slate-600 {
+  color: #9ca3af !important;
+}
+
+html.dark .text-gray-500,
+html.dark .text-slate-500 {
+  color: #6b7280 !important;
+}
+
+html.dark .text-gray-400,
+html.dark .text-slate-400 {
+  color: #6b7280 !important;
+}
+
+/* Bordas */
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300,
+html.dark .border-slate-100,
+html.dark .border-slate-200 {
+  border-color: #1f2937 !important;
+}
+
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1f2937 !important;
+}
+
+/* Inputs, Textareas e Selects */
+html.dark input:not([type='checkbox']):not([type='radio']):not([type='submit']):not([type='button']),
+html.dark select,
+html.dark textarea {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f9fafb !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 1px #3b82f6 !important;
+}
+
+/* Tabelas */
+html.dark table thead {
+  background-color: #111827 !important;
+  color: #9ca3af !important;
+}
+
+html.dark table tbody tr {
+  background-color: #111827 !important;
+}
+
+html.dark table tbody tr:hover {
+  background-color: #1f2937 !important;
+}
+
+/* Cards de destaque com tons translúcidos (Blue, Emerald, Purple, Indigo, Amber, Red) */
+html.dark .bg-blue-50 {
+  background-color: rgba(30, 58, 138, 0.25) !important;
+}
+html.dark .text-blue-700,
+html.dark .text-blue-800,
+html.dark .text-blue-900 {
+  color: #93c5fd !important;
+}
+
+html.dark .bg-emerald-50 {
+  background-color: rgba(6, 78, 59, 0.25) !important;
+}
+html.dark .text-emerald-700,
+html.dark .text-emerald-800,
+html.dark .text-emerald-900 {
+  color: #6ee7b7 !important;
+}
+
+html.dark .bg-purple-50 {
+  background-color: rgba(88, 28, 135, 0.25) !important;
+}
+html.dark .text-purple-700,
+html.dark .text-purple-800,
+html.dark .text-purple-900 {
+  color: #d8b4fe !important;
+}
+
+html.dark .bg-indigo-50 {
+  background-color: rgba(49, 46, 129, 0.25) !important;
+}
+html.dark .text-indigo-700,
+html.dark .text-indigo-800,
+html.dark .text-indigo-900 {
+  color: #a5b4fc !important;
+}
+
+html.dark .bg-amber-50 {
+  background-color: rgba(120, 53, 15, 0.25) !important;
+}
+html.dark .text-amber-700,
+html.dark .text-amber-800,
+html.dark .text-amber-900 {
+  color: #fcd34d !important;
+}
+
+html.dark .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.25) !important;
+}
+html.dark .text-red-700,
+html.dark .text-red-800,
+html.dark .text-red-900 {
+  color: #fca5a5 !important;
+}
+
+/* Modais e Dialogs */
+html.dark [role='dialog'] {
+  color: #f1f5f9;
+}
+
+html.dark [role='dialog'] .bg-white {
+  background-color: #111827 !important;
+  border-color: #1f2937 !important;
+}
+
+html.dark [role='dialog'] .bg-gray-50 {
+  background-color: #0b0f19 !important;
+}
+
+/* Dropdowns / Menus Flutuantes */
+html.dark [role='menu'],
+html.dark [role='listbox'] {
+  background-color: #111827 !important;
+  border-color: #374151 !important;
+  color: #f9fafb !important;
+}
+
+html.dark [role='menuitem']:hover,
+html.dark [role='option']:hover {
+  background-color: #1f2937 !important;
+}
+
+/* Scrollbars escuros */
+html.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+html.dark ::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
 }
 
 @media (max-width: 767px) {

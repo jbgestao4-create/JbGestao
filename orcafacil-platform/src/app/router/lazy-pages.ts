@@ -89,3 +89,28 @@ export const InventoryMovementsPage = lazy(() =>
     default: module.InventoryMovementsPage,
   })),
 )
+export const SalesHomePage = lazy(() =>
+  import('@modules/sales/pages/SalesHomePage').then((module) => ({
+    default: module.SalesHomePage,
+  })),
+)
+export const SaleFormPage = lazy(() =>
+  import('@modules/sales/pages/SaleFormPage').then((module) => ({
+    default: module.SaleFormPage,
+  })),
+)
+export const SalesListPage = lazy(() =>
+  import('@modules/sales/pages/SalesListPage').then((module) => ({
+    default: module.SalesListPage,
+  })),
+)
+export const SalesInvoicesPage = lazy(() =>
+  import('@modules/sales/pages/SalesInvoicesPage').then((module) => ({
+    default: module.SalesInvoicesPage,
+  })),
+)
+export const PdvTerminalPage = lazy(() =>
+  import('@modules/sales/pages/PdvTerminalPage').then((module) => ({
+    default: module.PdvTerminalPage,
+  })),
+)

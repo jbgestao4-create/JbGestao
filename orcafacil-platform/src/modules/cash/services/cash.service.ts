@@ -332,7 +332,7 @@ export const cashService = {
         logger.error('Erro ao consultar orçamento para gerar conta a receber', quoteError)
         return { success: false, error: 'Não foi possível localizar o orçamento selecionado.' }
       }
-      if (quote.status !== 'approved') {
+      if (quote.status !== 'approved' && quote.status !== 'completed') {
         return {
           success: false,
           error: 'Somente orçamentos aprovados podem ser convertidos em contas a receber.',

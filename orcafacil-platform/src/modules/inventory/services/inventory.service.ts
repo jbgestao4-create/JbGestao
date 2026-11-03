@@ -199,6 +199,20 @@ function mapInventoryItem(row: InventoryItemRow): InventoryItem {
     deletedAt: row.deleted_at ?? null,
     deleteReason: row.delete_reason ?? null,
     suppliers: itemSuppliers,
+    registrationStatus:
+      (row.attributes?.registration_status as 'completed' | 'awaiting_information') ||
+      (Number(row.unit_price) <= 0 || !row.can_sell ? 'awaiting_information' : 'completed'),
+    pendingFields: (() => {
+      if (row.attributes?.pending_fields) {
+        try {
+          const parsed = JSON.parse(row.attributes.pending_fields)
+          if (Array.isArray(parsed)) return parsed
+        } catch {
+          // ignore
+        }
+      }
+      return Number(row.unit_price) <= 0 ? ['Preço de venda'] : []
+    })(),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -368,6 +382,15 @@ export const inventoryService = {
         assignedSku = nextCodeResult.success ? nextCodeResult.data : '1'
       }
 
+      const hasSalePrice = Number(params.unitPrice) > 0
+      const currentRegStatus = params.attributes?.registration_status || (hasSalePrice ? 'completed' : 'awaiting_information')
+      const mergedAttributes = {
+        ...(params.attributes || {}),
+        registration_status: currentRegStatus,
+        pending_fields: currentRegStatus === 'completed' ? JSON.stringify([]) : (params.attributes?.pending_fields || JSON.stringify(['Preço de venda'])),
+      }
+      const effectiveCanSell = currentRegStatus === 'completed' ? params.canSell : false
+
       const { data, error } = await supabase
         .from('inventory_items')
         .insert({
@@ -409,12 +432,12 @@ export const inventoryService = {
           fiscal_product_code: params.fiscalProductCode.trim() || null,
           gtin: params.gtin.trim() || null,
           is_active: params.isActive,
-          can_sell: params.canSell,
+          can_sell: effectiveCanSell,
           can_purchase: params.canPurchase,
           notes: params.notes.trim() || null,
           purchase_unit: params.purchaseUnit.trim() || null,
           purchase_unit_factor: params.purchaseUnitFactor.trim() || '1',
-          attributes: params.attributes,
+          attributes: mergedAttributes,
           image_path: params.imagePath.trim() || null,
         })
         .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
@@ -447,6 +470,15 @@ export const inventoryService = {
     params: InventoryItemParams,
   ): Promise<ServiceResult<void>> {
     try {
+      const hasSalePrice = Number(params.unitPrice) > 0
+      const currentRegStatus = params.attributes?.registration_status || (hasSalePrice ? 'completed' : 'awaiting_information')
+      const mergedAttributes = {
+        ...(params.attributes || {}),
+        registration_status: hasSalePrice ? 'completed' : currentRegStatus,
+        pending_fields: hasSalePrice ? JSON.stringify([]) : (params.attributes?.pending_fields || JSON.stringify(['Preço de venda'])),
+      }
+      const effectiveCanSell = hasSalePrice ? params.canSell : false
+
       const { data, error } = await supabase
         .from('inventory_items')
         .update({
@@ -486,12 +518,12 @@ export const inventoryService = {
           fiscal_product_code: params.fiscalProductCode.trim() || null,
           gtin: params.gtin.trim() || null,
           is_active: params.isActive,
-          can_sell: params.canSell,
+          can_sell: effectiveCanSell,
           can_purchase: params.canPurchase,
           notes: params.notes.trim() || null,
           purchase_unit: params.purchaseUnit.trim() || null,
           purchase_unit_factor: params.purchaseUnitFactor.trim() || '1',
-          attributes: params.attributes,
+          attributes: mergedAttributes,
           image_path: params.imagePath.trim() || null,
         })
         .eq('organization_id', organizationId)
@@ -732,14 +764,21 @@ export const inventoryService = {
 
   async listMovements(
     organizationId: UUID,
-    inventoryItemId: UUID,
+    inventoryItemId?: UUID,
   ): Promise<ServiceResult<InventoryMovement[]>> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('inventory_movements')
         .select('*')
         .eq('organization_id', organizationId)
-        .eq('inventory_item_id', inventoryItemId)
+
+      if (inventoryItemId) {
+        query = query.eq('inventory_item_id', inventoryItemId)
+      } else {
+        query = query.limit(500)
+      }
+
+      const { data, error } = await query
         .order('moved_at', { ascending: false })
         // The shared Supabase client is untyped; this keeps the response typed locally.
         // eslint-disable-next-line @typescript-eslint/no-deprecated
@@ -764,11 +803,11 @@ export const inventoryService = {
 
       if (error) {
         logger.error('Erro ao consultar movimentações do estoque', error)
-        return { success: false, error: 'Não foi possível carregar o histórico do produto.' }
+        return { success: false, error: 'Não foi possível carregar o histórico de movimentações.' }
       }
       return {
         success: true,
-        data: data.map((movement) => ({
+        data: (data ?? []).map((movement) => ({
           id: movement.id,
           organizationId: movement.organization_id,
           inventoryItemId: movement.inventory_item_id,
@@ -787,7 +826,7 @@ export const inventoryService = {
       }
     } catch (error) {
       logger.error('Exceção ao consultar movimentações do estoque', error)
-      return { success: false, error: 'Erro inesperado ao consultar o histórico do produto.' }
+      return { success: false, error: 'Erro inesperado ao consultar o histórico de movimentações.' }
     }
   },
 

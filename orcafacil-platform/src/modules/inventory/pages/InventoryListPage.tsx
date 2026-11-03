@@ -9,7 +9,19 @@ import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ImagePreviewModal } from '@shared/components/ui/ImagePreviewModal'
 import { DeleteInventoryItemModal } from '../components/DeleteInventoryItemModal'
-import { ArrowLeft, CheckCircle2, Package, Pencil, Search, Trash2, X, ZoomIn } from 'lucide-react'
+import { ImportInvoiceModal } from '../components/ImportInvoiceModal'
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  FileUp,
+  Package,
+  Pencil,
+  Search,
+  Trash2,
+  X,
+  ZoomIn,
+} from 'lucide-react'
 
 function formatQuantity(value: string) {
   return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 }).format(Number(value))
@@ -23,18 +35,19 @@ function formatPrice(value: string) {
 
 export function InventoryListPage() {
   const { currentOrganization } = useOrganization()
-  const { canEditInventoryProduct } = useModuleAccess()
+  const { canEditInventoryProduct, canCreateInventoryProduct } = useModuleAccess()
   const navigate = useNavigate()
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loadedOrganizationId, setLoadedOrganizationId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'active' | 'inactive' | 'low'>(
-    'all',
-  )
+  const [inventoryFilter, setInventoryFilter] = useState<
+    'all' | 'completed' | 'awaiting' | 'active' | 'inactive' | 'low'
+  >('all')
   const [loadError, setLoadError] = useState('')
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null)
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState<{
     text: string
     type: 'success' | 'error'
@@ -105,8 +118,13 @@ export function InventoryListPage() {
       .filter(Boolean)
       .some((value) => value?.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
     const isLowStock = Number(item.quantityOnHand) <= Number(item.minimumQuantity) && item.isActive
+    const isAwaiting = item.registrationStatus === 'awaiting_information' || Number(item.unitPrice) <= 0 || !item.canSell
+    const isCompleted = item.registrationStatus === 'completed' || (!isAwaiting && Number(item.unitPrice) > 0)
+
     const matchesStatus =
       inventoryFilter === 'all' ||
+      (inventoryFilter === 'completed' && isCompleted) ||
+      (inventoryFilter === 'awaiting' && isAwaiting) ||
       (inventoryFilter === 'active' && item.isActive) ||
       (inventoryFilter === 'inactive' && !item.isActive) ||
       (inventoryFilter === 'low' && isLowStock)
@@ -132,6 +150,17 @@ export function InventoryListPage() {
             Consulte e gerencie materiais, unidades, saldos e fornecedores.
           </p>
         </div>
+
+        {canCreateInventoryProduct && (
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+          >
+            <FileUp className="h-4 w-4" aria-hidden="true" />
+            Importar Nota Fiscal
+          </button>
+        )}
       </div>
 
       {feedbackMessage && (
@@ -200,14 +229,18 @@ export function InventoryListPage() {
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <span className="shrink-0">Mostrar:</span>
               <ListBox
-                className="w-40"
+                className="w-48"
                 searchable={false}
                 value={inventoryFilter}
                 onChange={(val) => {
-                  setInventoryFilter(val as 'all' | 'active' | 'inactive' | 'low')
+                  setInventoryFilter(
+                    val as 'all' | 'completed' | 'awaiting' | 'active' | 'inactive' | 'low',
+                  )
                 }}
                 options={[
-                  { value: 'all', label: 'Todos' },
+                  { value: 'all', label: 'Todos os materiais' },
+                  { value: 'completed', label: 'Concluídos' },
+                  { value: 'awaiting', label: 'Aguardando informação' },
                   { value: 'active', label: 'Ativos' },
                   { value: 'inactive', label: 'Inativos' },
                   { value: 'low', label: 'Estoque baixo' },
@@ -255,11 +288,17 @@ export function InventoryListPage() {
         <div className="space-y-4">
           {filteredItems.map((item) => {
             const isLowStock = Number(item.quantityOnHand) <= Number(item.minimumQuantity)
+            const isAwaiting =
+              item.registrationStatus === 'awaiting_information' ||
+              Number(item.unitPrice) <= 0 ||
+              !item.canSell
             return (
               <Card
                 key={item.id}
                 className={`rounded-xl shadow-sm transition-all ${
-                  !item.isActive
+                  isAwaiting
+                    ? 'border-amber-200 bg-amber-50/20'
+                    : !item.isActive
                     ? 'border-gray-200 bg-gray-50/75 opacity-60 hover:opacity-90'
                     : 'bg-white'
                 }`}
@@ -303,6 +342,17 @@ export function InventoryListPage() {
                               Inativo
                             </span>
                           )}
+                          {isAwaiting ? (
+                            <span className="shrink-0 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800">
+                              <AlertCircle className="h-3 w-3 text-amber-600" />
+                              Aguardando informação
+                            </span>
+                          ) : (
+                            <span className="shrink-0 inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700">
+                              <CheckCircle2 className="h-3 w-3 text-green-600" />
+                              Concluído
+                            </span>
+                          )}
                           <span className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
                             Cód. #{item.sku || '—'}
                           </span>
@@ -332,11 +382,15 @@ export function InventoryListPage() {
                           onClick={() => {
                             void navigate(`/orcafacil/inventory/${item.id}/edit`)
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-700"
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                            isAwaiting
+                              ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-semibold'
+                              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-blue-700'
+                          }`}
                           aria-label={`Editar ${item.name}`}
                         >
                           <Pencil className="h-4 w-4" aria-hidden="true" />
-                          Editar
+                          {isAwaiting ? 'Completar cadastro' : 'Editar'}
                         </button>
                         <button
                           type="button"
@@ -352,6 +406,32 @@ export function InventoryListPage() {
                       </div>
                     )}
                   </div>
+
+                  {isAwaiting && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+                        <span>
+                          <strong>Cadastro incompleto:</strong>{' '}
+                          {item.pendingFields && item.pendingFields.length > 0
+                            ? item.pendingFields.join(', ')
+                            : 'Falta definir preço de venda'}.{' '}
+                          Este material não pode ser usado em outros módulos até ser concluído.
+                        </span>
+                      </div>
+                      {canEditInventoryProduct && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigate(`/orcafacil/inventory/${item.id}/edit`)
+                          }}
+                          className="font-bold underline text-amber-800 hover:text-amber-950 transition"
+                        >
+                          Completar cadastro agora →
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-4 rounded-xl bg-gray-50 p-4 sm:grid-cols-2 xl:grid-cols-5">
                     <div>
@@ -422,6 +502,18 @@ export function InventoryListPage() {
           if (!isDeleting) setItemToDelete(null)
         }}
         onConfirm={handleConfirmDelete}
+      />
+
+      <ImportInvoiceModal
+        open={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+          if (currentOrganization) {
+            void inventoryService.list(currentOrganization.id).then((result) => {
+              if (result.success) setItems(result.data)
+            })
+          }
+        }}
       />
     </div>
   )

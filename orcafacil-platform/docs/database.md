@@ -135,6 +135,36 @@ Orçamentos comerciais gerados no módulo JB Software.
   `FOREIGN KEY (organization_id, customer_id) REFERENCES customers(organization_id, id) ON DELETE RESTRICT`
   `UNIQUE (organization_id, id)`
 
+
+### `cash_sessions`
+
+Turnos e sessões de caixa do Ponto de Venda (PDV).
+
+- `id` (UUID, PK)
+- `organization_id` (UUID, FK -> `organizations.id` ON DELETE CASCADE)
+- `register_id` (TEXT, identificação do terminal, ex: 'Caixa 01')
+- `opened_by` (UUID, FK -> `auth.users.id`)
+- `closed_by` (UUID, FK -> `auth.users.id`, opcional)
+- `operator_name` (TEXT)
+- `status` (ENUM: `'open'`, `'closed'`)
+- `opening_balance` (NUMERIC(12, 2), fundo de troco inicial)
+- `opened_at`, `closed_at` (TIMESTAMPTZ)
+- Acumuladores: `total_sales`, `total_money`, `total_pix`, `total_credit_card`, `total_debit_card`, `total_additional_entries`, `total_withdrawals`, `total_cancellations`, `expected_money`
+- Conferência física: `counted_money`, `difference`, `conference_attempts`, `discrepancy_justification`, `supervisor_authorized_by`
+- Restrição: `cash_sessions_one_open_per_register` impede dois operadores de abrirem o mesmo caixa simultaneamente sem o fechamento oficial (Tecla 9).
+
+### `cash_session_movements`
+
+Movimentações manuais durante a sessão de caixa (Sangrias e Suprimentos).
+
+- `id` (UUID, PK)
+- `organization_id` (UUID, FK -> `organizations.id` ON DELETE CASCADE)
+- `session_id` (UUID, FK -> `cash_sessions.id` ON DELETE CASCADE)
+- `type` (ENUM: `'supply'` para reforço de troco, `'bleed'` para retirada/sangria)
+- `amount` (NUMERIC(12, 2), > 0)
+- `reason` (TEXT)
+- `created_by` (UUID, FK -> `auth.users.id`)
+
 ### `quote_items`
 
 Itens e serviços que compõem o orçamento.

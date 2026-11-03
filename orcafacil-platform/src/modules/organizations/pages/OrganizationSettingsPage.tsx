@@ -486,12 +486,12 @@ export function OrganizationSettingsPage() {
                     className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors"
                   >
                     {/* INFORMAÇÕES DO FUNCIONÁRIO */}
-                    <div className="flex items-start gap-3.5">
+                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
                       <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
                         {member.displayName?.slice(0, 2).toUpperCase() || 'FU'}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-bold text-gray-900">
                             {member.displayName}
                           </span>
@@ -503,7 +503,7 @@ export function OrganizationSettingsPage() {
                                 : 'Membro Operacional'}
                           </Badge>
                         </div>
-                        <span className="text-xs text-gray-500 block">{member.email}</span>
+                        <span className="text-xs text-gray-500 block truncate">{member.email}</span>
                         {member.jobTitle && (
                           <span className="text-xs text-gray-600 block">
                             Cargo: {member.jobTitle}
@@ -547,13 +547,13 @@ export function OrganizationSettingsPage() {
 
                     {/* AÇÕES DE GESTÃO */}
                     {canManageMembers && !isOwner && (
-                      <div className="flex items-center gap-2 self-end md:self-center">
+                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                         {canEditOperationalMemberModules && member.role === 'member' && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenEditModal(member)}
-                            className="text-xs gap-1"
+                            className="h-8 text-xs gap-1.5 whitespace-nowrap text-gray-700 hover:text-blue-600 hover:border-blue-300"
                           >
                             <Sliders className="w-3.5 h-3.5 text-gray-500" />
                             Permissões de Módulos
@@ -564,22 +564,23 @@ export function OrganizationSettingsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleOpenEditMember(member)}
-                          className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600"
+                          className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600 hover:border-blue-300"
                           title="Editar funcionário"
                           aria-label={`Editar ${member.displayName || member.email}`}
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
 
-                        <button
-                          type="button"
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => setMemberToRemove(member)}
-                          className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                          title="Remover Funcionário"
+                          className="h-8 w-8 p-0 text-gray-500 hover:text-red-600 hover:border-red-300 hover:bg-red-50"
+                          title="Remover funcionário"
                           aria-label={`Remover ${member.displayName || member.email}`}
                         >
                           <Trash2 className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>

@@ -4,7 +4,12 @@ import { useAuth } from '@modules/auth/context/AuthContext'
 import { AppLayout } from '@app/layouts/AppLayout'
 import { Loader2 } from 'lucide-react'
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
+interface ProtectedRouteProps {
+  children: ReactNode
+  hideLayout?: boolean
+}
+
+export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth()
   const location = useLocation()
 
@@ -21,6 +26,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
+  if (hideLayout) {
+    return <>{children}</>
+  }
+
   return <AppLayout>{children}</AppLayout>
 }
-

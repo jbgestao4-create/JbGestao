@@ -26,6 +26,7 @@ import { useModuleAccess } from '@modules/access-control/context/ModuleAccessCon
 import { quoteService } from '@modules/orcafacil/services/quote.service'
 import { customerService } from '@modules/customers/services/customer.service'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
+import { ThemeToggle } from '@shared/components/ThemeToggle'
 import type { DashboardModuleCode } from '@shared/types/database'
 
 type DashboardModule = {
@@ -88,8 +89,9 @@ export function DashboardPage() {
       action: 'Acessar Vendas',
       icon: ShoppingCart,
       iconStyle: 'bg-blue-50 text-blue-700',
-      isAvailable: false,
+      isAvailable: hasOrcafacil,
       accessModule: 'MOD-01',
+      path: '/orcafacil/sales',
     },
     {
       id: 'MOD-02',
@@ -231,6 +233,8 @@ export function DashboardPage() {
             >
               <Home aria-hidden="true" className="h-4 w-4" />
             </Link>
+
+            <ThemeToggle className="h-11 w-11 rounded-lg" />
 
             <ProfileMenu
               variant="dashboard"

@@ -8,6 +8,7 @@ import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
+import { ThemeToggle } from '@shared/components/ThemeToggle'
 import {
   LayoutDashboard,
   FileSpreadsheet,
@@ -17,6 +18,7 @@ import {
   Building2,
   Truck,
   Package,
+  ShoppingCart,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -143,6 +145,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const hasOrcafacil = canAccess('orcafacil')
+  const canAccessSales = canAccessDashboardModule('MOD-01')
   const canAccessCustomers = canAccessDashboardModule('MOD-03')
   const canAccessInventory = canAccessDashboardModule('MOD-02')
   const canAccessQuotes = canAccessDashboardModule('MOD-04')
@@ -260,7 +263,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             {/* Módulos de gestão */}
             {hasOrcafacil &&
-              (canAccessCustomers ||
+              (canAccessSales ||
+                canAccessCustomers ||
                 canAccessInventory ||
                 canAccessQuotes ||
                 canAccessSuppliers) && (
@@ -271,6 +275,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     </span>
                   )}
                   <div className="mt-1 space-y-0.5">
+                    {canAccessSales &&
+                      navItem(
+                        '/orcafacil/sales',
+                        'Vendas',
+                        <ShoppingCart className="w-4 h-4" />,
+                      )}
                     {canAccessQuotes &&
                       navItem(
                         '/orcafacil/quotes',
@@ -363,7 +373,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
+              <ThemeToggle />
               <ProfileMenu
                 variant="header"
                 displayName={profile?.displayName || 'Usuário'}

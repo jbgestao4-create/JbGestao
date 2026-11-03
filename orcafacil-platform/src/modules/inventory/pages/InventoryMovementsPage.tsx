@@ -1,4 +1,4 @@
-import { useEffect, useState, type SyntheticEvent } from 'react'
+import { useEffect, useMemo, useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
@@ -8,7 +8,19 @@ import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import type { InventoryItem, InventoryMovement, Supplier } from '@shared/types/common'
-import { ArrowLeft, ArrowLeftRight, Check, History, Package, ZoomIn } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  History,
+  Package,
+  Search,
+  X,
+  ZoomIn,
+} from 'lucide-react'
 import { ImagePreviewModal } from '@shared/components/ui/ImagePreviewModal'
 import { inventoryService } from '../services/inventory.service'
 
@@ -69,6 +81,36 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+function getMovementBadge(type: string, isEntry: boolean) {
+  const label = MOVEMENT_LABELS[type] ?? type
+  if (['initial', 'entry', 'purchase'].includes(type) || isEntry) {
+    return (
+      <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+        {label}
+      </span>
+    )
+  }
+  if (['exit', 'loss', 'damaged'].includes(type)) {
+    return (
+      <span className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
+        {label}
+      </span>
+    )
+  }
+  if (['sale', 'quote_approval', 'quote_edit', 'quote_cancellation'].includes(type)) {
+    return (
+      <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+        {label}
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700">
+      {label}
+    </span>
+  )
+}
+
 export function InventoryMovementsPage() {
   const { currentOrganization } = useOrganization()
   const { canMoveInventory, inventoryAccessLevel } = useModuleAccess()
@@ -77,15 +119,21 @@ export function InventoryMovementsPage() {
 
   const [items, setItems] = useState<InventoryItem[]>([])
   const [item, setItem] = useState<InventoryItem | null>(null)
-  const [movements, setMovements] = useState<InventoryMovement[]>([])
+  const [allMovements, setAllMovements] = useState<InventoryMovement[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
 
   const [isLoadingItems, setIsLoadingItems] = useState(false)
+  const [isLoadingAllMovements, setIsLoadingAllMovements] = useState(false)
   const [loadedItemKey, setLoadedItemKey] = useState<string | null>(null)
   const [loadError, setLoadError] = useState('')
   const [supplierError, setSupplierError] = useState('')
   const [formError, setFormError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 15
 
   const [direction, setDirection] = useState<MovementDirection>('in')
   const [type, setType] = useState<MovementType>('entry')
@@ -100,21 +148,31 @@ export function InventoryMovementsPage() {
   const [costUpdateMessage, setCostUpdateMessage] = useState('')
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null)
 
-  // Carrega a lista de produtos e fornecedores da organização
+  // Reseta a paginação ao mudar busca ou filtro
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [historySearch, historyTypeFilter])
+
+  // Carrega a lista de produtos, fornecedores e histórico geral da organização
   useEffect(() => {
     if (!currentOrganization) return
 
     let active = true
     void Promise.resolve().then(() => {
-      if (active) setIsLoadingItems(true)
+      if (active) {
+        setIsLoadingItems(true)
+        setIsLoadingAllMovements(true)
+      }
     })
 
     void Promise.all([
       inventoryService.list(currentOrganization.id),
       supplierService.list(currentOrganization.id),
-    ]).then(([itemsResult, suppliersResult]) => {
+      inventoryService.listMovements(currentOrganization.id),
+    ]).then(([itemsResult, suppliersResult, allMovementsResult]) => {
       if (!active) return
       setIsLoadingItems(false)
+      setIsLoadingAllMovements(false)
       if (itemsResult.success) {
         setItems(itemsResult.data)
       } else {
@@ -126,6 +184,9 @@ export function InventoryMovementsPage() {
       } else {
         setSupplierError(suppliersResult.error)
       }
+      if (allMovementsResult.success) {
+        setAllMovements(allMovementsResult.data)
+      }
     })
 
     return () => {
@@ -133,12 +194,12 @@ export function InventoryMovementsPage() {
     }
   }, [currentOrganization])
 
-  // Carrega dados do produto selecionado e seu histórico
+  // Carrega dados do produto selecionado
   const reloadItemData = async (organizationId: string, itemId: string) => {
-    const [itemResult, movementsResult, itemsResult] = await Promise.all([
+    const [itemResult, itemsResult, allMovementsResult] = await Promise.all([
       inventoryService.getById(organizationId, itemId),
-      inventoryService.listMovements(organizationId, itemId),
       inventoryService.list(organizationId),
+      inventoryService.listMovements(organizationId),
     ])
 
     if (!itemResult.success) {
@@ -146,15 +207,13 @@ export function InventoryMovementsPage() {
       setItem(null)
       return
     }
-    if (!movementsResult.success) {
-      setLoadError(movementsResult.error)
-      return
-    }
 
     setItem(itemResult.data)
-    setMovements(movementsResult.data)
     if (itemsResult.success) {
       setItems(itemsResult.data)
+    }
+    if (allMovementsResult.success) {
+      setAllMovements(allMovementsResult.data)
     }
     if (!itemResult.data.canPurchase) {
       setDirection('out')
@@ -171,23 +230,14 @@ export function InventoryMovementsPage() {
     if (!currentOrganization || !inventoryItemId) return
 
     let active = true
-    void Promise.all([
-      inventoryService.getById(currentOrganization.id, inventoryItemId),
-      inventoryService.listMovements(currentOrganization.id, inventoryItemId),
-    ]).then(
-      ([itemResult, movementsResult]) => {
+    void inventoryService.getById(currentOrganization.id, inventoryItemId).then(
+      (itemResult) => {
         if (!active) return
         if (!itemResult.success) {
           setLoadError(itemResult.error)
           setItem(null)
-          setMovements([])
-        } else if (!movementsResult.success) {
-          setLoadError(movementsResult.error)
-          setItem(itemResult.data)
-          setMovements([])
         } else {
           setItem(itemResult.data)
-          setMovements(movementsResult.data)
           if (!itemResult.data.canPurchase) {
             setDirection('out')
             setType('exit')
@@ -201,7 +251,7 @@ export function InventoryMovementsPage() {
       },
       () => {
         if (!active) return
-        setLoadError('Não foi possível carregar o produto e seu histórico.')
+        setLoadError('Não foi possível carregar o produto.')
         setLoadedItemKey(`${currentOrganization.id}:${inventoryItemId}`)
       },
     )
@@ -212,12 +262,69 @@ export function InventoryMovementsPage() {
   }, [currentOrganization, inventoryItemId])
 
   const activeItem = inventoryItemId ? item : null
-  const activeMovements = inventoryItemId ? movements : []
   const expectedKey = `${currentOrganization?.id ?? ''}:${inventoryItemId ?? ''}`
   const isLoadingItem = Boolean(inventoryItemId) && loadedItemKey !== expectedKey
 
   const isReasonRequired = direction === 'out' || ['exit', 'loss', 'damaged'].includes(type)
   const isOutbound = direction === 'out'
+
+  const itemsMap = useMemo(() => {
+    const map = new Map<string, InventoryItem>()
+    for (const it of items) {
+      map.set(it.id, it)
+    }
+    return map
+  }, [items])
+
+  const suppliersMap = useMemo(() => {
+    const map = new Map<string, Supplier>()
+    for (const s of suppliers) {
+      map.set(s.id, s)
+    }
+    return map
+  }, [suppliers])
+
+  const currentList = allMovements
+
+  const filteredMovements = useMemo(() => {
+    return currentList.filter((m) => {
+      const it = itemsMap.get(m.inventoryItemId)
+      const supp = m.supplierId ? suppliersMap.get(m.supplierId) : null
+      const isEntry = Number(m.balanceAfter) >= Number(m.balanceBefore)
+
+      if (historyTypeFilter !== 'all') {
+        if (historyTypeFilter === 'in') {
+          if (!isEntry) return false
+        } else if (historyTypeFilter === 'out') {
+          if (isEntry) return false
+        } else if (m.movementType !== historyTypeFilter) {
+          return false
+        }
+      }
+
+      if (historySearch.trim()) {
+        const query = historySearch.toLowerCase().trim()
+        const matchesName = it?.name.toLowerCase().includes(query) ?? false
+        const matchesSku = it?.sku?.toLowerCase().includes(query) ?? false
+        const matchesReason = m.reason?.toLowerCase().includes(query) ?? false
+        const matchesDoc = m.documentReference?.toLowerCase().includes(query) ?? false
+        const matchesSupplier = supp?.name.toLowerCase().includes(query) ?? false
+        const matchesType = (MOVEMENT_LABELS[m.movementType] ?? m.movementType).toLowerCase().includes(query)
+
+        if (!matchesName && !matchesSku && !matchesReason && !matchesDoc && !matchesSupplier && !matchesType) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [currentList, historyTypeFilter, historySearch, itemsMap, suppliersMap])
+
+  const totalPages = Math.max(1, Math.ceil(filteredMovements.length / pageSize))
+  const paginatedMovements = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filteredMovements.slice(start, start + pageSize)
+  }, [filteredMovements, currentPage, pageSize])
 
   const handleDirectionChange = (nextDirection: MovementDirection) => {
     if (!activeItem?.canPurchase && nextDirection === 'in') return
@@ -307,6 +414,16 @@ export function InventoryMovementsPage() {
 
     if (!activeItem.canPurchase && direction === 'in') {
       setFormError('Este material não permite compras nem acréscimos de estoque.')
+      return
+    }
+
+    if (
+      direction === 'out' &&
+      (activeItem.registrationStatus === 'awaiting_information' || !activeItem.canSell)
+    ) {
+      setFormError(
+        'Este material está com status "Aguardando informação" e não pode ter saídas registradas até que seu cadastro seja concluído no estoque.',
+      )
       return
     }
 
@@ -468,26 +585,44 @@ export function InventoryMovementsPage() {
         <>
           <Card className="rounded-xl shadow-sm">
             <CardContent className="p-4 sm:p-5">
-              <ListBox
-                label="Material do estoque *"
-                placeholder={
-                  isLoadingItems
-                    ? 'Carregando materiais...'
-                    : 'Selecione um material para movimentar...'
-                }
-                searchPlaceholder="Buscar material por nome, código, unidade..."
-                searchable
-                value={inventoryItemId || ''}
-                onChange={(val) => {
-                  handleItemChange((val as string) || '')
-                }}
-                options={visibleItems.map((i) => ({
-                  value: i.id,
-                  label: i.name,
-                  description: `Cód. #${i.sku || '—'} · Saldo: ${formatQuantity(i.quantityOnHand, i.unit)}${!i.isActive ? ' · (Inativo)' : ''}`,
-                }))}
-                disabled={isLoadingItems || visibleItems.length === 0}
-              />
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                <div className="flex-1">
+                  <ListBox
+                    label="Material do estoque *"
+                    placeholder={
+                      isLoadingItems
+                        ? 'Carregando materiais...'
+                        : 'Selecione um material para movimentar...'
+                    }
+                    searchPlaceholder="Buscar material por nome, código, unidade..."
+                    searchable
+                    value={inventoryItemId || ''}
+                    onChange={(val) => {
+                      handleItemChange((val as string) || '')
+                    }}
+                    options={visibleItems.map((i) => ({
+                      value: i.id,
+                      label: i.name,
+                      description: `Cód. #${i.sku || '—'} · Saldo: ${formatQuantity(i.quantityOnHand, i.unit)}${!i.isActive ? ' · (Inativo)' : ''}`,
+                    }))}
+                    disabled={isLoadingItems || visibleItems.length === 0}
+                  />
+                </div>
+                {inventoryItemId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    onClick={() => {
+                      handleItemChange('')
+                    }}
+                  >
+                    <X className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    Limpar seleção
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -509,28 +644,17 @@ export function InventoryMovementsPage() {
                 </Button>
               </CardContent>
             </Card>
-          ) : !inventoryItemId ? (
-            <Card className="rounded-xl shadow-sm">
-              <CardContent className="flex flex-col items-center px-6 py-12 text-center">
-                <div className="mb-3 rounded-full bg-purple-50 p-3 text-purple-600">
-                  <ArrowLeftRight className="h-6 w-6" aria-hidden="true" />
-                </div>
-                <h3 className="text-base font-semibold text-gray-900">
-                  Nenhum material selecionado
-                </h3>
-                <p className="mt-1 max-w-md text-sm text-gray-500">
-                  Selecione um material no campo acima para registrar entradas, compras, saídas, perdas e consultar o histórico completo de movimentações.
-                </p>
-              </CardContent>
-            </Card>
-          ) : isLoadingItem ? (
-            <Card className="rounded-xl shadow-sm">
-              <CardContent className="p-8 text-center text-sm text-gray-500">
-                Carregando produto e histórico...
-              </CardContent>
-            </Card>
-          ) : activeItem ? (
+          ) : (
             <>
+              {inventoryItemId ? (
+                isLoadingItem ? (
+                  <Card className="rounded-xl shadow-sm">
+                    <CardContent className="p-8 text-center text-sm text-gray-500">
+                      Carregando material...
+                    </CardContent>
+                  </Card>
+                ) : activeItem ? (
+                  <>
               {/* Card de identificação do produto selecionado com foto */}
               <Card className="rounded-xl border-purple-200/80 bg-gradient-to-r from-purple-50/50 to-white shadow-sm">
                 <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5">
@@ -915,102 +1039,289 @@ export function InventoryMovementsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-xl shadow-sm">
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <History className="h-4 w-4 text-gray-500" aria-hidden="true" />
-                    <h2 className="text-sm font-semibold text-gray-900">Histórico imutável</h2>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {activeMovements.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-gray-500">
-                      Ainda não há movimentações registradas para este produto.
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[700px] text-left text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
-                            <th className="px-3 py-3 font-semibold">Data</th>
-                            <th className="px-3 py-3 font-semibold">Tipo</th>
-                            <th className="px-3 py-3 font-semibold">Motivo</th>
-                            <th className="px-3 py-3 text-right font-semibold">Quantidade</th>
-                            <th className="px-3 py-3 text-right font-semibold">Saldo após</th>
-                            <th className="px-3 py-3 text-right font-semibold">Custo unitário</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {activeMovements.map((movement) => {
-                            const isEntry =
-                              Number(movement.balanceAfter) >= Number(movement.balanceBefore)
-                            return (
-                              <tr
-                                key={movement.id}
-                                className="border-b border-gray-100 last:border-0"
-                              >
-                                <td className="whitespace-nowrap px-3 py-3 text-gray-600">
-                                  {formatDate(movement.movedAt)}
-                                </td>
-                                <td className="px-3 py-3 font-medium text-gray-800">
-                                  {MOVEMENT_LABELS[movement.movementType] ?? movement.movementType}
-                                </td>
-                                <td
-                                  className="max-w-xs truncate px-3 py-3 text-gray-600"
-                                  title={movement.reason}
-                                >
-                                  {movement.reason}
-                                  {movement.documentReference && (
-                                    <span className="block text-xs text-gray-400">
-                                      Doc. {movement.documentReference}
-                                    </span>
-                                  )}
-                                </td>
-                                <td
-                                  className={`whitespace-nowrap px-3 py-3 text-right font-semibold ${isEntry ? 'text-emerald-700' : 'text-red-700'}`}
-                                >
-                                  {isEntry ? '+' : '−'}
-                                  {formatQuantity(movement.quantity, activeItem.unit)}
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-3 text-right text-gray-700">
-                                  {formatQuantity(movement.balanceAfter, activeItem.unit)}
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-3 text-right text-gray-700">
-                                  {formatPrice(movement.unitPrice)}
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (inventoryItemId) {
+                            void navigate(`/orcafacil/inventory/${inventoryItemId}/edit`)
+                          }
+                        }}
+                      >
+                        Editar dados do produto
+                      </Button>
                     </div>
+                  </>
+                ) : (
+                  <Card className="rounded-xl shadow-sm">
+                    <CardContent className="p-8 text-center text-sm text-gray-500">
+                      Produto não encontrado.
+                    </CardContent>
+                  </Card>
+                )
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 rounded-xl border border-purple-200/80 bg-purple-50/60 p-4 text-purple-900 shadow-xs">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-100 text-purple-700">
+                      <Package className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-semibold text-purple-950">
+                        Selecione um material no seletor acima para lançar uma movimentação
+                      </p>
+                      <p className="mt-0.5 text-xs text-purple-800">
+                        Abaixo você pode consultar o histórico de todas as movimentações anteriores registradas no estoque.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Histórico Geral de Movimentações */}
+                  <Card className="rounded-xl shadow-sm">
+                    <CardHeader className="border-b border-gray-100 pb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="rounded-lg bg-purple-50 p-2 text-purple-700">
+                            <History className="h-4 w-4" aria-hidden="true" />
+                          </div>
+                          <div>
+                            <h2 className="text-sm font-semibold text-gray-900">
+                              Histórico de todas as movimentações anteriores
+                            </h2>
+                            <p className="text-xs text-gray-500">
+                              {allMovements.length} movimentação(ões) no histórico geral
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                <CardContent className="p-4 sm:p-5 space-y-4">
+                  {/* Filtros de busca e tipo */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={historySearch}
+                        onChange={(e) => setHistorySearch(e.target.value)}
+                        placeholder="Buscar por material, código, motivo, doc..."
+                        className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-8 text-xs text-gray-900 placeholder:text-gray-400 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                      {historySearch && (
+                        <button
+                          type="button"
+                          onClick={() => setHistorySearch('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Filter className="h-4 w-4 text-gray-400" />
+                      <select
+                        value={historyTypeFilter}
+                        onChange={(e) => setHistoryTypeFilter(e.target.value)}
+                        className="rounded-lg border border-gray-300 py-2 px-2.5 text-xs text-gray-800 bg-white focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      >
+                        <option value="all">Todos os tipos de movimento</option>
+                        <option value="in">Apenas Entradas (+)</option>
+                        <option value="out">Apenas Saídas (−)</option>
+                        <option value="entry">Entrada</option>
+                        <option value="purchase">Compra</option>
+                        <option value="sale">Venda</option>
+                        <option value="quote_approval">Aprovação de orçamento</option>
+                        <option value="exit">Saída</option>
+                        <option value="loss">Perda</option>
+                        <option value="damaged">Avaria</option>
+                        <option value="adjustment">Ajuste</option>
+                        <option value="return">Devolução</option>
+                        <option value="initial">Saldo inicial</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {isLoadingAllMovements && allMovements.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-gray-500">
+                      Carregando histórico de movimentações...
+                    </div>
+                  ) : currentList.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-gray-500">
+                      Ainda não há nenhuma movimentação registrada no estoque da organização.
+                    </div>
+                  ) : filteredMovements.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-gray-500">
+                      Nenhuma movimentação encontrada com os filtros informados.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[760px] text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 bg-gray-50/50">
+                              <th className="px-3 py-3 font-semibold">Data / Hora</th>
+                              <th className="px-3 py-3 font-semibold">Material</th>
+                              <th className="px-3 py-3 font-semibold">Tipo</th>
+                              <th className="px-3 py-3 font-semibold">Motivo / Documento</th>
+                              <th className="px-3 py-3 text-right font-semibold">Quantidade</th>
+                              <th className="px-3 py-3 text-right font-semibold">Saldo após</th>
+                              <th className="px-3 py-3 text-right font-semibold">Custo unitário</th>
+                              <th className="px-3 py-3 text-center font-semibold">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedMovements.map((movement) => {
+                              const movementItem = itemsMap.get(movement.inventoryItemId)
+                              const movementSupplier = movement.supplierId
+                                ? suppliersMap.get(movement.supplierId)
+                                : null
+                              const isEntry =
+                                Number(movement.balanceAfter) >= Number(movement.balanceBefore)
+                              const itemUnit = movementItem?.unit || 'UN'
+                              const isCurrentItem = activeItem?.id === movement.inventoryItemId
+
+                              return (
+                                <tr
+                                  key={movement.id}
+                                  className="border-b border-gray-100 last:border-0 hover:bg-gray-50/60 transition"
+                                >
+                                  <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-600">
+                                    {formatDate(movement.movedAt)}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    {movementItem ? (
+                                      <div>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-semibold text-gray-900 text-xs">
+                                            {movementItem.name}
+                                          </span>
+                                          {isCurrentItem && (
+                                            <span className="rounded bg-purple-100 px-1 py-0.2 text-[10px] font-bold text-purple-700">
+                                              Atual
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-[11px] text-gray-500">
+                                          Cód. #{movementItem.sku || '—'} · Saldo:{' '}
+                                          {formatQuantity(movementItem.quantityOnHand, itemUnit)}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-gray-400 italic">
+                                        Item #{movement.inventoryItemId.slice(0, 8)}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-3 whitespace-nowrap">
+                                    {getMovementBadge(movement.movementType, isEntry)}
+                                  </td>
+                                  <td
+                                    className="max-w-xs px-3 py-3 text-xs text-gray-700"
+                                    title={movement.reason}
+                                  >
+                                    <div className="truncate font-medium">{movement.reason}</div>
+                                    {(movement.documentReference || movementSupplier) && (
+                                      <div className="text-[11px] text-gray-400 mt-0.5 truncate">
+                                        {movement.documentReference && `Doc: ${movement.documentReference}`}
+                                        {movement.documentReference && movementSupplier && ' · '}
+                                        {movementSupplier && `Forn: ${movementSupplier.name}`}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td
+                                    className={`whitespace-nowrap px-3 py-3 text-right font-semibold text-xs ${
+                                      isEntry ? 'text-emerald-700' : 'text-red-700'
+                                    }`}
+                                  >
+                                    {isEntry ? '+' : '−'}
+                                    {formatQuantity(movement.quantity, itemUnit)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-3 text-right text-xs text-gray-700">
+                                    {formatQuantity(movement.balanceAfter, itemUnit)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-3 text-right text-xs text-gray-700">
+                                    {formatPrice(movement.unitPrice)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-3 text-center">
+                                    {movementItem ? (
+                                      isCurrentItem ? (
+                                        <span className="text-[11px] text-purple-600 font-medium">
+                                          Em edição
+                                        </span>
+                                      ) : (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-xs text-purple-700 hover:bg-purple-50"
+                                          onClick={() => {
+                                            handleItemChange(movementItem.id)
+                                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                                          }}
+                                        >
+                                          Movimentar
+                                        </Button>
+                                      )
+                                    ) : (
+                                      <span className="text-gray-300">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Paginação */}
+                      {filteredMovements.length > pageSize && (
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                          <div>
+                            Mostrando {(currentPage - 1) * pageSize + 1} a{' '}
+                            {Math.min(currentPage * pageSize, filteredMovements.length)} de{' '}
+                            {filteredMovements.length} movimentações
+                          </div>
+                          <div className="flex items-center gap-1.5 self-end sm:self-center">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={currentPage === 1}
+                              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                              className="h-8 px-2.5 text-xs"
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+                              Anterior
+                            </Button>
+                            <span className="px-2 text-xs font-medium text-gray-700">
+                              Página {currentPage} de {totalPages}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={currentPage >= totalPages}
+                              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                              className="h-8 px-2.5 text-xs"
+                            >
+                              Próxima
+                              <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
-
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (inventoryItemId) {
-                      void navigate(`/orcafacil/inventory/${inventoryItemId}/edit`)
-                    }
-                  }}
-                >
-                  Editar produto
-                </Button>
-              </div>
             </>
-          ) : (
-            <Card className="rounded-xl shadow-sm">
-              <CardContent className="p-8 text-center text-sm text-gray-500">
-                Produto não encontrado.
-              </CardContent>
-            </Card>
           )}
         </>
       )}
+    </>
+  )}
 
       <ImagePreviewModal
         open={previewImage !== null}

@@ -187,13 +187,17 @@ export const organizationService = {
         .select('user_id, job_title, inventory_access_level')
         .eq('organization_id', orgId)
 
-      let membersExtraData = memberJobTitles
+      let membersExtraData: Array<{
+        user_id: string
+        job_title?: string | null
+        inventory_access_level?: any
+      }> | null = memberJobTitles
       if (memberJobTitlesError) {
         const { data: fallbackMembers } = await supabase
           .from('organization_members')
           .select('user_id, job_title')
           .eq('organization_id', orgId)
-        membersExtraData = fallbackMembers ?? []
+        membersExtraData = (fallbackMembers ?? []).map(m => ({ ...m, inventory_access_level: undefined }))
       }
 
       if (dashboardPermissionsError) {

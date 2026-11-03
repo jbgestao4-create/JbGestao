@@ -19,6 +19,11 @@ import {
   QuoteFormPage,
   QuotesListPage,
   RegisterPage,
+  SaleFormPage,
+  SalesHomePage,
+  PdvTerminalPage,
+  SalesInvoicesPage,
+  SalesListPage,
   SupplierFormPage,
   SuppliersHomePage,
   SuppliersListPage,
@@ -76,6 +81,66 @@ export const router = createBrowserRouter([
   },
 
   // Rotas do módulo JB Software (protegidas por autenticação e concessão de módulo)
+  {
+    path: '/orcafacil/sales/pdv',
+    element: (
+      <ProtectedRoute hideLayout>
+        <RequireDashboardModule moduleCode="MOD-01">
+          <RequireModule moduleCode="orcafacil">
+            <PdvTerminalPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/sales',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-01">
+          <RequireModule moduleCode="orcafacil">
+            <SalesHomePage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/sales/new',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-01">
+          <RequireModule moduleCode="orcafacil">
+            <SaleFormPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/sales/search',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-01">
+          <RequireModule moduleCode="orcafacil">
+            <SalesListPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/sales/invoices',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-01">
+          <RequireModule moduleCode="orcafacil">
+            <SalesInvoicesPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
   {
     path: '/orcafacil/suppliers',
     element: (
