@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { authService } from '../services/auth.service'
 import { Button } from '@shared/components/ui/Button'
@@ -9,6 +9,11 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.classList.remove('dark')
+    document.documentElement.removeAttribute('data-theme')
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

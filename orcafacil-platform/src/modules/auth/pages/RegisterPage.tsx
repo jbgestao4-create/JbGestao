@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { Button } from '@shared/components/ui/Button'
@@ -15,6 +15,11 @@ export function RegisterPage() {
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.classList.remove('dark')
+    document.documentElement.removeAttribute('data-theme')
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

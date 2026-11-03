@@ -20,7 +20,6 @@ import {
   Loader2,
   Package,
   Percent,
-  Sparkles,
   Upload,
   X,
 } from 'lucide-react'
@@ -31,27 +30,6 @@ interface ImportInvoiceModalProps {
   onClose: () => void
   onSuccess?: () => void
 }
-
-const SAMPLE_INVOICES = [
-  {
-    name: 'Nota 1: LT Comércio T-Shirt',
-    desc: 'Camisetas variadas (13 itens)',
-    url: '/samples/nota_fiscal_tshirt.pdf',
-    fileName: 'nota_fiscal_tshirt.pdf',
-  },
-  {
-    name: 'Nota 2: KaBuM! Eletrônicos',
-    desc: 'Water Cooler Rise Mode Frost 360mm',
-    url: '/samples/nota_fiscal_kabum.pdf',
-    fileName: 'nota_fiscal_kabum.pdf',
-  },
-  {
-    name: 'Nota 3: Pichau Informática',
-    desc: 'Cadeira Gamer TGT Heron TX',
-    url: '/samples/nota_fiscal_pichau.pdf',
-    fileName: 'nota_fiscal_pichau.pdf',
-  },
-]
 
 export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceModalProps) {
   const { currentOrganization } = useOrganization()
@@ -108,20 +86,6 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
       )
     } finally {
       setIsParsing(false)
-    }
-  }
-
-  const handleLoadSample = async (sample: (typeof SAMPLE_INVOICES)[0]) => {
-    try {
-      setIsParsing(true)
-      setParseError(null)
-      const res = await fetch(sample.url)
-      const blob = await res.blob()
-      const file = new File([blob], sample.fileName, { type: 'application/pdf' })
-      await handleProcessFile(file)
-    } catch (err) {
-      setIsParsing(false)
-      setParseError('Erro ao carregar a nota de exemplo.')
     }
   }
 
@@ -340,31 +304,6 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
                   </div>
                 )}
               </label>
-
-              {/* Notas fiscais de exemplo */}
-              <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="h-4 w-4 text-blue-600" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-blue-900">
-                    Notas fiscais de teste disponíveis:
-                  </h3>
-                </div>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                  {SAMPLE_INVOICES.map((sample, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      disabled={isParsing}
-                      onClick={() => void handleLoadSample(sample)}
-                      className="flex flex-col text-left rounded-xl border border-blue-200 bg-white p-3 hover:border-blue-400 hover:shadow-sm transition disabled:opacity-50"
-                    >
-                      <span className="text-xs font-bold text-gray-900 truncate">{sample.name}</span>
-                      <span className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">{sample.desc}</span>
-                      <span className="mt-2 text-[10px] font-semibold text-blue-600">Carregar para teste →</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           ) : (
             /* ESTADO 3: PRÉ-VISUALIZAÇÃO DOS DADOS LIDOS E CONFIGURAÇÃO */

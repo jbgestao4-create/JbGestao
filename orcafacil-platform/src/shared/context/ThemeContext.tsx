@@ -7,6 +7,7 @@ interface ThemeContextType {
   isDark: boolean
   toggleTheme: () => void
   setTheme: (theme: Theme) => void
+  setInsideSystem: (inside: boolean) => void
 }
 
 const THEME_STORAGE_KEY = 'jb_theme'
@@ -18,47 +19,55 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem(THEME_STORAGE_KEY)
       if (stored === 'dark' || stored === 'light') return stored
-      // Preferência do sistema do usuário
-      if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        return 'dark'
-      }
     } catch {
       // Fallback
     }
     return 'light'
   })
 
+  const [isInsideSystem, setIsInsideSystem] = useState(false)
+
   useEffect(() => {
     const root = document.documentElement
-    if (theme === 'dark') {
+    // O modo escuro só se aplica quando o usuário está dentro da área autenticada do sistema
+    if (isInsideSystem && theme === 'dark') {
       root.classList.add('dark')
       root.setAttribute('data-theme', 'dark')
     } else {
       root.classList.remove('dark')
       root.removeAttribute('data-theme')
     }
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme)
-    } catch {
-      // ignore
-    }
-  }, [theme])
+  }, [theme, isInsideSystem])
 
   const toggleTheme = () => {
-    setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'))
+    setThemeState((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light'
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next)
+      } catch {
+        // ignore
+      }
+      return next
+    })
   }
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme)
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, newTheme)
+    } catch {
+      // ignore
+    }
   }
 
   return (
     <ThemeContext.Provider
       value={{
         theme,
-        isDark: theme === 'dark',
+        isDark: isInsideSystem && theme === 'dark',
         toggleTheme,
         setTheme,
+        setInsideSystem: setIsInsideSystem,
       }}
     >
       {children}
