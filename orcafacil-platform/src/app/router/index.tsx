@@ -173,6 +173,18 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/orcafacil/inventory/movements',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-02">
+          <RequireModule moduleCode="orcafacil">
+            <InventoryMovementsPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: '/orcafacil/inventory/:inventoryItemId/movements',
     element: (
       <ProtectedRoute>

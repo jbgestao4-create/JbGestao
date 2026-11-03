@@ -100,7 +100,8 @@ Produtos da organização, com unidade de estoque configurável, identificação
 - `name` (TEXT)
 - `unit` (TEXT, por exemplo: metro, kg ou litro)
 - `quantity_on_hand`, `minimum_quantity`, `unit_price` (NUMERIC(12, 4))
-- `sku` e `barcode` (identificadores únicos por organização)
+- `sku` (código interno numérico, sequencial por organização e gerado pelo banco) e `barcode` (identificadores únicos por organização)
+- Os códigos internos de produtos já existentes são preservados; a numeração começa em `1` por organização (ou continua após o maior código numérico existente) e não reutiliza códigos removidos.
 - Categoria, marca/modelo, custo/preços, local de armazenagem, campos fiscais e atributos em JSONB.
 - `is_active`, `can_sell` e `can_purchase` controlam a disponibilidade do produto.
 - Produtos com histórico são desativados em vez de excluídos.

@@ -9,6 +9,8 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { supabase } from '@app/config/supabase'
 import type { DashboardModuleCode, ModuleCode } from '@shared/types/database'
+import type { InventoryAccessLevel } from '@shared/types/common'
+import { getStoredInventoryLevels } from '@modules/organizations/services/organization.service'
 import { logger } from '@shared/lib/logger'
 import { DASHBOARD_MODULES } from '../services/module-access.service'
 
@@ -17,6 +19,11 @@ interface ModuleAccessContextType {
   grantedModules: GrantedModule[]
   memberAllowedModules: ModuleCode[]
   memberAllowedDashboardModules: DashboardModuleCode[]
+  inventoryAccessLevel: InventoryAccessLevel
+  canCreateInventoryProduct: boolean
+  canEditInventoryProduct: boolean
+  canDeleteInventoryProduct: boolean
+  canMoveInventory: boolean
   isLoading: boolean
   canAccess: (moduleCode: ModuleCode) => boolean
   canAccessDashboardModule: (moduleCode: DashboardModuleCode) => boolean
@@ -34,6 +41,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
   const [memberAllowedDashboardModules, setMemberAllowedDashboardModules] = useState<
     DashboardModuleCode[]
   >([])
+  const [inventoryAccessLevel, setInventoryAccessLevel] = useState<InventoryAccessLevel>(3)
   const [isLoading, setIsLoading] = useState(true)
 
   const loadAccess = async () => {
@@ -65,7 +73,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
         if (memberModulesError) {
           logger.error('Erro ao carregar permissões de módulos do membro', memberModulesError)
           setMemberAllowedModules([])
-        } else if (memberPerms) {
+        } else {
           setMemberAllowedModules(memberPerms.map((p) => p.module_code as ModuleCode))
         }
 
@@ -84,20 +92,56 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
             },
           )
           setMemberAllowedDashboardModules(DASHBOARD_MODULES.map((module) => module.code))
-        } else if (dashboardPerms) {
-          setMemberAllowedDashboardModules(dashboardPerms.map((p) => p.module_code))
         } else {
-          setMemberAllowedDashboardModules([])
+          setMemberAllowedDashboardModules(
+            dashboardPerms.map((p) => p.module_code as DashboardModuleCode),
+          )
         }
+
+        // 4. Carrega nível de acesso específico ao estoque
+        let userInvLevel: InventoryAccessLevel = 3
+        try {
+          const response = await supabase
+            .from('organization_members')
+            .select('inventory_access_level' as never)
+            .eq('organization_id', currentOrganization.id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+          const memberRecord = response.data as { inventory_access_level?: number | null } | null
+
+          if (
+            memberRecord?.inventory_access_level === 1 ||
+            memberRecord?.inventory_access_level === 2 ||
+            memberRecord?.inventory_access_level === 3
+          ) {
+            userInvLevel = memberRecord.inventory_access_level
+          } else {
+            const stored: Record<string, InventoryAccessLevel | undefined> = getStoredInventoryLevels(currentOrganization.id)
+            const fallback = stored[user.id]
+            if (fallback) {
+              userInvLevel = fallback
+            }
+          }
+        } catch {
+          const stored: Record<string, InventoryAccessLevel | undefined> = getStoredInventoryLevels(currentOrganization.id)
+          const fallback = stored[user.id]
+          if (fallback) {
+            userInvLevel = fallback
+          }
+        }
+        setInventoryAccessLevel(userInvLevel)
       } else {
-        // Proprietários e administradores mantêm acesso total aos cartões.
+        // Proprietários e administradores mantêm acesso total aos cartões e nível 3.
         setMemberAllowedModules([])
         setMemberAllowedDashboardModules([])
+        setInventoryAccessLevel(3)
       }
     } else {
       setGrantedModules([])
       setMemberAllowedModules([])
       setMemberAllowedDashboardModules([])
+      setInventoryAccessLevel(3)
     }
 
     setIsLoading(false)
@@ -145,6 +189,21 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
     return userRole === 'member' && memberAllowedDashboardModules.includes(moduleCode)
   }
 
+  const effectiveInventoryLevel: InventoryAccessLevel =
+    userRole === 'owner' || userRole === 'admin' ? 3 : inventoryAccessLevel
+
+  const canCreateInventoryProduct =
+    canAccessDashboardModule('MOD-02') && effectiveInventoryLevel >= 2
+
+  const canEditInventoryProduct =
+    canAccessDashboardModule('MOD-02') && effectiveInventoryLevel === 3
+
+  const canDeleteInventoryProduct =
+    canAccessDashboardModule('MOD-02') && effectiveInventoryLevel === 3
+
+  const canMoveInventory =
+    canAccessDashboardModule('MOD-02') && effectiveInventoryLevel === 3
+
   return (
     <ModuleAccessContext.Provider
       value={{
@@ -152,6 +211,11 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
         grantedModules,
         memberAllowedModules,
         memberAllowedDashboardModules,
+        inventoryAccessLevel: effectiveInventoryLevel,
+        canCreateInventoryProduct,
+        canEditInventoryProduct,
+        canDeleteInventoryProduct,
+        canMoveInventory,
         isLoading,
         canAccess,
         canAccessDashboardModule,

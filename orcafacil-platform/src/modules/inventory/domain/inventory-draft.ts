@@ -40,6 +40,7 @@ const stringFields = [
   'notes',
   'purchaseUnit',
   'purchaseUnitFactor',
+  'imagePath',
 ] as const satisfies readonly (keyof InventoryItemParams)[]
 
 const booleanFields = [

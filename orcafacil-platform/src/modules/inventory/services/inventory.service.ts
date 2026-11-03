@@ -70,6 +70,8 @@ interface InventoryItemRow {
   purchase_unit: string | null
   purchase_unit_factor: string
   image_path: string | null
+  deleted_at?: string | null
+  delete_reason?: string | null
   created_at: string
   updated_at: string
   suppliers?: { name: string } | { name: string }[] | null
@@ -121,6 +123,7 @@ export interface InventoryItemParams {
   purchaseUnit: string
   purchaseUnitFactor: string
   attributes: Record<string, string>
+  imagePath: string
 }
 
 function mapInventoryItem(row: InventoryItemRow): InventoryItem {
@@ -193,6 +196,8 @@ function mapInventoryItem(row: InventoryItemRow): InventoryItem {
     purchaseUnit: row.purchase_unit,
     purchaseUnitFactor: row.purchase_unit_factor,
     imagePath: row.image_path,
+    deletedAt: row.deleted_at ?? null,
+    deleteReason: row.delete_reason ?? null,
     suppliers: itemSuppliers,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -226,6 +231,29 @@ function getInventoryError(
   return `Não foi possível ${operation} o material. Verifique sua conexão e tente novamente.`
 }
 
+const DELETED_ITEMS_KEY_PREFIX = 'orcafacil_deleted_inventory_items_'
+
+function getLocalDeletedItemIds(orgId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(`${DELETED_ITEMS_KEY_PREFIX}${orgId}`)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw) as string[]
+    return new Set(Array.isArray(parsed) ? parsed : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveLocalDeletedItemId(orgId: string, itemId: string) {
+  try {
+    const set = getLocalDeletedItemIds(orgId)
+    set.add(itemId)
+    localStorage.setItem(`${DELETED_ITEMS_KEY_PREFIX}${orgId}`, JSON.stringify([...set]))
+  } catch {
+    // ignorar falha ao gravar em storage
+  }
+}
+
 export const inventoryService = {
   async list(organizationId: UUID): Promise<ServiceResult<InventoryItem[]>> {
     try {
@@ -243,7 +271,12 @@ export const inventoryService = {
         return { success: false, error: getInventoryError(error, 'consultar') }
       }
 
-      return { success: true, data: data.map(mapInventoryItem) }
+      const localDeleted = getLocalDeletedItemIds(organizationId)
+      const activeItems = data
+        .filter((row) => !row.deleted_at && !localDeleted.has(row.id))
+        .map(mapInventoryItem)
+
+      return { success: true, data: activeItems }
     } catch (error) {
       logger.error('Exceção ao listar materiais do estoque', error)
       return { success: false, error: 'Erro inesperado ao consultar o estoque.' }
@@ -277,11 +310,64 @@ export const inventoryService = {
     }
   },
 
+  async getNextCode(organizationId: UUID): Promise<ServiceResult<string>> {
+    try {
+      try {
+        const response = await supabase
+          .from('inventory_item_code_counters' as never)
+          .select('last_code' as never)
+          .eq('organization_id', organizationId)
+          .maybeSingle()
+
+        const counter = response.data as { last_code?: number | null } | null
+        if (typeof counter?.last_code === 'number') {
+          const next = counter.last_code + 1
+          return { success: true, data: String(next) }
+        }
+      } catch {
+        // Fallback para consulta direta aos itens existentes
+      }
+
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('sku')
+        .eq('organization_id', organizationId)
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        .returns<{ sku: string | null }[]>()
+
+      if (error) {
+        return { success: true, data: '1' }
+      }
+
+      let max = 0
+      for (const row of data) {
+        if (row.sku) {
+          const cleaned = row.sku.replace(/^\D+/, '')
+          const num = parseInt(cleaned || row.sku, 10)
+          if (!isNaN(num) && num > max) {
+            max = num
+          }
+        }
+      }
+
+      return { success: true, data: String(max + 1) }
+    } catch (error) {
+      logger.error('Erro ao calcular próximo código do produto', error)
+      return { success: true, data: '1' }
+    }
+  },
+
   async create(
     organizationId: UUID,
     params: InventoryItemParams,
   ): Promise<ServiceResult<InventoryItem>> {
     try {
+      let assignedSku = params.sku.trim()
+      if (!assignedSku) {
+        const nextCodeResult = await this.getNextCode(organizationId)
+        assignedSku = nextCodeResult.success ? nextCodeResult.data : '1'
+      }
+
       const { data, error } = await supabase
         .from('inventory_items')
         .insert({
@@ -292,7 +378,7 @@ export const inventoryService = {
           quantity_on_hand: params.quantityOnHand.trim() || '0',
           minimum_quantity: params.minimumQuantity.trim() || '0',
           unit_price: params.unitPrice.trim() || '0',
-          sku: params.sku.trim(),
+          sku: assignedSku,
           barcode: params.barcode.trim() || null,
           description: params.description.trim() || null,
           category: params.category.trim() || null,
@@ -329,6 +415,7 @@ export const inventoryService = {
           purchase_unit: params.purchaseUnit.trim() || null,
           purchase_unit_factor: params.purchaseUnitFactor.trim() || '1',
           attributes: params.attributes,
+          image_path: params.imagePath.trim() || null,
         })
         .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
         // The shared Supabase client is untyped; this keeps the response typed locally.
@@ -405,6 +492,7 @@ export const inventoryService = {
           purchase_unit: params.purchaseUnit.trim() || null,
           purchase_unit_factor: params.purchaseUnitFactor.trim() || '1',
           attributes: params.attributes,
+          image_path: params.imagePath.trim() || null,
         })
         .eq('organization_id', organizationId)
         .eq('id', inventoryItemId)
@@ -442,6 +530,174 @@ export const inventoryService = {
       logger.error('Exceção ao atualizar material do estoque', error)
       return { success: false, error: 'Erro inesperado ao atualizar material.' }
     }
+  },
+
+  async setActive(
+    organizationId: UUID,
+    inventoryItemId: UUID,
+    isActive: boolean,
+  ): Promise<ServiceResult<void>> {
+    try {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .update({ is_active: isActive })
+        .eq('organization_id', organizationId)
+        .eq('id', inventoryItemId)
+        .select('id')
+        // The shared Supabase client is untyped; this keeps the response typed locally.
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        .returns<{ id: string }[]>()
+        .maybeSingle()
+
+      if (error) {
+        logger.error(`Erro ao ${isActive ? 'reativar' : 'desativar'} material do estoque`, error)
+        return { success: false, error: getInventoryError(error, isActive ? 'reativar' : 'desativar') }
+      }
+      if (!data) {
+        return {
+          success: false,
+          error: 'Material não encontrado ou usuário sem acesso ao estoque.',
+        }
+      }
+      return { success: true, data: undefined }
+    } catch (error) {
+      logger.error(`Exceção ao ${isActive ? 'reativar' : 'desativar'} material do estoque`, error)
+      return { success: false, error: `Erro inesperado ao ${isActive ? 'reativar' : 'desativar'} material.` }
+    }
+  },
+
+  async delete(
+    organizationId: UUID,
+    inventoryItemId: UUID,
+    reason: string,
+  ): Promise<ServiceResult<void>> {
+    const trimmedReason = reason.trim()
+    if (!trimmedReason) {
+      return { success: false, error: 'O motivo da exclusão é obrigatório.' }
+    }
+
+    try {
+      // 1. Tenta chamar RPC se existir
+      try {
+        const { error: rpcError } = await supabase.rpc('soft_delete_inventory_item', {
+          p_organization_id: organizationId,
+          p_inventory_item_id: inventoryItemId,
+          p_reason: trimmedReason,
+        })
+        if (!rpcError) {
+          saveLocalDeletedItemId(organizationId, inventoryItemId)
+          return { success: true, data: undefined }
+        }
+      } catch {
+        // Fallback para update direto
+      }
+
+      // 2. Tenta update com deleted_at
+      const { error: updateError } = await supabase
+        .from('inventory_items')
+        .update({
+          is_active: false,
+          deleted_at: new Date().toISOString(),
+          delete_reason: trimmedReason,
+          notes: `[EXCLUÍDO]: ${trimmedReason}`,
+        } as never)
+        .eq('organization_id', organizationId)
+        .eq('id', inventoryItemId)
+
+      if (!updateError) {
+        saveLocalDeletedItemId(organizationId, inventoryItemId)
+        return { success: true, data: undefined }
+      }
+
+      // 3. Fallback se coluna deleted_at ainda não existir
+      const { error: fallbackError } = await supabase
+        .from('inventory_items')
+        .update({
+          is_active: false,
+          notes: `[EXCLUÍDO]: ${trimmedReason}`,
+        })
+        .eq('organization_id', organizationId)
+        .eq('id', inventoryItemId)
+
+      if (fallbackError) {
+        logger.error('Erro ao excluir produto do estoque', fallbackError)
+        return { success: false, error: 'Não foi possível excluir o produto do estoque.' }
+      }
+
+      saveLocalDeletedItemId(organizationId, inventoryItemId)
+      return { success: true, data: undefined }
+    } catch (error) {
+      logger.error('Exceção ao excluir produto do estoque', error)
+      return { success: false, error: 'Erro inesperado ao excluir o produto.' }
+    }
+  },
+
+  async updatePrices(
+    organizationId: UUID,
+    inventoryItemId: UUID,
+    prices: { purchasePrice?: string; salePrice?: string },
+  ): Promise<ServiceResult<void>> {
+    try {
+      const updates: {
+        purchase_price?: string
+        last_purchase_price?: string
+        unit_price?: string
+        updated_at: string
+      } = {
+        updated_at: new Date().toISOString(),
+      }
+
+      if (prices.purchasePrice !== undefined && prices.purchasePrice.trim() !== '') {
+        const pNum = Number(prices.purchasePrice)
+        if (!Number.isFinite(pNum) || pNum < 0) {
+          return { success: false, error: 'Informe um valor de custo válido.' }
+        }
+        updates.purchase_price = pNum.toFixed(2)
+        updates.last_purchase_price = pNum.toFixed(2)
+      }
+
+      if (prices.salePrice !== undefined && prices.salePrice.trim() !== '') {
+        const sNum = Number(prices.salePrice)
+        if (!Number.isFinite(sNum) || sNum < 0) {
+          return { success: false, error: 'Informe um valor de venda válido.' }
+        }
+        updates.unit_price = sNum.toFixed(2)
+      }
+
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .update(updates)
+        .eq('organization_id', organizationId)
+        .eq('id', inventoryItemId)
+        .select('id')
+        // The shared Supabase client is untyped; this keeps the response typed locally.
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        .returns<{ id: string }[]>()
+        .maybeSingle()
+
+      if (error) {
+        logger.error('Erro ao atualizar preços do material', error)
+        return { success: false, error: getInventoryError(error, 'atualizar preços') }
+      }
+      if (!data) {
+        return {
+          success: false,
+          error: 'Material não encontrado ou usuário sem acesso ao estoque.',
+        }
+      }
+      return { success: true, data: undefined }
+    } catch (error) {
+      logger.error('Exceção ao atualizar preços do material', error)
+      return { success: false, error: 'Erro inesperado ao atualizar os preços.' }
+    }
+  },
+
+  async updatePurchasePrice(
+    organizationId: UUID,
+    inventoryItemId: UUID,
+    purchasePrice: string,
+  ): Promise<ServiceResult<void>> {
+    return this.updatePrices(organizationId, inventoryItemId, { purchasePrice })
   },
 
   async deactivate(organizationId: UUID, inventoryItemId: UUID): Promise<ServiceResult<void>> {

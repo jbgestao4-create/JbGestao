@@ -4,6 +4,7 @@ import { DASHBOARD_MODULES } from '@modules/access-control/services/module-acces
 import type {
   ModuleCode,
   DashboardModuleCode,
+  InventoryAccessLevel,
   Organization,
   OrganizationMemberDetail,
   OrganizationMembership,
@@ -11,6 +12,31 @@ import type {
   ServiceResult,
   UUID,
 } from '@shared/types/common'
+
+const INVENTORY_LEVELS_STORAGE_KEY = 'orcafacil_inventory_access_levels'
+
+export function getStoredInventoryLevels(orgId: string): Record<string, InventoryAccessLevel> {
+  try {
+    const raw = localStorage.getItem(`${INVENTORY_LEVELS_STORAGE_KEY}_${orgId}`)
+    return raw ? (JSON.parse(raw) as Record<string, InventoryAccessLevel>) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveStoredInventoryLevel(
+  orgId: string,
+  userId: string,
+  level: InventoryAccessLevel,
+): void {
+  try {
+    const current = getStoredInventoryLevels(orgId)
+    current[userId] = level
+    localStorage.setItem(`${INVENTORY_LEVELS_STORAGE_KEY}_${orgId}`, JSON.stringify(current))
+  } catch {
+    // Silently ignore storage errors
+  }
+}
 
 export interface AddMemberParams {
   organizationId: UUID
@@ -20,6 +46,7 @@ export interface AddMemberParams {
   password?: string
   role: OrganizationRole
   dashboardModules: DashboardModuleCode[]
+  inventoryAccessLevel?: InventoryAccessLevel
 }
 
 export const organizationService = {
@@ -157,12 +184,16 @@ export const organizationService = {
 
       const { data: memberJobTitles, error: memberJobTitlesError } = await supabase
         .from('organization_members')
-        .select('user_id, job_title')
+        .select('user_id, job_title, inventory_access_level')
         .eq('organization_id', orgId)
 
+      let membersExtraData = memberJobTitles
       if (memberJobTitlesError) {
-        logger.error('Erro ao carregar cargos dos funcionários', memberJobTitlesError)
-        return { success: false, error: 'Não foi possível carregar os cargos dos funcionários.' }
+        const { data: fallbackMembers } = await supabase
+          .from('organization_members')
+          .select('user_id, job_title')
+          .eq('organization_id', orgId)
+        membersExtraData = fallbackMembers ?? []
       }
 
       if (dashboardPermissionsError) {
@@ -172,8 +203,18 @@ export const organizationService = {
         })
       }
 
+      const storedLevels = getStoredInventoryLevels(orgId)
+      const inventoryLevelByUserId = new Map<string, InventoryAccessLevel>(
+        (membersExtraData ?? []).map((m: any) => [
+          m.user_id,
+          ((m.inventory_access_level as InventoryAccessLevel | undefined) ||
+            storedLevels[m.user_id] ||
+            3),
+        ]),
+      )
+
       const jobTitleByUserId = new Map(
-        (memberJobTitles ?? []).map((member) => [member.user_id, member.job_title]),
+        (membersExtraData ?? []).map((member: any) => [member.user_id, member.job_title]),
       )
 
       return {
@@ -194,6 +235,8 @@ export const organizationService = {
                 : (dashboardPermissions ?? [])
                     .filter((permission) => permission.user_id === row.user_id)
                     .map((permission) => permission.module_code),
+          inventoryAccessLevel:
+            inventoryLevelByUserId.get(row.user_id) || storedLevels[row.user_id] || 3,
           createdAt: row.created_at,
         })),
       }
@@ -222,6 +265,33 @@ export const organizationService = {
       if (error) {
         logger.warn('Erro ao adicionar membro', { message: error.message })
         return { success: false, error: error.message }
+      }
+
+      if (params.inventoryAccessLevel !== undefined) {
+        const { data: memberRecord } = await supabase
+          .from('organization_members')
+          .select('user_id')
+          .eq('organization_id', params.organizationId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (memberRecord?.user_id) {
+          saveStoredInventoryLevel(
+            params.organizationId,
+            memberRecord.user_id,
+            params.inventoryAccessLevel,
+          )
+          try {
+            await supabase
+              .from('organization_members')
+              .update({ inventory_access_level: params.inventoryAccessLevel })
+              .eq('organization_id', params.organizationId)
+              .eq('user_id', memberRecord.user_id)
+          } catch {
+            // Ignora se coluna ainda não existir no DB remoto
+          }
+        }
       }
 
       return { success: true, data: undefined }
@@ -314,12 +384,13 @@ export const organizationService = {
   },
 
   /**
-   * Atualiza os módulos da página inicial permitidos para um membro operacional.
+   * Atualiza os módulos da página inicial permitidos para um membro operacional e seu nível de estoque.
    */
   async updateMemberDashboardModules(
     orgId: UUID,
     userId: UUID,
     modules: DashboardModuleCode[],
+    inventoryAccessLevel?: InventoryAccessLevel,
   ): Promise<ServiceResult<void>> {
     try {
       const { error } = await supabase.rpc('update_member_dashboard_modules', {
@@ -331,6 +402,19 @@ export const organizationService = {
       if (error) {
         logger.error('Erro ao atualizar permissões dos módulos da página inicial', error)
         return { success: false, error: error.message }
+      }
+
+      if (inventoryAccessLevel !== undefined) {
+        saveStoredInventoryLevel(orgId, userId, inventoryAccessLevel)
+        try {
+          await supabase
+            .from('organization_members')
+            .update({ inventory_access_level: inventoryAccessLevel })
+            .eq('organization_id', orgId)
+            .eq('user_id', userId)
+        } catch {
+          // Ignora se coluna ainda não existir no DB remoto
+        }
       }
 
       return { success: true, data: undefined }

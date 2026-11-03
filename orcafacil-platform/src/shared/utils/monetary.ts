@@ -7,13 +7,24 @@
  *
  * Estratégia de arredondamento: HALF_UP com 2 casas decimais.
  * Quantidades: até 4 casas decimais.
- * Valores unitários: até 4 casas decimais.
+ * Valores unitários: 2 casas decimais.
  * Subtotais e totais: 2 casas decimais.
  */
 
 const MONETARY_DECIMALS = 2
 const QUANTITY_DECIMALS = 4
-const UNIT_PRICE_DECIMALS = 4
+const UNIT_PRICE_DECIMALS = 2
+
+/**
+ * Normaliza um valor em R$ para uso em campos de formulário (sempre 2 casas decimais).
+ * Retorna string vazia para valores ausentes ou inválidos.
+ */
+export function toMoneyInput(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return ''
+  const num = typeof value === 'number' ? value : parseFloat(value)
+  if (!isFinite(num)) return ''
+  return roundHalfUp(num, MONETARY_DECIMALS).toFixed(MONETARY_DECIMALS)
+}
 
 /**
  * Arredonda um número para o número especificado de casas decimais
@@ -117,6 +128,6 @@ export function normalizeQuantity(value: string): string {
  */
 export function normalizeUnitPrice(value: string): string {
   const num = parseFloat(value)
-  if (!isFinite(num) || num < 0) return '0.0000'
+  if (!isFinite(num) || num < 0) return '0.00'
   return roundHalfUp(num, UNIT_PRICE_DECIMALS).toFixed(UNIT_PRICE_DECIMALS)
 }

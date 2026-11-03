@@ -20,11 +20,112 @@ import {
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
+  InventoryAccessLevel,
   OrganizationMemberDetail,
   Organization,
   OrganizationRole,
   ServiceResult,
 } from '@shared/types/common'
+
+function InventoryLevelSelector({
+  value,
+  onChange,
+  namePrefix,
+}: {
+  value: InventoryAccessLevel
+  onChange: (level: InventoryAccessLevel) => void
+  namePrefix: string
+}) {
+  return (
+    <div className="px-3 pb-3 pt-1 border-t border-blue-200/60 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-gray-900">
+          Qual nível de acesso ao Estoque?
+        </span>
+        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+          Nível {value}
+        </span>
+      </div>
+
+      <div className="space-y-1.5">
+        <label
+          className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition ${
+            value === 1
+              ? 'border-blue-600 bg-white ring-1 ring-blue-600 shadow-xs'
+              : 'border-gray-200 bg-white/70 hover:bg-white'
+          }`}
+        >
+          <input
+            type="radio"
+            name={`${namePrefix}-inventory-level`}
+            value={1}
+            checked={value === 1}
+            onChange={() => onChange(1)}
+            className="mt-0.5 accent-blue-600"
+          />
+          <div>
+            <span className="text-xs font-bold text-gray-900 block">
+              Nível 1 — Apenas Consulta
+            </span>
+            <span className="text-[11px] text-gray-500 block leading-tight">
+              Consultar Estoque apenas, não podendo editar nem cadastrar produtos.
+            </span>
+          </div>
+        </label>
+
+        <label
+          className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition ${
+            value === 2
+              ? 'border-blue-600 bg-white ring-1 ring-blue-600 shadow-xs'
+              : 'border-gray-200 bg-white/70 hover:bg-white'
+          }`}
+        >
+          <input
+            type="radio"
+            name={`${namePrefix}-inventory-level`}
+            value={2}
+            checked={value === 2}
+            onChange={() => onChange(2)}
+            className="mt-0.5 accent-blue-600"
+          />
+          <div>
+            <span className="text-xs font-bold text-gray-900 block">
+              Nível 2 — Consulta e Cadastro
+            </span>
+            <span className="text-[11px] text-gray-500 block leading-tight">
+              Consulta e cadastro de estoque, não podendo editar produtos existentes, apenas cadastrar novos produtos.
+            </span>
+          </div>
+        </label>
+
+        <label
+          className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition ${
+            value === 3
+              ? 'border-blue-600 bg-white ring-1 ring-blue-600 shadow-xs'
+              : 'border-gray-200 bg-white/70 hover:bg-white'
+          }`}
+        >
+          <input
+            type="radio"
+            name={`${namePrefix}-inventory-level`}
+            value={3}
+            checked={value === 3}
+            onChange={() => onChange(3)}
+            className="mt-0.5 accent-blue-600"
+          />
+          <div>
+            <span className="text-xs font-bold text-gray-900 block">
+              Nível 3 — Acesso Geral ao Estoque
+            </span>
+            <span className="text-[11px] text-gray-500 block leading-tight">
+              Acesso total ao estoque (consulta, cadastro, edição completa, desativação e movimentações).
+            </span>
+          </div>
+        </label>
+      </div>
+    </div>
+  )
+}
 
 export function OrganizationSettingsPage() {
   const { currentOrganization, userRole, organizations, setCurrentOrganization } = useOrganization()
@@ -44,12 +145,14 @@ export function OrganizationSettingsPage() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<OrganizationRole>('member')
   const [selectedDashboardModules, setSelectedDashboardModules] = useState<DashboardModuleCode[]>([])
+  const [addInventoryLevel, setAddInventoryLevel] = useState<InventoryAccessLevel>(3)
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Modal de edição de permissões de membro existente
   const [editingMember, setEditingMember] = useState<OrganizationMemberDetail | null>(null)
   const [editDashboardModules, setEditDashboardModules] = useState<DashboardModuleCode[]>([])
+  const [editInventoryLevel, setEditInventoryLevel] = useState<InventoryAccessLevel>(3)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [memberToEdit, setMemberToEdit] = useState<OrganizationMemberDetail | null>(null)
   const [editMemberName, setEditMemberName] = useState('')
@@ -139,6 +242,7 @@ export function OrganizationSettingsPage() {
     setRole('member')
     setSelectedOrganizationId(initialOrganizationId)
     setSelectedDashboardModules([])
+    setAddInventoryLevel(3)
     setFormError('')
     setIsAddModalOpen(true)
   }
@@ -184,6 +288,7 @@ export function OrganizationSettingsPage() {
       role,
       dashboardModules:
         canEditModulePermissions && role === 'member' ? selectedDashboardModules : [],
+      inventoryAccessLevel: selectedDashboardModules.includes('MOD-02') ? addInventoryLevel : 3,
     })
 
     if (res.success) {
@@ -204,6 +309,7 @@ export function OrganizationSettingsPage() {
     if (!canEditOperationalMemberModules || member.role !== 'member') return
     setEditingMember(member)
     setEditDashboardModules(member.dashboardModules ?? [])
+    setEditInventoryLevel(member.inventoryAccessLevel ?? 3)
   }
 
   const handleSaveEditModules = async () => {
@@ -221,6 +327,7 @@ export function OrganizationSettingsPage() {
       currentOrganization.id,
       editingMember.userId,
       editDashboardModules,
+      editDashboardModules.includes('MOD-02') ? editInventoryLevel : 3,
     )
 
     if (res.success) {
@@ -422,6 +529,11 @@ export function OrganizationSettingsPage() {
                                 <span>
                                   {DASHBOARD_MODULES.find((module) => module.code === mCode)?.name}
                                 </span>
+                                {mCode === 'MOD-02' && (
+                                  <span className="rounded bg-blue-200/90 px-1 py-0.2 text-[9px] font-bold text-blue-900">
+                                    Nível {member.inventoryAccessLevel ?? 3}
+                                  </span>
+                                )}
                               </span>
                             ))
                           ) : (
@@ -519,6 +631,7 @@ export function OrganizationSettingsPage() {
                   onChange={(val) => {
                     setSelectedOrganizationId(val as string)
                     setSelectedDashboardModules([])
+                    setAddInventoryLevel(3)
                     setFormError('')
                   }}
                   disabled={
@@ -645,35 +758,45 @@ export function OrganizationSettingsPage() {
                       const isSelected = selectedDashboardModules.includes(mod.code)
 
                       return (
-                        <label
+                        <div
                           key={mod.code}
-                          className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                          className={`rounded-xl border transition-all ${
                             isSelected
-                              ? 'border-blue-500 bg-blue-50/40'
+                              ? 'border-blue-500 bg-blue-50/40 shadow-xs'
                               : 'border-gray-200 hover:bg-gray-50'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
-                              {mod.code}
+                          <label className="flex items-center justify-between p-3 cursor-pointer">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
+                                {mod.code}
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-gray-900 block">
+                                  {mod.name}
+                                </span>
+                                <span className="text-[11px] text-gray-500 block leading-tight">
+                                  {mod.description}
+                                </span>
+                              </div>
                             </div>
-                            <div>
-                              <span className="text-xs font-bold text-gray-900 block">
-                                {mod.name}
-                              </span>
-                              <span className="text-[11px] text-gray-500 block leading-tight">
-                                {mod.description}
-                              </span>
-                            </div>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleDashboardModule(mod.code)}
-                            aria-label={`Acesso ao módulo ${mod.name}`}
-                            className="h-5 w-5 shrink-0 accent-blue-600"
-                          />
-                        </label>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleDashboardModule(mod.code)}
+                              aria-label={`Acesso ao módulo ${mod.name}`}
+                              className="h-5 w-5 shrink-0 accent-blue-600"
+                            />
+                          </label>
+
+                          {mod.code === 'MOD-02' && isSelected && (
+                            <InventoryLevelSelector
+                              value={addInventoryLevel}
+                              onChange={setAddInventoryLevel}
+                              namePrefix="add-employee"
+                            />
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -802,33 +925,43 @@ export function OrganizationSettingsPage() {
                 const isSelected = editDashboardModules.includes(mod.code)
 
                 return (
-                  <label
+                  <div
                     key={mod.code}
-                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                    className={`rounded-xl border transition-all ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-50/40'
+                        ? 'border-blue-500 bg-blue-50/40 shadow-xs'
                         : 'border-gray-200 hover:bg-gray-50'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
-                        {mod.code}
+                    <label className="flex items-center justify-between p-3 cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
+                          {mod.code}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-gray-900 block">{mod.name}</span>
+                          <span className="text-[11px] text-gray-500 block leading-tight">
+                            {mod.description}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-xs font-bold text-gray-900 block">{mod.name}</span>
-                        <span className="text-[11px] text-gray-500 block leading-tight">
-                          {mod.description}
-                        </span>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleToggleEditModule(mod.code)}
-                      aria-label={`Acesso ao módulo ${mod.name}`}
-                      className="h-5 w-5 shrink-0 accent-blue-600"
-                    />
-                  </label>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleEditModule(mod.code)}
+                        aria-label={`Acesso ao módulo ${mod.name}`}
+                        className="h-5 w-5 shrink-0 accent-blue-600"
+                      />
+                    </label>
+
+                    {mod.code === 'MOD-02' && isSelected && (
+                      <InventoryLevelSelector
+                        value={editInventoryLevel}
+                        onChange={setEditInventoryLevel}
+                        namePrefix="edit-employee"
+                      />
+                    )}
+                  </div>
                 )
               })}
             </div>

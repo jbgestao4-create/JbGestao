@@ -259,6 +259,9 @@ export function ListBox({
                   left: coords.left,
                   width: coords.width,
                   zIndex: 9999,
+                  colorScheme: 'light',
+                  backgroundColor: '#fff',
+                  color: '#111827',
                 }}
                 className="max-h-60 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl animate-in fade-in-50 duration-100"
               >

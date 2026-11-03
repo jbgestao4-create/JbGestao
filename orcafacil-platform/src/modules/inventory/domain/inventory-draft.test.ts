@@ -52,6 +52,7 @@ const form: InventoryItemParams = {
   purchaseUnit: '',
   purchaseUnitFactor: '1',
   attributes: { color: 'Azul' },
+  imagePath: '',
 }
 
 describe('inventory draft storage', () => {

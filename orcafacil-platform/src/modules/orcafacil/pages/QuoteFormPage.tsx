@@ -15,6 +15,7 @@ import {
   calculateSubtotal,
   calculateTotal,
   formatCurrency,
+  toMoneyInput,
 } from '@shared/utils/monetary'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
@@ -82,7 +83,7 @@ function ProductCodeSearch({
       <input
         ref={inputRef}
         type="text"
-        placeholder="Cód / SKU"
+        placeholder="Código interno"
         value={isFocused ? query : value}
         onFocus={() => {
           setIsFocused(true)
@@ -144,7 +145,9 @@ function ProductCodeSearch({
                   }}
                   className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-blue-50 focus:bg-blue-50"
                 >
-                  <span className="font-mono font-semibold text-blue-700">{item.sku}</span>
+                  <span className="font-mono font-semibold text-blue-700">
+                    Código: #{item.sku}
+                  </span>
                   <span className="truncate text-gray-700">{item.name}</span>
                 </button>
               ))
@@ -286,7 +289,7 @@ export function QuoteFormPage() {
           itemType: item.inventoryItemId ? 'material' : 'service',
           description: item.description,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          unitPrice: toMoneyInput(item.unitPrice),
           inventoryItemId: item.inventoryItemId ?? '',
           unit: item.unit ?? '',
         })),
@@ -318,7 +321,7 @@ export function QuoteFormPage() {
         id: Date.now().toString(),
         itemType,
         description: '',
-        quantity: '1.0000',
+        quantity: '1',
         unitPrice: '0.00',
         inventoryItemId: '',
         unit: '',
@@ -344,7 +347,7 @@ export function QuoteFormPage() {
               inventoryItemId,
               description: inventoryItem?.name ?? item.description,
               unit: inventoryItem?.unit ?? '',
-              unitPrice: inventoryItem?.unitPrice ?? item.unitPrice,
+              unitPrice: toMoneyInput(inventoryItem?.unitPrice ?? item.unitPrice),
             }
           : item,
       ),
@@ -409,10 +412,13 @@ export function QuoteFormPage() {
 
     const invalidItem = items.find(
       (i) =>
-        !i.description.trim() || !Number.isFinite(Number(i.quantity)) || Number(i.quantity) <= 0,
+        !i.description.trim() ||
+        !Number.isFinite(Number(i.quantity)) ||
+        !Number.isInteger(Number(i.quantity)) ||
+        Number(i.quantity) <= 0,
     )
     if (invalidItem) {
-      setError('Todos os itens devem possuir descrição e quantidade válida maior que zero.')
+      setError('Todos os itens devem possuir descrição e quantidade inteira maior que zero.')
       return
     }
     if (items.some((item) => item.itemType === 'material' && !item.inventoryItemId)) {
@@ -822,7 +828,7 @@ export function QuoteFormPage() {
                                         .map((inventoryItem) => ({
                                           value: inventoryItem.id,
                                           label: inventoryItem.name,
-                                          description: `${inventoryItem.sku} · Estoque: ${Number(inventoryItem.quantityOnHand).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${inventoryItem.unit}`,
+                                          description: `Cód. #${inventoryItem.sku} · Estoque: ${Number(inventoryItem.quantityOnHand).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${inventoryItem.unit}`,
                                         }))}
                                     />
                                     {item.inventoryItemId && (
@@ -854,8 +860,8 @@ export function QuoteFormPage() {
                                 <div className="flex flex-col items-end">
                                   <input
                                     type="number"
-                                    step="0.0001"
-                                    min="0.0001"
+                                    step="1"
+                                    min="1"
                                     className="h-10 w-full rounded-lg border border-gray-300 px-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     value={item.quantity}
                                     onChange={(e) => {
@@ -874,7 +880,7 @@ export function QuoteFormPage() {
                                 <div className="flex flex-col items-end">
                                   <input
                                     type="number"
-                                    step="0.0001"
+                                    step="0.01"
                                     min="0"
                                     className={`h-10 w-full rounded-lg border px-2 text-right text-sm focus:outline-none focus:ring-2 ${
                                       minimumPriceViolation
@@ -927,6 +933,7 @@ export function QuoteFormPage() {
                   <div className="w-full sm:w-64">
                     <Input
                       label="Desconto em R$"
+                      currency
                       type="number"
                       step="0.01"
                       min="0"

@@ -43,6 +43,8 @@ export interface OrganizationMembership {
   role: OrganizationRole
 }
 
+export type InventoryAccessLevel = 1 | 2 | 3
+
 /** Detalhes completos do membro da organização para gestão de equipe */
 export interface OrganizationMemberDetail {
   userId: UUID
@@ -53,6 +55,7 @@ export interface OrganizationMemberDetail {
   jobTitle: string | null
   modules: ModuleCode[]
   dashboardModules: DashboardModuleCode[]
+  inventoryAccessLevel?: InventoryAccessLevel
   createdAt: string
 }
 
@@ -122,6 +125,8 @@ export interface InventoryItem {
   purchaseUnit: string | null
   purchaseUnitFactor: string
   imagePath: string | null
+  deletedAt?: string | null
+  deleteReason?: string | null
   suppliers: InventoryItemSupplier[]
   createdAt: string
   updatedAt: string

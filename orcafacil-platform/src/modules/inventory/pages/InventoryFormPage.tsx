@@ -2,18 +2,37 @@ import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { supplierService } from '@modules/suppliers/services/supplier.service'
 import { Button } from '@shared/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
+import { Switch } from '@shared/components/ui/Switch'
+import { ImagePreviewModal } from '@shared/components/ui/ImagePreviewModal'
 import type { InventoryItem, Supplier } from '@shared/types/common'
 import { logger } from '@shared/lib/logger'
-import { ArrowLeft, Barcode, Package, Plus, ShoppingBag, Tag, Warehouse } from 'lucide-react'
+import { toMoneyInput } from '@shared/utils/monetary'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Barcode,
+  CheckCircle2,
+  Image as ImageIcon,
+  Package,
+  Plus,
+  ShoppingBag,
+  ShoppingCart,
+  Tag,
+  Trash2,
+  Upload,
+  Warehouse,
+  ZoomIn,
+} from 'lucide-react'
 import { inventoryService, type InventoryItemParams } from '../services/inventory.service'
 import { warehouseService, type Warehouse as WarehouseOption } from '../services/warehouse.service'
-import { generateSku, getSalesIndicators, isValidBarcode } from '../domain/product-identification'
+import { getSalesIndicators, isValidBarcode } from '../domain/product-identification'
 import { calculateMarginPercent, calculateSalePrice } from '../domain/pricing'
 import {
   clearInventoryDraft,
@@ -22,6 +41,55 @@ import {
   readInventoryDraft,
   writeInventoryDraft,
 } from '../domain/inventory-draft'
+
+function compressImage(
+  file: File,
+  maxWidth = 800,
+  maxHeight = 800,
+  quality = 0.85,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = (event) => {
+      const img = new window.Image()
+      img.src = event.target?.result as string
+      img.onload = () => {
+        let width = img.width
+        let height = img.height
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width)
+            width = maxWidth
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height)
+            height = maxHeight
+          }
+        }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          resolve(event.target?.result as string)
+          return
+        }
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = () => {
+        reject(new Error('Falha ao carregar imagem'))
+      }
+    }
+    reader.onerror = () => {
+      reject(new Error('Falha ao ler arquivo'))
+    }
+  })
+}
 
 const EMPTY_FORM: InventoryItemParams = {
   supplierId: '',
@@ -68,6 +136,7 @@ const EMPTY_FORM: InventoryItemParams = {
   purchaseUnit: '',
   purchaseUnitFactor: '',
   attributes: {},
+  imagePath: '',
 }
 
 const STANDARD_UNITS = [
@@ -87,14 +156,15 @@ const STANDARD_UNITS = [
 ]
 
 function getFormFromItem(item: InventoryItem): InventoryItemParams {
+  const supplierId = item.supplierId || item.suppliers[0]?.supplierId || ''
   return {
-    supplierId: item.supplierId ?? '',
-    supplierIds: item.suppliers.map((supplier) => supplier.supplierId),
+    supplierId,
+    supplierIds: supplierId ? [supplierId] : [],
     name: item.name,
     unit: item.unit,
     quantityOnHand: item.quantityOnHand,
     minimumQuantity: item.minimumQuantity,
-    unitPrice: item.unitPrice,
+    unitPrice: toMoneyInput(item.unitPrice),
     sku: item.sku,
     barcode: item.barcode ?? '',
     description: item.description ?? '',
@@ -104,13 +174,13 @@ function getFormFromItem(item: InventoryItem): InventoryItemParams {
     manufacturer: item.manufacturer ?? '',
     model: item.model ?? '',
     manufacturerReference: item.manufacturerReference ?? '',
-    purchasePrice: item.purchasePrice,
-    extraPurchaseCost: item.extraPurchaseCost,
+    purchasePrice: toMoneyInput(item.purchasePrice),
+    extraPurchaseCost: toMoneyInput(item.extraPurchaseCost),
     supplierProductCode: item.supplierProductCode ?? '',
     leadTimeDays: item.leadTimeDays?.toString() ?? '',
-    promotionalPrice: item.promotionalPrice ?? '',
+    promotionalPrice: toMoneyInput(item.promotionalPrice),
     targetMarginPercent: item.targetMarginPercent ?? '',
-    minimumSalePrice: item.minimumSalePrice ?? '',
+    minimumSalePrice: toMoneyInput(item.minimumSalePrice),
     maximumQuantity: item.maximumQuantity,
     idealRestockQuantity: item.idealRestockQuantity,
     location: item.location ?? '',
@@ -132,6 +202,7 @@ function getFormFromItem(item: InventoryItem): InventoryItemParams {
     purchaseUnit: item.purchaseUnit ?? '',
     purchaseUnitFactor: item.purchaseUnitFactor,
     attributes: item.attributes,
+    imagePath: item.imagePath ?? '',
   }
 }
 
@@ -139,6 +210,7 @@ export function InventoryFormPage() {
   const { user } = useAuth()
   const { currentOrganization } = useOrganization()
   const navigate = useNavigate()
+  const { canCreateInventoryProduct, canEditInventoryProduct, inventoryAccessLevel } = useModuleAccess()
   const { inventoryItemId } = useParams()
   const isEditing = inventoryItemId !== undefined
   const organizationId = currentOrganization?.id
@@ -152,6 +224,7 @@ export function InventoryFormPage() {
   const [form, setForm] = useState<InventoryItemParams>(() => ({
     ...EMPTY_FORM,
   }))
+  const [barcodeUnavailable, setBarcodeUnavailable] = useState(false)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [currentQuantity, setCurrentQuantity] = useState('0')
   const [formError, setFormError] = useState('')
@@ -167,12 +240,57 @@ export function InventoryFormPage() {
   const [warehouseError, setWarehouseError] = useState('')
   const [isSavingWarehouse, setIsSavingWarehouse] = useState(false)
   const [pendingFlagChange, setPendingFlagChange] = useState<{
-    field: 'canSell' | 'canPurchase'
+    field: 'allowNegativeStock' | 'canSell' | 'canPurchase' | 'isActive'
     nextValue: boolean
   } | null>(null)
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [generatedNextCode, setGeneratedNextCode] = useState('')
 
-  const handleFlagToggle = (field: 'canSell' | 'canPurchase', nextValue: boolean) => {
+  const handleFlagToggle = (
+    field: 'allowNegativeStock' | 'canSell' | 'canPurchase' | 'isActive',
+    nextValue: boolean,
+  ) => {
     setPendingFlagChange({ field, nextValue })
+  }
+
+  const getFlagConfirmDetails = (
+    field: 'allowNegativeStock' | 'canSell' | 'canPurchase' | 'isActive',
+    nextValue: boolean,
+  ) => {
+    switch (field) {
+      case 'allowNegativeStock':
+        return {
+          title: nextValue ? 'Permitir saldo negativo?' : 'Bloquear saldo negativo?',
+          description: nextValue
+            ? 'Ao habilitar o saldo negativo, o sistema permitirá realizar vendas e saídas deste produto mesmo quando o estoque atual estiver zerado ou insuficiente. Deseja confirmar a habilitação?'
+            : 'Ao desabilitar o saldo negativo, o sistema impedirá vendas e saídas se a quantidade em estoque for insuficiente. Deseja confirmar o bloqueio de saldo negativo?',
+          confirmLabel: nextValue ? 'Sim, habilitar' : 'Sim, desabilitar',
+        }
+      case 'canSell':
+        return {
+          title: nextValue ? 'Habilitar venda do material?' : 'Desabilitar venda do material?',
+          description: nextValue
+            ? 'Ao habilitar a venda, o material ficará disponível para seleção no catálogo, PDV e pedidos de venda. Deseja confirmar?'
+            : 'Ao desabilitar a venda, o material não poderá mais ser vendido ou selecionado em novos pedidos de venda. Deseja confirmar?',
+          confirmLabel: nextValue ? 'Sim, habilitar venda' : 'Sim, desabilitar venda',
+        }
+      case 'canPurchase':
+        return {
+          title: nextValue ? 'Habilitar compra do material?' : 'Desabilitar compra do material?',
+          description: nextValue
+            ? 'Ao habilitar a compra, o material poderá receber ordens de compra e novas entradas de estoque. Deseja confirmar?'
+            : 'Ao desabilitar a compra, o sistema não permitirá emitir novas ordens de compra ou dar entrada deste material por compras. Deseja confirmar?',
+          confirmLabel: nextValue ? 'Sim, habilitar compra' : 'Sim, desabilitar compra',
+        }
+      case 'isActive':
+        return {
+          title: nextValue ? 'Reativar material?' : 'Desativar material?',
+          description: nextValue
+            ? 'Ao reativar este material, ele voltará a ficar disponível para movimentações de estoque e inclusão em novos orçamentos. Deseja confirmar a reativação?'
+            : 'Ao desativar este material, ele não poderá mais receber movimentações de estoque nem ser incluído em novos orçamentos. O histórico de movimentações é preservado e você poderá reativá-lo a qualquer momento. Deseja confirmar a desativação?',
+          confirmLabel: nextValue ? 'Sim, reativar' : 'Sim, desativar',
+        }
+    }
   }
 
   useEffect(() => {
@@ -205,6 +323,7 @@ export function InventoryFormPage() {
         if (inventoryItemId === undefined) {
           clearInventoryDraft(activeDraftKey)
           setForm({ ...EMPTY_FORM })
+          setBarcodeUnavailable(false)
           setCurrentQuantity('0')
           setDraftHydratedKey(null)
           setDraftStorageWarning('')
@@ -216,6 +335,12 @@ export function InventoryFormPage() {
             setSupplierError('')
           } else {
             setSupplierError(suppliersResult.error)
+          }
+
+          const nextCodeResult = await inventoryService.getNextCode(organizationId)
+          if (!isActive()) return
+          if (nextCodeResult.success) {
+            setGeneratedNextCode(nextCodeResult.data)
           }
           return
         }
@@ -245,12 +370,16 @@ export function InventoryFormPage() {
 
         if (result.success) {
           setCurrentQuantity(result.data.quantityOnHand)
-          setForm(savedDraft.status === 'draft' ? savedDraft.form : getFormFromItem(result.data))
+          const loadedForm =
+            savedDraft.status === 'draft' ? savedDraft.form : getFormFromItem(result.data)
+          setForm(loadedForm)
+          setBarcodeUnavailable(!loadedForm.barcode.trim())
         } else {
           setCurrentQuantity('0')
-          setForm(
-            savedDraft.status === 'draft' ? savedDraft.form : { ...EMPTY_FORM },
-          )
+          const loadedForm =
+            savedDraft.status === 'draft' ? savedDraft.form : { ...EMPTY_FORM }
+          setForm(loadedForm)
+          setBarcodeUnavailable(false)
           setFormError(result.error)
         }
         setDraftHydratedKey(activeDraftKey)
@@ -305,6 +434,20 @@ export function InventoryFormPage() {
     updateFormFields({ [field]: value })
   }
 
+  const handleImageFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setFormError('Por favor, selecione um arquivo de imagem válido (JPG, PNG ou WebP).')
+      return
+    }
+    try {
+      const compressedDataUrl = await compressImage(file, 800, 800, 0.85)
+      updateForm('imagePath', compressedDataUrl)
+      setFormError('')
+    } catch {
+      setFormError('Não foi possível carregar a imagem selecionada.')
+    }
+  }
+
   const handleCreateWarehouse = async () => {
     if (!organizationId) return
     const name = newWarehouseName.trim()
@@ -343,6 +486,15 @@ export function InventoryFormPage() {
       return
     }
 
+    if (isEditing && !canEditInventoryProduct) {
+      setFormError('Seu nível de acesso não permite editar produtos existentes.')
+      return
+    }
+    if (!isEditing && !canCreateInventoryProduct) {
+      setFormError('Seu nível de acesso não permite cadastrar novos produtos.')
+      return
+    }
+
     const submittedForm = normalizeInventoryItemParams(form)
     if (!submittedForm) {
       setFormError('Os dados do formulário estão inválidos. Revise os campos e tente novamente.')
@@ -353,7 +505,6 @@ export function InventoryFormPage() {
       setFormError('Informe o nome do material e sua unidade de medida.')
       return
     }
-    const finalSku = submittedForm.sku.trim() || generateSku()
     if (!isValidBarcode(submittedForm.barcode)) {
       setFormError(
         'Confira o código de barras. EAN-8, UPC e EAN-13 precisam ter dígito verificador válido.',
@@ -408,7 +559,7 @@ export function InventoryFormPage() {
     try {
       const params = {
         ...submittedForm,
-        sku: finalSku,
+        sku: isEditing ? submittedForm.sku : (generatedNextCode || ''),
         quantityOnHand: submittedForm.quantityOnHand.trim() || '0',
         minimumQuantity: submittedForm.minimumQuantity.trim() || '0',
         unitPrice: submittedForm.unitPrice.trim() || '0.00',
@@ -446,6 +597,70 @@ export function InventoryFormPage() {
     }
   }
 
+  if (isEditing && !canEditInventoryProduct) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/orcafacil/inventory/search"
+            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Voltar ao estoque"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Estoque</h1>
+        </div>
+        <Card className="rounded-2xl border-amber-200 bg-amber-50/50 p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <AlertTriangle className="h-7 w-7" aria-hidden="true" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">Acesso Restrito ao Estoque</h3>
+          <p className="mt-2 text-sm text-gray-600 max-w-md mx-auto">
+            Seu nível de acesso atual ({inventoryAccessLevel === 1 ? 'Nível 1 — Apenas Consulta' : 'Nível 2 — Consulta e Cadastro'}) não permite editar produtos existentes.
+            A edição de produtos é permitida exclusivamente para o <strong>Nível 3 (Acesso Geral)</strong>.
+          </p>
+          <div className="mt-6">
+            <Button onClick={() => void navigate('/orcafacil/inventory/search')}>
+              Voltar à consulta de estoque
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!isEditing && !canCreateInventoryProduct) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/orcafacil/inventory/search"
+            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Voltar ao estoque"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Estoque</h1>
+        </div>
+        <Card className="rounded-2xl border-amber-200 bg-amber-50/50 p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <AlertTriangle className="h-7 w-7" aria-hidden="true" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">Acesso Restrito ao Estoque</h3>
+          <p className="mt-2 text-sm text-gray-600 max-w-md mx-auto">
+            Seu nível de acesso atual (<strong>Nível 1 — Apenas Consulta</strong>) não permite cadastrar novos produtos.
+            Para cadastrar produtos, solicite ao administrador a liberação do <strong>Nível 2</strong> ou <strong>Nível 3</strong>.
+          </p>
+          <div className="mt-6">
+            <Button onClick={() => void navigate('/orcafacil/inventory/search')}>
+              Voltar à consulta de estoque
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
@@ -457,9 +672,20 @@ export function InventoryFormPage() {
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-            {isEditing ? 'Editar Material' : 'Cadastrar Material'}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+              {isEditing ? 'Editar Produto' : 'Cadastrar Produto'}
+            </h1>
+            {isEditing && form.sku ? (
+              <span className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+                Cód. #{form.sku}
+              </span>
+            ) : generatedNextCode ? (
+              <span className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+                Próximo Cód. #{generatedNextCode}
+              </span>
+            ) : null}
+          </div>
           <p className="text-sm text-gray-500">
             Informe a unidade usada para controlar o saldo, como metro, quilo ou litro.
           </p>
@@ -503,7 +729,82 @@ export function InventoryFormPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <CardContent className="space-y-6">
+              {/* Foto do produto */}
+              <div
+                className={`flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 rounded-2xl border-2 border-gray-200/90 bg-gray-50/70 p-4 transition-all ${
+                  form.imagePath ? 'sm:p-6 shadow-sm' : 'sm:p-4'
+                }`}
+              >
+                {form.imagePath ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (form.imagePath) {
+                        setPreviewImage(form.imagePath)
+                      }
+                    }}
+                    className="group relative flex h-36 w-36 sm:h-44 sm:w-44 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-gray-200 bg-white shadow-md transition hover:border-blue-400 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    title="Clique para ampliar a foto"
+                    aria-label="Ampliar foto do produto"
+                  >
+                    <img
+                      src={form.imagePath}
+                      alt={form.name || 'Foto do produto'}
+                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover:opacity-100">
+                      <ZoomIn className="h-8 w-8 text-white drop-shadow" aria-hidden="true" />
+                    </div>
+                  </button>
+                ) : (
+                  <div className="flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-white text-gray-400">
+                    <ImageIcon className="h-5 w-5 stroke-[1.5]" aria-hidden="true" />
+                    <span className="text-[10px] font-medium text-gray-400 mt-0.5">Sem foto</span>
+                  </div>
+                )}
+
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <span className="text-base font-bold text-gray-900">Foto do produto</span>
+                    <p className="mt-1 text-xs sm:text-sm text-gray-500">
+                      Adicione uma foto em boa resolução para identificar visualmente o item no estoque, na listagem de consulta e nos orçamentos.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 hover:text-blue-600">
+                      <Upload className="h-4 w-4" aria-hidden="true" />
+                      <span>{form.imagePath ? 'Alterar foto' : 'Carregar foto do produto'}</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/jpg"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          void handleImageFile(file)
+                        }}
+                      />
+                    </label>
+
+                    {form.imagePath && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateForm('imagePath', '')
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        Remover foto
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Nome do produto *"
                 placeholder="Ex.: Cabo elétrico flexível"
@@ -515,43 +816,60 @@ export function InventoryFormPage() {
                 required
               />
               <Input
-                label="Código interno (SKU)"
-                placeholder="Ex.: PRD-001 (ou deixe em branco para gerar automaticamente)"
-                helperText="Código exclusivo para localizar o produto. Se deixar vazio, será gerado automaticamente."
-                value={form.sku}
-                onChange={(event) => {
-                  updateForm('sku', event.target.value)
-                }}
+                label="Código do produto"
+                placeholder={isEditing ? '' : 'Gerado automaticamente'}
+                helperText={
+                  isEditing
+                    ? 'Código sequencial exclusivo do produto (gerado automaticamente).'
+                    : 'Código numérico sequencial que sobe de 1 em 1 automaticamente.'
+                }
+                value={
+                  isEditing
+                    ? form.sku ? `#${form.sku}` : '—'
+                    : generatedNextCode ? `#${generatedNextCode}` : 'Gerando código...'
+                }
+                disabled
               />
-              <Input
-                label="Código de barras"
-                placeholder="Digite ou leia com o leitor USB"
-                helperText="Leitores USB funcionam como teclado: clique aqui e faça a leitura."
-                value={form.barcode}
-                onChange={(event) => {
-                  updateForm('barcode', event.target.value)
-                }}
-                maxLength={50}
-              />
-              <Input
+              <div className="space-y-2">
+                <Input
+                  label="Código de barras"
+                  placeholder="Digite ou leia com o leitor USB"
+                  helperText="Leitores USB funcionam como teclado: clique aqui e faça a leitura."
+                  value={form.barcode}
+                  onChange={(event) => {
+                    setBarcodeUnavailable(false)
+                    updateForm('barcode', event.target.value)
+                  }}
+                  maxLength={50}
+                  disabled={barcodeUnavailable}
+                />
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={barcodeUnavailable}
+                    onChange={(event) => {
+                      const unavailable = event.target.checked
+                      setBarcodeUnavailable(unavailable)
+                      if (unavailable) updateForm('barcode', '')
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Este produto não possui código de barra válido.
+                </label>
+              </div>
+              <ListBox
+                id="inventory-unit"
                 label="Unidade usada no saldo *"
-                list="inventory-standard-units"
-                placeholder="Ex.: M, KG, L ou caixa"
+                placeholder="Selecione uma unidade"
+                searchPlaceholder="Buscar unidade..."
+                searchable
                 helperText="É a unidade usada para controlar e movimentar o estoque."
                 value={form.unit}
-                onChange={(event) => {
-                  updateForm('unit', event.target.value)
+                onChange={(value) => {
+                  updateForm('unit', typeof value === 'string' ? value : (value[0] ?? ''))
                 }}
-                maxLength={30}
-                required
+                options={STANDARD_UNITS.map(([value, label]) => ({ value, label }))}
               />
-              <datalist id="inventory-standard-units">
-                {STANDARD_UNITS.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </datalist>
               <Input
                 label="Categoria"
                 placeholder="Ex.: Material elétrico"
@@ -602,7 +920,8 @@ export function InventoryFormPage() {
                   className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-            </CardContent>
+            </div>
+          </CardContent>
           </Card>
 
           <Card>
@@ -753,40 +1072,185 @@ export function InventoryFormPage() {
                   updateForm('location', event.target.value)
                 }}
               />
-              <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={form.allowNegativeStock}
-                  onChange={(event) => {
-                    updateForm('allowNegativeStock', event.target.checked)
+              <div className="flex flex-col gap-3 sm:col-span-2 pt-2">
+                {/* 1. Permitir saldo negativo */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    handleFlagToggle('allowNegativeStock', !form.allowNegativeStock)
                   }}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                Permitir saldo negativo para este produto
-              </label>
-              <div className="flex flex-col gap-2.5 sm:col-span-2 border-t border-gray-100 pt-3">
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleFlagToggle('allowNegativeStock', !form.allowNegativeStock)
+                    }
+                  }}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-amber-300 bg-white p-3.5 sm:p-4 shadow-sm transition hover:shadow-md cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100/70 text-amber-700">
+                      <AlertTriangle className="h-5 w-5 stroke-[2.2]" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm sm:text-base font-semibold text-gray-900">
+                          Permitir saldo negativo
+                        </span>
+                        <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-800">
+                          ATENÇÃO
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
+                        Autoriza vendas mesmo se o estoque atual estiver zerado ou insuficiente.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={form.allowNegativeStock}
+                    onCheckedChange={(checked) => {
+                      handleFlagToggle('allowNegativeStock', checked)
+                    }}
+                    activeColorClass="bg-amber-500"
+                    className={
+                      !form.allowNegativeStock ? 'border-2 border-amber-300 bg-amber-50/50' : ''
+                    }
+                    aria-label="Permitir saldo negativo"
+                  />
+                </div>
+
+                {/* 2. Permitir venda */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    handleFlagToggle('canSell', !form.canSell)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleFlagToggle('canSell', !form.canSell)
+                    }
+                  }}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-indigo-400 bg-white p-3.5 sm:p-4 shadow-sm transition hover:shadow-md cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100/70 text-indigo-600">
+                      <ShoppingBag className="h-5 w-5 stroke-[2]" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-sm sm:text-base font-semibold text-gray-900">
+                        Permitir venda
+                      </span>
+                      <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
+                        Disponibiliza o item no catálogo de PDV, E-commerce e Pedidos de Venda.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
                     checked={form.canSell}
-                    onChange={(event) => {
-                      handleFlagToggle('canSell', event.target.checked)
+                    onCheckedChange={(checked) => {
+                      handleFlagToggle('canSell', checked)
                     }}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    activeColorClass="bg-indigo-600"
+                    aria-label="Permitir venda"
                   />
-                  Permitir venda
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
+                </div>
+
+                {/* 3. Permitir compra */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    handleFlagToggle('canPurchase', !form.canPurchase)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleFlagToggle('canPurchase', !form.canPurchase)
+                    }
+                  }}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-400 bg-white p-3.5 sm:p-4 shadow-sm transition hover:shadow-md cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100/70 text-emerald-600">
+                      <ShoppingCart className="h-5 w-5 stroke-[2]" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-sm sm:text-base font-semibold text-gray-900">
+                        Permitir compra
+                      </span>
+                      <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
+                        Habilita o produto para emissão de Ordens de Compra e Entrada de Notas.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
                     checked={form.canPurchase}
-                    onChange={(event) => {
-                      handleFlagToggle('canPurchase', event.target.checked)
+                    onCheckedChange={(checked) => {
+                      handleFlagToggle('canPurchase', checked)
                     }}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    activeColorClass="bg-emerald-600"
+                    aria-label="Permitir compra"
                   />
-                  Permitir compra
-                </label>
+                </div>
+
+                {/* 4. Material ativo */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    handleFlagToggle('isActive', !form.isActive)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleFlagToggle('isActive', !form.isActive)
+                    }
+                  }}
+                  className={`flex items-center justify-between gap-4 rounded-2xl border bg-white p-3.5 sm:p-4 shadow-sm transition hover:shadow-md cursor-pointer select-none ${
+                    form.isActive ? 'border-blue-400' : 'border-gray-300 bg-gray-50/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                        form.isActive ? 'bg-blue-100/70 text-blue-600' : 'bg-gray-100 text-gray-400'
+                      }`}
+                    >
+                      <CheckCircle2 className="h-5 w-5 stroke-[2]" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm sm:text-base font-semibold text-gray-900">
+                          Material ativo
+                        </span>
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wider ${
+                            form.isActive
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-200 text-gray-600'
+                          }`}
+                        >
+                          {form.isActive ? 'ATIVO' : 'INATIVO'}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
+                        {form.isActive
+                          ? 'Material habilitado para movimentações e novos orçamentos.'
+                          : 'Material desativado. Histórico preservado, bloqueado para novas operações.'}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={form.isActive}
+                    onCheckedChange={(checked) => {
+                      handleFlagToggle('isActive', checked)
+                    }}
+                    activeColorClass="bg-blue-600"
+                    aria-label="Material ativo"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -807,6 +1271,7 @@ export function InventoryFormPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Input
                   label="1. Preço de compra (R$)"
+                  currency
                   type="number"
                   min="0"
                   step="0.01"
@@ -841,6 +1306,7 @@ export function InventoryFormPage() {
                 />
                 <Input
                   label="3. Preço de venda (R$)"
+                  currency
                   type="number"
                   min="0"
                   step="0.01"
@@ -860,6 +1326,7 @@ export function InventoryFormPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Input
                   label="Outros custos de compra (R$)"
+                  currency
                   type="number"
                   min="0"
                   step="0.01"
@@ -872,6 +1339,7 @@ export function InventoryFormPage() {
                 />
                 <Input
                   label="Preço promocional (R$)"
+                  currency
                   type="number"
                   min="0"
                   step="0.01"
@@ -883,6 +1351,7 @@ export function InventoryFormPage() {
                 />
                 <Input
                   label="Preço mínimo de venda (R$)"
+                  currency
                   type="number"
                   min="0"
                   step="0.01"
@@ -904,13 +1373,6 @@ export function InventoryFormPage() {
                     })}
                     %
                   </span>
-                  <span>
-                    Participação do lucro na venda:{' '}
-                    {salesIndicators.marginPercent.toLocaleString('pt-BR', {
-                      maximumFractionDigits: 2,
-                    })}
-                    %
-                  </span>
                 </div>
                 <p className="mt-2 text-xs text-emerald-700">
                   Estimativa antes de impostos e despesas operacionais.
@@ -925,7 +1387,7 @@ export function InventoryFormPage() {
                 <Tag className="h-4 w-4 text-violet-600" aria-hidden="true" />
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900">Fornecedores</h2>
-                  <p className="text-xs text-gray-500">Você pode vincular mais de um fornecedor.</p>
+                  <p className="text-xs text-gray-500">Selecione um único fornecedor para o produto.</p>
                 </div>
               </div>
             </CardHeader>
@@ -936,16 +1398,15 @@ export function InventoryFormPage() {
                 </p>
               ) : (
                 <ListBox
-                  label="Selecionar fornecedores"
-                  placeholder="Selecione um ou mais fornecedores..."
+                  label="Selecionar fornecedor"
+                  placeholder="Selecione um fornecedor..."
                   searchPlaceholder="Buscar fornecedor por nome ou documento..."
-                  multiple
-                  value={form.supplierIds}
+                  value={form.supplierId}
                   onChange={(val) => {
-                    const supplierIds = val as string[]
+                    const supplierId = typeof val === 'string' ? val : (val[0] ?? '')
                     updateFormFields({
-                      supplierIds,
-                      supplierId: supplierIds[0] ?? '',
+                      supplierId,
+                      supplierIds: supplierId ? [supplierId] : [],
                     })
                   }}
                   options={suppliers.map((s) => ({
@@ -953,7 +1414,7 @@ export function InventoryFormPage() {
                     label: s.name,
                     description: s.document ?? undefined,
                   }))}
-                  helperText="Clique para selecionar ou desmarcar. O primeiro fornecedor será o principal."
+                  helperText="O produto pode ser vinculado a apenas um fornecedor."
                 />
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1166,7 +1627,7 @@ export function InventoryFormPage() {
               </Button>
             </Link>
             <Button type="submit" isLoading={isSaving}>
-              {isEditing ? 'Salvar alterações' : 'Cadastrar material'}
+              {isEditing ? 'Salvar alterações' : 'Cadastrar produto'}
             </Button>
           </div>
         </form>
@@ -1174,20 +1635,43 @@ export function InventoryFormPage() {
 
       <ConfirmActionDialog
         open={pendingFlagChange !== null}
-        title="Confirmar alteração"
-        description={`Ao realizar alteração o sistema não vai deixar mais realizar a ${
-          pendingFlagChange?.field === 'canPurchase' ? 'Compra' : 'Venda'
-        } deseja continuar?`}
-        confirmLabel="Continuar"
+        title={
+          pendingFlagChange
+            ? getFlagConfirmDetails(pendingFlagChange.field, pendingFlagChange.nextValue).title
+            : 'Confirmar alteração'
+        }
+        description={
+          pendingFlagChange
+            ? getFlagConfirmDetails(pendingFlagChange.field, pendingFlagChange.nextValue).description
+            : ''
+        }
+        confirmLabel={
+          pendingFlagChange
+            ? getFlagConfirmDetails(pendingFlagChange.field, pendingFlagChange.nextValue).confirmLabel
+            : 'Confirmar'
+        }
         onCancel={() => {
           setPendingFlagChange(null)
         }}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (pendingFlagChange) {
-            updateForm(pendingFlagChange.field, pendingFlagChange.nextValue)
+            const { field, nextValue } = pendingFlagChange
+            updateForm(field, nextValue)
+            if (field === 'isActive' && isEditing && organizationId && inventoryItemId) {
+              await inventoryService.setActive(organizationId, inventoryItemId, nextValue)
+            }
           }
           setPendingFlagChange(null)
           return Promise.resolve({ success: true, data: undefined })
+        }}
+      />
+
+      <ImagePreviewModal
+        open={previewImage !== null}
+        src={previewImage}
+        title={form.name || 'Foto do produto'}
+        onClose={() => {
+          setPreviewImage(null)
         }}
       />
     </div>

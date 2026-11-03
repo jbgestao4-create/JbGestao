@@ -1,7 +1,3 @@
-export function generateSku() {
-  return `SKU-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
-}
-
 export function getInventoryUniqueConstraintError(
   code: string | undefined,
   message: string | undefined,

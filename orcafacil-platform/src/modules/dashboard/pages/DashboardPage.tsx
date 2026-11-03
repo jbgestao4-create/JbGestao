@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
+  Building2,
   ChartNoAxesCombined,
   ChevronDown,
   ChevronUp,
@@ -24,7 +25,6 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { quoteService } from '@modules/orcafacil/services/quote.service'
 import { customerService } from '@modules/customers/services/customer.service'
-import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import type { DashboardModuleCode } from '@shared/types/database'
 
@@ -42,7 +42,7 @@ type DashboardModule = {
 
 export function DashboardPage() {
   const { user, profile, signOut } = useAuth()
-  const { currentOrganization, organizations, setCurrentOrganization } = useOrganization()
+  const { currentOrganization } = useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const navigate = useNavigate()
 
@@ -197,21 +197,15 @@ export function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="w-56">
-              <ListBox
-                searchable={organizations.length > 4}
-                searchPlaceholder="Buscar filial..."
-                value={currentOrganization?.id ?? ''}
-                onChange={(val) => {
-                  const organization = organizations.find((item) => item.id === val)
-                  if (organization) setCurrentOrganization(organization)
-                }}
-                options={organizations.map((organization) => ({
-                  value: organization.id,
-                  label: organization.name,
-                }))}
-              />
-            </div>
+            <button
+              type="button"
+              disabled
+              aria-label={`Organização atual: ${currentOrganization?.name ?? 'Organização'}`}
+              className="inline-flex h-10 w-56 cursor-not-allowed items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left text-xs font-medium text-slate-500 opacity-80"
+            >
+              <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
+              <span className="truncate">{currentOrganization?.name ?? 'Organização'}</span>
+            </button>
 
             <div
               className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600"

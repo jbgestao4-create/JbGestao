@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { inventoryService } from '../services/inventory.service'
-import type { InventoryItem, ServiceResult } from '@shared/types/common'
+import type { InventoryItem } from '@shared/types/common'
 import { Card, CardContent } from '@shared/components/ui/Card'
-import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
-import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
-import { ArrowLeft, ArrowLeftRight, Archive, Package, Pencil, Plus, Search, X } from 'lucide-react'
+import { ImagePreviewModal } from '@shared/components/ui/ImagePreviewModal'
+import { DeleteInventoryItemModal } from '../components/DeleteInventoryItemModal'
+import { ArrowLeft, CheckCircle2, Package, Pencil, Search, Trash2, X, ZoomIn } from 'lucide-react'
 
 function formatQuantity(value: string) {
   return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 }).format(Number(value))
@@ -22,6 +23,7 @@ function formatPrice(value: string) {
 
 export function InventoryListPage() {
   const { currentOrganization } = useOrganization()
+  const { canEditInventoryProduct } = useModuleAccess()
   const navigate = useNavigate()
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loadedOrganizationId, setLoadedOrganizationId] = useState<string | null>(null)
@@ -30,25 +32,13 @@ export function InventoryListPage() {
     'all',
   )
   const [loadError, setLoadError] = useState('')
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null)
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null)
-
-  const loadItems = async () => {
-    if (!currentOrganization) {
-      setItems([])
-      setLoadedOrganizationId(null)
-      return
-    }
-
-    setLoadError('')
-    const result = await inventoryService.list(currentOrganization.id)
-    if (result.success) {
-      setItems(result.data)
-      setLoadedOrganizationId(currentOrganization.id)
-    } else {
-      setLoadError(result.error)
-      setLoadedOrganizationId(currentOrganization.id)
-    }
-  }
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [feedbackMessage, setFeedbackMessage] = useState<{
+    text: string
+    type: 'success' | 'error'
+  } | null>(null)
 
   useEffect(() => {
     if (!currentOrganization) return
@@ -75,16 +65,26 @@ export function InventoryListPage() {
     }
   }, [currentOrganization])
 
-  const handleDeactivate = async (): Promise<ServiceResult<void>> => {
-    if (!currentOrganization || !itemToDelete) {
-      return { success: false, error: 'Não foi possível identificar o material.' }
-    }
-    const result = await inventoryService.deactivate(currentOrganization.id, itemToDelete.id)
+  const handleConfirmDelete = async (reason: string) => {
+    if (!currentOrganization || !itemToDelete) return
+    setIsDeleting(true)
+    const result = await inventoryService.delete(currentOrganization.id, itemToDelete.id, reason)
+    setIsDeleting(false)
+
     if (result.success) {
+      const deletedName = itemToDelete.name
+      setItems((prev) => prev.filter((i) => i.id !== itemToDelete.id))
       setItemToDelete(null)
-      await loadItems()
+      setFeedbackMessage({
+        text: `O produto "${deletedName}" foi excluído com sucesso.`,
+        type: 'success',
+      })
+    } else {
+      setFeedbackMessage({
+        text: result.error,
+        type: 'error',
+      })
     }
-    return result
   }
 
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase('pt-BR')
@@ -132,15 +132,37 @@ export function InventoryListPage() {
             Consulte e gerencie materiais, unidades, saldos e fornecedores.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            void navigate('/orcafacil/inventory/new')
-          }}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Cadastrar material
-        </Button>
       </div>
+
+      {feedbackMessage && (
+        <div
+          role="alert"
+          className={`flex items-center justify-between gap-3 rounded-xl border p-4 text-sm ${
+            feedbackMessage.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-800'
+              : 'border-red-200 bg-red-50 text-red-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {feedbackMessage.type === 'success' ? (
+              <CheckCircle2 className="h-5 w-5 text-green-600" aria-hidden="true" />
+            ) : (
+              <X className="h-5 w-5 text-red-600" aria-hidden="true" />
+            )}
+            <span>{feedbackMessage.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFeedbackMessage(null)
+            }}
+            className="text-gray-400 hover:text-gray-700"
+            aria-label="Fechar mensagem"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       <Card className="rounded-xl border-blue-200 shadow-sm ring-1 ring-blue-100">
         <CardContent className="p-3 sm:p-4">
@@ -173,7 +195,7 @@ export function InventoryListPage() {
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-gray-500">
-              Pesquise por nome, SKU, código de barras, marca ou fornecedor.
+              Pesquise por nome, código interno, código de barras, marca ou fornecedor.
             </p>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <span className="shrink-0">Mostrar:</span>
@@ -221,15 +243,6 @@ export function InventoryListPage() {
           <CardContent className="flex flex-col items-center px-6 py-12 text-center">
             <Package className="mb-3 h-9 w-9 text-gray-300" aria-hidden="true" />
             <p className="text-sm text-gray-600">Ainda não há materiais cadastrados no estoque.</p>
-            <Button
-              size="sm"
-              className="mt-4"
-              onClick={() => {
-                void navigate('/orcafacil/inventory/new')
-              }}
-            >
-              Cadastrar o primeiro material
-            </Button>
           </CardContent>
         </Card>
       ) : filteredItems.length === 0 ? (
@@ -243,26 +256,66 @@ export function InventoryListPage() {
           {filteredItems.map((item) => {
             const isLowStock = Number(item.quantityOnHand) <= Number(item.minimumQuantity)
             return (
-              <Card key={item.id} className="rounded-xl shadow-sm">
+              <Card
+                key={item.id}
+                className={`rounded-xl shadow-sm transition-all ${
+                  !item.isActive
+                    ? 'border-gray-200 bg-gray-50/75 opacity-60 hover:opacity-90'
+                    : 'bg-white'
+                }`}
+              >
                 <CardContent className="space-y-4 p-5 sm:p-6">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700">
-                        <Package className="h-5 w-5" aria-hidden="true" />
-                      </div>
+                    <div className="flex min-w-0 items-center gap-4 sm:gap-5">
+                      {item.imagePath ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (item.imagePath) {
+                              setPreviewImage({ src: item.imagePath, title: item.name })
+                            }
+                          }}
+                          className={`group relative flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-gray-200 bg-white shadow-sm transition hover:border-blue-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            !item.isActive ? 'grayscale-[35%] opacity-80' : ''
+                          }`}
+                          title="Clique para ampliar a foto"
+                          aria-label={`Ampliar foto de ${item.name}`}
+                        >
+                          <img
+                            src={item.imagePath}
+                            alt={item.name}
+                            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover:opacity-100">
+                            <ZoomIn className="h-6 w-6 text-white drop-shadow" aria-hidden="true" />
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 text-gray-400">
+                          <Package className="h-4 w-4" aria-hidden="true" />
+                          <span className="text-[9px] font-medium text-gray-400">Sem foto</span>
+                        </div>
+                      )}
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h2 className="truncate text-base font-bold text-gray-900">
-                            {item.name}
-                          </h2>
+                        <div className="flex flex-wrap items-center gap-2">
                           {!item.isActive && (
-                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                            <span className="shrink-0 rounded-md border border-gray-300 bg-gray-200 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-gray-700">
                               Inativo
                             </span>
                           )}
+                          <span className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                            Cód. #{item.sku || '—'}
+                          </span>
+                          <h2
+                            className={`truncate text-base font-bold ${
+                              !item.isActive ? 'text-gray-600' : 'text-gray-900'
+                            }`}
+                          >
+                            {item.name}
+                          </h2>
                         </div>
                         <p className="text-sm text-gray-500">
-                          SKU: {item.sku} · Unidade: {item.unit}
+                          Código: <strong>#{item.sku || '—'}</strong> · Unidade: {item.unit}
                         </p>
                         {item.category && (
                           <p className="text-xs text-gray-400">
@@ -272,46 +325,43 @@ export function InventoryListPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void navigate(`/orcafacil/inventory/${item.id}/movements`)
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50"
-                        aria-label={`Movimentações de ${item.name}`}
-                      >
-                        <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-                        Movimentar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void navigate(`/orcafacil/inventory/${item.id}/edit`)
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-700"
-                        aria-label={`Editar ${item.name}`}
-                      >
-                        <Pencil className="h-4 w-4" aria-hidden="true" />
-                        Editar
-                      </button>
-                      {item.isActive && (
+                    {canEditInventoryProduct && (
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigate(`/orcafacil/inventory/${item.id}/edit`)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-700"
+                          aria-label={`Editar ${item.name}`}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                          Editar
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
                             setItemToDelete(item)
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-                          aria-label={`Desativar ${item.name}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                          aria-label={`Excluir ${item.name}`}
                         >
-                          <Archive className="h-4 w-4" aria-hidden="true" />
-                          Desativar
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          Excluir
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 rounded-xl bg-gray-50 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-4 rounded-xl bg-gray-50 p-4 sm:grid-cols-2 xl:grid-cols-5">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        Código do produto
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-blue-700">
+                        #{item.sku || '—'}
+                      </p>
+                    </div>
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                         Saldo disponível
@@ -355,15 +405,23 @@ export function InventoryListPage() {
         </div>
       )}
 
-      <ConfirmActionDialog
-        open={itemToDelete !== null}
-        title="Desativar produto?"
-        description={`Desativar ${itemToDelete?.name ?? 'este produto'}? O histórico será preservado e o produto poderá ser reativado na edição.`}
-        confirmLabel="Sim, desativar"
-        onCancel={() => {
-          setItemToDelete(null)
+      <ImagePreviewModal
+        open={previewImage !== null}
+        src={previewImage?.src}
+        title={previewImage?.title}
+        onClose={() => {
+          setPreviewImage(null)
         }}
-        onConfirm={handleDeactivate}
+      />
+
+      <DeleteInventoryItemModal
+        open={itemToDelete !== null}
+        item={itemToDelete}
+        isDeleting={isDeleting}
+        onClose={() => {
+          if (!isDeleting) setItemToDelete(null)
+        }}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   )
