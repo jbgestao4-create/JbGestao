@@ -30,7 +30,7 @@ export function BrandLogo({
         <img src="/jb-software-mark.svg" alt="" className="h-full w-full" />
       </span>
       {showName && (
-        <span className={cn('font-semibold', dark ? 'text-white' : 'text-gray-900')}>
+        <span className={cn('font-semibold', dark ? 'text-white' : 'text-gray-900 dark:text-white')}>
           JB Software
         </span>
       )}

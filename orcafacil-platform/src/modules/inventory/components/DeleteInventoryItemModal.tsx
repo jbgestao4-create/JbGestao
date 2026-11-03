@@ -81,7 +81,7 @@ function DeleteInventoryItemDialog({
       onClick={handleBackdropClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150"
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-[#111827] border border-gray-200 dark:border-slate-800 p-6 shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 duration-200">
         <button
           type="button"
           onClick={onClose}
@@ -103,15 +103,15 @@ function DeleteInventoryItemDialog({
             >
               Excluir Produto do Estoque
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
               Esta ação removerá o produto da listagem de estoque.
             </p>
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-sm text-gray-700">
-          <p className="font-semibold text-gray-900">{item.name}</p>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+        <div className="mt-4 rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900/60 p-3.5 text-sm text-gray-700 dark:text-slate-300">
+          <p className="font-semibold text-gray-900 dark:text-white">{item.name}</p>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-slate-400">
             {item.sku && <span>Código: <strong>#{item.sku}</strong></span>}
             <span>Unidade: <strong>{item.unit}</strong></span>
             <span>Saldo: <strong>{formatQuantity(item.quantityOnHand)} {item.unit}</strong></span>
@@ -131,7 +131,7 @@ function DeleteInventoryItemDialog({
           <div>
             <label
               htmlFor="delete-reason-input"
-              className="block text-sm font-semibold text-gray-700"
+              className="block text-sm font-semibold text-gray-700 dark:text-slate-300"
             >
               Motivo da exclusão <span className="text-red-500">*</span>
             </label>

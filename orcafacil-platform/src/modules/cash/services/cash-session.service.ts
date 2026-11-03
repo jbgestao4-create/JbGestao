@@ -202,7 +202,7 @@ export const cashSessionService = {
         if (existing.openedBy !== params.operatorId) {
           return {
             success: false,
-            error: `O ${registerId} já está aberto pelo operador "${existing.operatorName}". É obrigatório realizar o fechamento do caixa anterior (Tecla 9) antes de abrir uma nova sessão.`,
+            error: `O ${registerId} já está aberto pelo operador "${existing.operatorName}". É obrigatório realizar o fechamento do caixa anterior (Tecla F12) antes de abrir uma nova sessão.`,
           }
         }
         return { success: true, data: existing }
@@ -478,7 +478,7 @@ export const cashSessionService = {
   },
 
   /**
-   * Realiza a conferência e o fechamento oficial do caixa (Procedimento obrigatório da Tecla 9)
+   * Realiza a conferência e o fechamento oficial do caixa (Procedimento obrigatório da Tecla F12)
    */
   async closeSession(
     organizationId: UUID,

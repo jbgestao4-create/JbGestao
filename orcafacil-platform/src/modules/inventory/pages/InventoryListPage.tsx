@@ -154,7 +154,9 @@ export function InventoryListPage() {
         {canCreateInventoryProduct && (
           <button
             type="button"
-            onClick={() => setIsImportModalOpen(true)}
+            onClick={() => {
+              setIsImportModalOpen(true)
+            }}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
           >
             <FileUp className="h-4 w-4" aria-hidden="true" />
@@ -251,7 +253,7 @@ export function InventoryListPage() {
         </CardContent>
       </Card>
 
-      <p className="text-sm font-medium text-gray-700" aria-live="polite">
+      <p className="text-sm font-medium text-gray-700 dark:text-slate-300" aria-live="polite">
         Exibindo {String(filteredItems.length)} de {String(visibleItems.length)} produto(s)
       </p>
 
@@ -299,8 +301,8 @@ export function InventoryListPage() {
                   isAwaiting
                     ? 'border-amber-200 bg-amber-50/20'
                     : !item.isActive
-                    ? 'border-gray-200 bg-gray-50/75 opacity-60 hover:opacity-90'
-                    : 'bg-white'
+                    ? 'border-gray-200 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-900/40 opacity-60 hover:opacity-90'
+                    : 'bg-white dark:bg-[#111827] border-gray-200 dark:border-slate-800'
                 }`}
               >
                 <CardContent className="space-y-4 p-5 sm:p-6">
@@ -385,7 +387,7 @@ export function InventoryListPage() {
                           className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                             isAwaiting
                               ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-semibold'
-                              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-blue-700'
+                              : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-blue-700 dark:hover:text-blue-400'
                           }`}
                           aria-label={`Editar ${item.name}`}
                         >
@@ -397,7 +399,7 @@ export function InventoryListPage() {
                           onClick={() => {
                             setItemToDelete(item)
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 dark:border-red-900/50 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-700 hover:border-red-300"
                           aria-label={`Excluir ${item.name}`}
                         >
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -433,47 +435,47 @@ export function InventoryListPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 gap-4 rounded-xl bg-gray-50 p-4 sm:grid-cols-2 xl:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-4 rounded-xl bg-gray-50 dark:bg-slate-900/60 p-4 sm:grid-cols-2 xl:grid-cols-5 border border-gray-100 dark:border-slate-800">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
                         Código do produto
                       </p>
-                      <p className="mt-1 text-sm font-bold text-blue-700">
+                      <p className="mt-1 text-sm font-bold text-blue-700 dark:text-blue-400">
                         #{item.sku || '—'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
                         Saldo disponível
                       </p>
                       <p
-                        className={`mt-1 text-sm font-semibold ${isLowStock ? 'text-amber-700' : 'text-gray-900'}`}
+                        className={`mt-1 text-sm font-semibold ${isLowStock ? 'text-amber-700 dark:text-amber-400' : 'text-gray-900 dark:text-slate-100'}`}
                       >
                         {formatQuantity(item.quantityOnHand)} {item.unit}
                         {isLowStock && <span className="ml-2 text-xs">(estoque baixo)</span>}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
                         Estoque mínimo
                       </p>
-                      <p className="mt-1 text-sm font-semibold text-gray-900">
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
                         {formatQuantity(item.minimumQuantity)} {item.unit}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
                         Valor por unidade
                       </p>
-                      <p className="mt-1 text-sm font-semibold text-gray-900">
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
                         {formatPrice(item.unitPrice)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
                         Fornecedor
                       </p>
-                      <p className="mt-1 text-sm font-semibold text-gray-900">
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
                         {item.supplierName || 'Não informado'}
                       </p>
                     </div>
@@ -506,7 +508,9 @@ export function InventoryListPage() {
 
       <ImportInvoiceModal
         open={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
+        onClose={() => {
+          setIsImportModalOpen(false)
+        }}
         onSuccess={() => {
           if (currentOrganization) {
             void inventoryService.list(currentOrganization.id).then((result) => {

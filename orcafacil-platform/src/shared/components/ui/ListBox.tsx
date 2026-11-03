@@ -259,11 +259,9 @@ export function ListBox({
                   left: coords.left,
                   width: coords.width,
                   zIndex: 9999,
-                  colorScheme: 'light',
-                  backgroundColor: '#fff',
-                  color: '#111827',
+                  
                 }}
-                className="max-h-60 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl animate-in fade-in-50 duration-100"
+                className="max-h-60 overflow-hidden rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-[#111827] text-gray-900 dark:text-slate-100 shadow-xl animate-in fade-in-50 duration-100"
               >
                 {searchable && (
                   <div className="border-b border-gray-100 p-2">
@@ -278,7 +276,7 @@ export function ListBox({
                         onChange={(e) => {
                           setSearch(e.target.value)
                         }}
-                        className="h-8 w-full rounded-md border border-gray-200 py-1 pl-8 pr-3 text-xs placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="h-8 w-full rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-1 pl-8 pr-3 text-xs placeholder:text-gray-400 dark:placeholder:text-slate-500 text-gray-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
                   </div>

@@ -23,8 +23,8 @@ export function InventoryHomePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Estoque</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Estoque</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
           Cadastre materiais com unidades flexíveis, fornecedores e saldo disponível para os
           orçamentos.
         </p>
@@ -37,23 +37,21 @@ export function InventoryHomePage() {
             <div className="flex items-start justify-between gap-3">
               <div
                 className={`rounded-xl p-3 ${
-                  canCreateInventoryProduct ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'
+                  canCreateInventoryProduct ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400'
                 }`}
               >
                 <PackagePlus className="h-6 w-6" aria-hidden="true" />
               </div>
               <span
                 className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide ${
-                  canCreateInventoryProduct
-                    ? 'bg-blue-50 text-blue-800'
-                    : 'bg-gray-100 text-gray-600'
+                  canCreateInventoryProduct ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
                 }`}
               >
                 {canCreateInventoryProduct ? 'NOVO PRODUTO' : 'BLOQUEADO'}
               </span>
             </div>
-            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900">CADASTRAR PRODUTO</h2>
-            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600">
+            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">CADASTRAR PRODUTO</h2>
+            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
               {canCreateInventoryProduct
                 ? 'Informe dados do produto, foto, unidade de medida, saldo, valores e fornecedor.'
                 : 'Seu nível de acesso (Nível 1 - Apenas Consulta) não permite cadastrar novos produtos.'}
@@ -93,17 +91,17 @@ export function InventoryHomePage() {
         <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
           <CardContent className="flex h-full flex-col p-6 sm:p-8">
             <div className="flex items-start justify-between gap-3">
-              <div className="rounded-xl bg-emerald-50 p-3 text-emerald-700">
+              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/60 p-3 text-emerald-700 dark:text-emerald-300">
                 <ClipboardList className="h-6 w-6" aria-hidden="true" />
               </div>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-800">
+              <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-300">
                 CONSULTA
               </span>
             </div>
-            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900">
+            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
               CONSULTAR ESTOQUE
             </h2>
-            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600">
+            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
               Consulte saldos, valores, unidades e os fornecedores dos materiais cadastrados.
             </p>
             <Button
@@ -128,23 +126,21 @@ export function InventoryHomePage() {
             <div className="flex items-start justify-between gap-3">
               <div
                 className={`rounded-xl p-3 ${
-                  canCreateInventoryProduct ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500'
+                  canCreateInventoryProduct ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400'
                 }`}
               >
                 <FileUp className="h-6 w-6" aria-hidden="true" />
               </div>
               <span
                 className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide ${
-                  canCreateInventoryProduct
-                    ? 'bg-indigo-50 text-indigo-800'
-                    : 'bg-gray-100 text-gray-600'
+                  canCreateInventoryProduct ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
                 }`}
               >
                 {canCreateInventoryProduct ? 'IMPORTAÇÃO' : 'BLOQUEADO'}
               </span>
             </div>
-            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900">IMPORTAR NOTA FISCAL</h2>
-            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600">
+            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">IMPORTAR NOTA FISCAL</h2>
+            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
               {canCreateInventoryProduct
                 ? 'Lê todos os dados da NF-e (PDF/XML), cadastra o fornecedor, anexa a nota e lança os materiais no estoque com status automático.'
                 : 'Seu nível de acesso não permite importar materiais no estoque.'}
@@ -152,7 +148,9 @@ export function InventoryHomePage() {
             {canCreateInventoryProduct ? (
               <Button
                 size="lg"
-                onClick={() => setIsImportModalOpen(true)}
+                onClick={() => {
+                  setIsImportModalOpen(true)
+                }}
                 className="mt-6 w-full justify-between rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
               >
                 <span className="inline-flex items-center gap-2">
@@ -183,26 +181,26 @@ export function InventoryHomePage() {
             <div className="flex items-start justify-between gap-3">
               <div
                 className={`rounded-xl p-3 ${
-                  canMoveInventory ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-500'
+                  canMoveInventory ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400'
                 }`}
               >
                 <ArrowLeftRight className="h-6 w-6" aria-hidden="true" />
               </div>
               <span
                 className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide ${
-                  canMoveInventory ? 'bg-purple-50 text-purple-800' : 'bg-gray-100 text-gray-600'
+                  canMoveInventory ? 'bg-purple-50 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
                 }`}
               >
                 {canMoveInventory ? 'MOVIMENTAÇÃO' : 'BLOQUEADO'}
               </span>
             </div>
-            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900">
+            <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
               MOVIMENTAÇÃO DE ESTOQUE
             </h2>
-            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600">
+            <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
               {canMoveInventory
                 ? 'Entradas, saídas e histórico do produto.'
-                : `Seu nível de acesso (Nível ${inventoryAccessLevel}) não permite registrar movimentações.`}
+                : `Seu nível de acesso (Nível ${String(inventoryAccessLevel)}) não permite registrar movimentações.`}
             </p>
             {canMoveInventory ? (
               <Button
@@ -238,7 +236,9 @@ export function InventoryHomePage() {
 
       <ImportInvoiceModal
         open={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
+        onClose={() => {
+          setIsImportModalOpen(false)
+        }}
       />
     </div>
   )

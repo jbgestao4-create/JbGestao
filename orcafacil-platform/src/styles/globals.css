@@ -85,7 +85,9 @@ html.dark .bg-white {
 
 html.dark .bg-gray-50,
 html.dark .bg-slate-50,
-html.dark .bg-zinc-50 {
+html.dark .bg-zinc-50,
+html.dark [class*='bg-[#F8FAFC]'],
+html.dark [class*='bg-[#f8fafc]'] {
   background-color: #0b0f19 !important;
 }
 
@@ -97,6 +99,44 @@ html.dark .bg-slate-100 {
 html.dark .bg-gray-200,
 html.dark .bg-slate-200 {
   background-color: #374151 !important;
+}
+
+/* Trata classes com opacidade no tema escuro para não gerarem caixas cinza claras */
+html.dark [class*='bg-gray-50/'],
+html.dark [class*='bg-slate-50/'],
+html.dark [class*='bg-zinc-50/'] {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+}
+
+
+/* Inset boxes / grids cinza dentro de cards e containers escuros */
+html.dark .bg-white .bg-gray-50,
+html.dark .bg-white .bg-slate-50,
+html.dark [class*="bg-[#111827]"] .bg-gray-50,
+html.dark [class*="dark:bg-[#111827]"] .bg-gray-50,
+html.dark [class*="dark:bg-slate-900"] .bg-gray-50,
+html.dark .bg-white [class*="bg-gray-50/"],
+html.dark [class*="dark:bg-[#111827]"] [class*="bg-gray-50/"] {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+/* Gradientes terminando em branco */
+html.dark .to-white,
+html.dark [class*="to-white"] {
+  --tw-gradient-to: #111827 !important;
+}
+
+html.dark [class*="from-emerald-50"] {
+  --tw-gradient-from: rgba(6, 78, 59, 0.3) !important;
+}
+
+html.dark [class*="from-blue-50"] {
+  --tw-gradient-from: rgba(30, 58, 138, 0.3) !important;
+}
+
+html.dark [class*="from-purple-50"] {
+  --tw-gradient-from: rgba(88, 28, 135, 0.3) !important;
 }
 
 /* Tipografia e Textos */

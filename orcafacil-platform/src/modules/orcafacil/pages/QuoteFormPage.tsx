@@ -478,7 +478,7 @@ export function QuoteFormPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-4 max-w-full">
       <div className="flex items-center gap-3">
         <Link
           to="/orcafacil/quotes"

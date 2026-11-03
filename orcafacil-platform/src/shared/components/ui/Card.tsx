@@ -7,7 +7,7 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
       <div
         ref={ref}
         className={cn(
-          'bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden',
+          'bg-white dark:bg-[#111827] rounded-xl border border-gray-200 dark:border-slate-800 shadow-xs overflow-hidden',
           className,
         )}
         {...props}
@@ -24,7 +24,7 @@ export function CardHeader({ className, children, ...props }: HTMLAttributes<HTM
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 sm:px-6',
+        'flex items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800 px-4 py-4 sm:px-6',
         className,
       )}
       {...props}

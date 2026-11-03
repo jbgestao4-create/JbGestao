@@ -12,6 +12,7 @@ export interface QuoteListItem {
   organizationId: UUID
   customerId: UUID
   customerName: string
+  customerPhone?: string | null
   quoteNumber: string
   status: QuoteStatus
   subtotal: string
@@ -165,7 +166,8 @@ export const quoteService = {
           created_at,
           updated_at,
           customers (
-            name
+            name,
+            phone
           )
         `,
         )
@@ -184,6 +186,7 @@ export const quoteService = {
           organizationId: q.organization_id,
           customerId: q.customer_id,
           customerName: cust?.name ?? 'Cliente Desconhecido',
+          customerPhone: cust?.phone ?? null,
           quoteNumber: q.quote_number,
           status: q.status as QuoteStatus,
           subtotal: q.subtotal,

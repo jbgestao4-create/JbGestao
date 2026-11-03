@@ -168,7 +168,9 @@ export function DashboardPage() {
 
   const handleSignOut = async () => {
     const result = await signOut()
-    if (result.success) navigate('/login')
+    if (result.success) {
+      void navigate('/login')
+    }
     return result
   }
 
@@ -180,21 +182,21 @@ export function DashboardPage() {
   const visibleModules = modules.filter((module) => canAccessDashboardModule(module.accessModule))
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100">
+      <header className="border-b border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827]">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 sm:px-7 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
               <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900">JB Gestão Comercial</h1>
-                <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                <h1 className="text-base font-bold text-slate-900 dark:text-white">JB Gestão Comercial</h1>
+                <span className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
                   v1.0
                 </span>
               </div>
-              <p className="text-xs text-slate-500">Módulo de Gestão Empresarial</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Módulo de Gestão Empresarial</p>
             </div>
           </div>
 
@@ -203,14 +205,14 @@ export function DashboardPage() {
               type="button"
               disabled
               aria-label={`Organização atual: ${currentOrganization?.name ?? 'Organização'}`}
-              className="inline-flex h-10 w-56 cursor-not-allowed items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left text-xs font-medium text-slate-500 opacity-80"
+              className="inline-flex h-10 w-56 cursor-not-allowed items-center gap-2 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-800/60 px-3 text-left text-xs font-medium text-slate-600 dark:text-slate-400 opacity-90 shadow-2xs"
             >
-              <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
+              <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
               <span className="truncate">{currentOrganization?.name ?? 'Organização'}</span>
             </button>
 
             <div
-              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600"
+              className="flex items-center gap-2 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 shadow-2xs"
               aria-live="polite"
             >
               <span
@@ -229,12 +231,12 @@ export function DashboardPage() {
               to="/"
               aria-label="Página Inicial"
               title="Página Inicial"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
             >
               <Home aria-hidden="true" className="h-4 w-4" />
             </Link>
 
-            <ThemeToggle className="h-11 w-11 rounded-lg" />
+            <ThemeToggle className="h-11 w-11 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] shadow-2xs" />
 
             <ProfileMenu
               variant="dashboard"
@@ -293,10 +295,10 @@ export function DashboardPage() {
         <section aria-labelledby="modules-heading">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 id="modules-heading" className="text-xl font-bold text-slate-900">
+              <h2 id="modules-heading" className="text-xl font-bold text-slate-900 dark:text-white">
                 Módulos do Sistema
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Clique em uma das opções para abrir a área operacional correspondente.
               </p>
             </div>
@@ -304,8 +306,10 @@ export function DashboardPage() {
               type="button"
               aria-expanded={isModulesExpanded}
               aria-controls="dashboard-modules"
-              onClick={() => setIsModulesExpanded((expanded) => !expanded)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              onClick={() => {
+                setIsModulesExpanded((expanded) => !expanded)
+              }}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               {isModulesExpanded ? 'Minimize Módulos' : 'Mostrar Módulos'}
               {isModulesExpanded ? (
@@ -322,16 +326,13 @@ export function DashboardPage() {
               isModulesExpanded ? '' : 'hidden'
             }`}
           >
-            {visibleModules.map((module, index) => {
+            {visibleModules.map((module) => {
               const Icon = module.icon
-              const isFeatured = index === 0 && module.isAvailable
 
               return (
                 <article
                   key={module.id}
-                  className={`flex min-h-[260px] flex-col rounded-xl border bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-shadow hover:shadow-sm ${
-                    isFeatured ? 'border-blue-700 ring-1 ring-blue-700/10' : 'border-slate-200'
-                  }`}
+                  className="flex min-h-[260px] flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-shadow hover:shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span
@@ -340,16 +341,16 @@ export function DashboardPage() {
                       <Icon aria-hidden="true" className="h-5 w-5" />
                     </span>
                     <div className="flex flex-col items-end gap-2">
-                      <span className="text-[10px] font-semibold tracking-wider text-slate-400">
+                      <span className="text-[10px] font-semibold tracking-wider text-slate-400 dark:text-slate-500">
                         {module.id}
                       </span>
                       {module.isAvailable ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                           Disponível
                         </span>
                       ) : (
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
+                        <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                           Em breve
                         </span>
                       )}
@@ -357,19 +358,15 @@ export function DashboardPage() {
                   </div>
 
                   <div className="mt-5">
-                    <h3 className="text-base font-bold text-slate-900">{module.title}</h3>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">{module.description}</p>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{module.title}</h3>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{module.description}</p>
                   </div>
 
                   <div className="mt-auto pt-5">
                     {module.isAvailable && module.path ? (
                       <Link
                         to={module.path}
-                        className={`flex min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
-                          isFeatured
-                            ? 'bg-blue-50 text-blue-800 hover:bg-blue-100'
-                            : 'bg-slate-50 text-slate-700 hover:bg-blue-100 hover:text-blue-800'
-                        }`}
+                        className="flex min-h-10 items-center justify-between gap-2 rounded-lg bg-slate-50 text-slate-700 hover:bg-blue-100 hover:text-blue-800 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-300 px-3 py-2 text-xs font-semibold transition-colors"
                       >
                         {module.action}
                         <ArrowRight aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -378,7 +375,7 @@ export function DashboardPage() {
                       <button
                         type="button"
                         disabled
-                        className="flex min-h-10 w-full cursor-not-allowed items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-400 transition-colors hover:bg-blue-100 hover:text-blue-800"
+                        className="flex min-h-10 w-full cursor-not-allowed items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-left text-xs font-semibold text-slate-400 dark:text-slate-500 transition-colors hover:bg-blue-100 hover:text-blue-800 dark:hover:bg-slate-800"
                       >
                         Indisponível nesta versão
                         <ArrowRight aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -391,7 +388,7 @@ export function DashboardPage() {
           </div>
         </section>
 
-        <footer className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-slate-200 pt-5 text-xs text-slate-400">
+        <footer className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-slate-200 dark:border-slate-800 pt-5 text-xs text-slate-400 dark:text-slate-500">
           <CircleDollarSign aria-hidden="true" className="h-3.5 w-3.5" />
           JB Gestão Comercial
           <span>•</span>

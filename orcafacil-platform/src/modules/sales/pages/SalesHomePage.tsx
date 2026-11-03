@@ -140,7 +140,7 @@ export function SalesHomePage() {
             </h2>
             <p className="text-sm sm:text-base leading-relaxed text-slate-300">
               Terminal em tela cheia (Full Screen) otimizado para operação por teclado e leitor de código de barras USB.
-              Atendimento ágil de balcão com conferência de caixa, troco em tempo real e fechamento oficial (Tecla 9).
+              Atendimento ágil de balcão com conferência de caixa, troco em tempo real e fechamento oficial (Tecla F12).
             </p>
           </div>
 

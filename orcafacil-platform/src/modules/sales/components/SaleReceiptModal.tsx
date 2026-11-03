@@ -17,6 +17,10 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
+      if (e.key === 'Enter' || e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        window.print()
+      }
     }
     if (open) {
       window.addEventListener('keydown', handleKeyDown)
@@ -169,11 +173,11 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
         {/* Rodapé com Ações */}
         <div className="border-t border-gray-100 p-4 bg-gray-50 flex items-center justify-between gap-3">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Fechar
+            [Esc] Fechar
           </Button>
           <Button type="button" size="sm" onClick={handlePrint} className="gap-2">
             <Printer className="h-4 w-4" />
-            Imprimir Comprovante
+            [Enter] Imprimir Comprovante
           </Button>
         </div>
       </div>

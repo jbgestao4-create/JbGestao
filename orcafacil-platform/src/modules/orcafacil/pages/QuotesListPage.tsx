@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { quoteService, type QuoteDetail, type QuoteListItem } from '../services/quote.service'
@@ -14,7 +14,18 @@ import { formatCurrency } from '@shared/utils/monetary'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { ListBox } from '@shared/components/ui/ListBox'
-import { FileSpreadsheet, Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react'
+import {
+  FileDown,
+  FileSpreadsheet,
+  MessageCircle,
+  Pencil,
+  Plus,
+  Printer,
+  Search,
+  Trash2,
+} from 'lucide-react'
+import { SendQuoteWhatsAppModal } from '../components/SendQuoteWhatsAppModal'
+import { downloadQuotePdf } from '../utils/quote-pdf'
 import type { QuoteStatus } from '@shared/types/database'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import type { ServiceResult } from '@shared/types/common'
@@ -39,8 +50,11 @@ export function QuotesListPage() {
   const [printError, setPrintError] = useState<string | null>(null)
   const [quoteToDelete, setQuoteToDelete] = useState<QuoteListItem | null>(null)
   const [quoteToPrint, setQuoteToPrint] = useState<QuoteDetail | null>(null)
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false)
+  const [quoteForWhatsApp, setQuoteForWhatsApp] = useState<QuoteListItem | null>(null)
+  const [quoteDetailForWhatsApp, setQuoteDetailForWhatsApp] = useState<QuoteDetail | null>(null)
 
-  const loadQuotes = async () => {
+  const loadQuotes = useCallback(async () => {
     if (!currentOrganization) return
     setIsLoading(true)
     const res = await quoteService.listQuotes(currentOrganization.id)
@@ -48,10 +62,24 @@ export function QuotesListPage() {
       setQuotes(res.data)
     }
     setIsLoading(false)
-  }
+  }, [currentOrganization])
 
   useEffect(() => {
-    void loadQuotes()
+    let isCancelled = false
+    if (!currentOrganization) return
+
+    void quoteService.listQuotes(currentOrganization.id).then((res) => {
+      if (!isCancelled) {
+        if (res.success) {
+          setQuotes(res.data)
+        }
+        setIsLoading(false)
+      }
+    })
+
+    return () => {
+      isCancelled = true
+    }
   }, [currentOrganization])
 
   useEffect(() => {
@@ -88,12 +116,38 @@ export function QuotesListPage() {
       return
     }
 
+    const isTransitioningFromDraftToSent = currentStatus === 'draft' && newStatus === 'sent'
+
     const res = await quoteService.updateStatus(currentOrganization.id, quoteId, newStatus)
     if (res.success) {
       await loadQuotes()
+
+      if (isTransitioningFromDraftToSent) {
+        const found = quotes.find((q) => q.id === quoteId) ?? null
+        setQuoteForWhatsApp(found)
+        const detailRes = await quoteService.getQuote(currentOrganization.id, quoteId)
+        if (detailRes.success) {
+          setQuoteDetailForWhatsApp(detailRes.data)
+        } else {
+          setQuoteDetailForWhatsApp(null)
+        }
+        setWhatsAppModalOpen(true)
+      }
     } else {
       setStatusError(res.error)
     }
+  }
+
+  const handleOpenWhatsApp = async (q: QuoteListItem) => {
+    if (!currentOrganization) return
+    setQuoteForWhatsApp(q)
+    const detailRes = await quoteService.getQuote(currentOrganization.id, q.id)
+    if (detailRes.success) {
+      setQuoteDetailForWhatsApp(detailRes.data)
+    } else {
+      setQuoteDetailForWhatsApp(null)
+    }
+    setWhatsAppModalOpen(true)
   }
 
   const handleDelete = async (): Promise<ServiceResult<void>> => {
@@ -120,6 +174,17 @@ export function QuotesListPage() {
     }
   }
 
+  const handleDownloadDirectPdf = async (quoteId: string) => {
+    if (!currentOrganization) return
+    setPrintError(null)
+    const res = await quoteService.getQuote(currentOrganization.id, quoteId)
+    if (res.success) {
+      downloadQuotePdf(res.data, { organizationName: currentOrganization.name })
+    } else {
+      setPrintError(res.error)
+    }
+  }
+
   const normalizedCustomerName = filterCustomerName.trim().toLocaleLowerCase('pt-BR')
   const normalizedQuoteNumber = filterQuoteNumber.trim().toLocaleLowerCase('pt-BR')
   const filteredQuotes = quotes.filter((quote) => {
@@ -136,7 +201,7 @@ export function QuotesListPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Orçamentos</h1>
@@ -163,7 +228,7 @@ export function QuotesListPage() {
         </div>
       )}
 
-      <div className="sticky top-0 z-20 -mx-4 space-y-3 border-b border-gray-200 bg-gray-50/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky top-0 z-20 -mx-4 space-y-3 border-b border-gray-200 dark:border-slate-800 bg-gray-50/95 dark:bg-[#0f172a]/95 px-4 py-3 shadow-xs backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {(['all', 'draft', 'sent', 'approved', 'completed', 'rejected', 'expired'] as const).map(
             (st) => {
@@ -177,7 +242,7 @@ export function QuotesListPage() {
                   className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                     filterStatus === st
                       ? 'bg-blue-600 text-white'
-                      : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
+                      : 'border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                   }`}
                 >
                   {label}
@@ -189,10 +254,10 @@ export function QuotesListPage() {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className="relative block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">Nome do cliente</span>
+            <span className="mb-1 block text-xs font-medium text-gray-600 dark:text-slate-300">Nome do cliente</span>
             <Search
               aria-hidden="true"
-              className="pointer-events-none absolute bottom-2.5 left-3 h-4 w-4 text-gray-400"
+              className="pointer-events-none absolute bottom-2.5 left-3 h-4 w-4 text-gray-400 dark:text-slate-500"
             />
             <input
               type="search"
@@ -202,11 +267,11 @@ export function QuotesListPage() {
               }}
               placeholder="Filtrar pelo cliente"
               aria-label="Filtrar orçamentos pelo nome do cliente"
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-10 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-9 pr-3 text-sm text-gray-700 dark:text-slate-200 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">
+            <span className="mb-1 block text-xs font-medium text-gray-600 dark:text-slate-300">
               Número do orçamento
             </span>
             <input
@@ -217,11 +282,11 @@ export function QuotesListPage() {
               }}
               placeholder="Ex.: ORC-2026"
               aria-label="Filtrar orçamentos pelo número"
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-10 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm text-gray-700 dark:text-slate-200 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">Data do orçamento</span>
+            <span className="mb-1 block text-xs font-medium text-gray-600 dark:text-slate-300">Data do orçamento</span>
             <input
               type="date"
               value={filterQuoteDate}
@@ -229,30 +294,30 @@ export function QuotesListPage() {
                 setFilterQuoteDate(event.target.value)
               }}
               aria-label="Filtrar orçamentos pela data do orçamento"
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-10 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm text-gray-700 dark:text-slate-200 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
         </div>
       </div>
 
-      <Card className="-mx-8">
+      <Card className="w-full">
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-8 text-center text-sm text-gray-500">Carregando orçamentos...</div>
+            <div className="p-8 text-center text-sm text-gray-500 dark:text-slate-400">Carregando orçamentos...</div>
           ) : filteredQuotes.length === 0 ? (
-            <div className="text-center py-12 text-sm text-gray-500">
-              <FileSpreadsheet className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+            <div className="text-center py-12 text-sm text-gray-500 dark:text-slate-400">
+              <FileSpreadsheet className="w-8 h-8 mx-auto text-gray-300 dark:text-slate-600 mb-2" />
               Nenhum orçamento encontrado com o filtro selecionado.{' '}
               <Link
                 to="/orcafacil/quotes/new"
-                className="text-blue-600 font-medium hover:underline"
+                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
               >
                 Criar novo orçamento
               </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1260px] table-fixed text-left text-sm text-gray-600">
+              <table className="w-full min-w-[1260px] table-fixed text-left text-sm text-gray-600 dark:text-slate-300">
                 <colgroup>
                   <col className="w-24" />
                   <col className="w-[148px]" />
@@ -264,7 +329,7 @@ export function QuotesListPage() {
                   <col className="w-24" />
                   <col className="w-[340px]" />
                 </colgroup>
-                <thead className="bg-gray-50/75 text-xs uppercase text-gray-400 font-semibold border-b border-gray-100">
+                <thead className="bg-gray-50/75 dark:bg-slate-800/60 text-xs uppercase text-gray-400 dark:text-slate-400 font-semibold border-b border-gray-100 dark:border-slate-800">
                   <tr>
                     <th className="px-3 py-3">Número</th>
                     <th className="px-3 py-3">Cliente</th>
@@ -277,34 +342,34 @@ export function QuotesListPage() {
                     <th className="px-3 py-3 text-right" aria-label="Ações" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                   {filteredQuotes.map((q) => {
                     const allowedNext = ALLOWED_STATUS_TRANSITIONS[q.status]
 
                     return (
-                      <tr key={q.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="break-all px-3 py-4 font-semibold text-gray-900">
+                      <tr key={q.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="break-all px-3 py-2.5 font-semibold text-gray-900 dark:text-white">
                           {q.quoteNumber}
                         </td>
-                        <td className="break-words px-3 py-4" title={q.customerName}>
+                        <td className="break-words px-3 py-2.5 text-gray-800 dark:text-slate-200" title={q.customerName}>
                           {q.customerName}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-right text-xs text-gray-500">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right text-xs text-gray-500 dark:text-slate-400">
                           {formatCurrency(q.subtotal)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-right text-xs text-red-600">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right text-xs text-red-600 dark:text-red-400">
                           {parseFloat(q.discount) > 0 ? `-${formatCurrency(q.discount)}` : '—'}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-right font-bold text-gray-900">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold text-gray-900 dark:text-white">
                           {formatCurrency(q.total)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-right text-xs text-gray-500">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right text-xs text-gray-500 dark:text-slate-400">
                           {new Date(q.createdAt).toLocaleDateString('pt-BR')}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-right text-xs text-gray-400">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right text-xs text-gray-400 dark:text-slate-500">
                           {q.validUntil ? new Date(q.validUntil).toLocaleDateString('pt-BR') : '—'}
                         </td>
-                        <td className="px-3 py-4">
+                        <td className="px-3 py-2.5">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeClasses(
                               q.status,
@@ -313,9 +378,9 @@ export function QuotesListPage() {
                             {getStatusLabel(q.status)}
                           </span>
                         </td>
-                        <td className="px-3 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {filterStatus !== 'all' && allowedNext.length > 0 && (
+                        <td className="px-3 py-2.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {allowedNext.length > 0 && (
                               <div className="w-36 text-left">
                                 <ListBox
                                   placeholder="Mudar status..."
@@ -340,30 +405,56 @@ export function QuotesListPage() {
                             {canEditQuote(q.status, userRole) && (
                               <Link
                                 to={`/orcafacil/quotes/${q.id}/edit`}
-                                className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                                className="inline-flex items-center gap-1.5 rounded p-1.5 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
                                 title="Editar orçamento"
                                 aria-label={`Editar orçamento ${q.quoteNumber}`}
                               >
                                 <Pencil className="w-4 h-4" />
                               </Link>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleOpenWhatsApp(q)
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                              title="Enviar cópia via WhatsApp"
+                              aria-label={`Enviar orçamento ${q.quoteNumber} via WhatsApp`}
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </button>
                             {isQuotePrintable(q.status) && (
-                              <button
-                                onClick={() => {
-                                  void handlePrint(q.id)
-                                }}
-                                className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer"
-                                title="Imprimir comprovante do orçamento"
-                                aria-label={`Imprimir comprovante do orçamento ${q.quoteNumber}`}
-                              >
-                                <Printer className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleDownloadDirectPdf(q.id)
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                                  title="Baixar arquivo PDF"
+                                  aria-label={`Baixar PDF do orçamento ${q.quoteNumber}`}
+                                >
+                                  <FileDown className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handlePrint(q.id)
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded p-1.5 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                  title="Imprimir comprovante do orçamento"
+                                  aria-label={`Imprimir comprovante do orçamento ${q.quoteNumber}`}
+                                >
+                                  <Printer className="w-4 h-4" />
+                                </button>
+                              </>
                             )}
                             <button
+                              type="button"
                               onClick={() => {
                                 setQuoteToDelete(q)
                               }}
-                              className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                              className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                               title="Excluir Orçamento"
                               aria-label={`Excluir orçamento ${q.quoteNumber}`}
                             >
@@ -380,6 +471,17 @@ export function QuotesListPage() {
           )}
         </CardContent>
       </Card>
+      <SendQuoteWhatsAppModal
+        open={whatsAppModalOpen}
+        quote={quoteForWhatsApp}
+        quoteDetail={quoteDetailForWhatsApp}
+        organizationName={currentOrganization?.name}
+        onClose={() => {
+          setWhatsAppModalOpen(false)
+          setQuoteForWhatsApp(null)
+          setQuoteDetailForWhatsApp(null)
+        }}
+      />
       <ConfirmActionDialog
         open={quoteToDelete !== null}
         title="Excluir orçamento?"

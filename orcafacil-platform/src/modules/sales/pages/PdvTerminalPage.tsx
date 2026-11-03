@@ -30,7 +30,13 @@ import {
   ChevronRight,
   Clock,
   DollarSign,
+  Hash,
   Lock,
+  Maximize,
+  Minimize,
+  Minus,
+  Plus,
+  Phone,
   Printer,
   QrCode,
   Receipt,
@@ -38,8 +44,19 @@ import {
   Store,
   Trash2,
   User,
+  Users,
   X,
 } from 'lucide-react'
+
+function getCustomerInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join('')
+    .toLocaleUpperCase()
+}
 
 interface CartItem {
   id: string
@@ -103,11 +120,118 @@ export function PdvTerminalPage() {
   const [closureError, setClosureError] = useState<string | null>(null)
   const [closedSessionReport, setClosedSessionReport] = useState<CashSession | null>(null)
 
+  // Modo Tela Cheia (Fullscreen)
+  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement))
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen()
+      } else {
+        await document.exitFullscreen()
+      }
+    } catch {
+      // Ignora restrições do navegador
+    }
+  }, [])
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => { document.removeEventListener('fullscreenchange', onFullscreenChange); }
+  }, [])
+
+  // Auto-fullscreen ao abrir a tela (com tentativa imediata e fallback na 1ª tecla/clique)
+  useEffect(() => {
+    const tryEnterFullscreen = async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen()
+        }
+      } catch {
+        // Silenciosamente capturado na primeira interação
+      }
+    }
+
+    void tryEnterFullscreen()
+
+    const handleFirstGesture = () => {
+      void tryEnterFullscreen()
+      window.removeEventListener('keydown', handleFirstGesture)
+      window.removeEventListener('pointerdown', handleFirstGesture)
+    }
+
+    window.addEventListener('keydown', handleFirstGesture, { once: true })
+    window.addEventListener('pointerdown', handleFirstGesture, { once: true })
+
+    return () => {
+      window.removeEventListener('keydown', handleFirstGesture)
+      window.removeEventListener('pointerdown', handleFirstGesture)
+    }
+  }, [])
+
+  // Dados do Cliente Selecionado
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => c.id === selectedCustomerId) || null,
+    [customers, selectedCustomerId],
+  )
+  const customerPhone = selectedCustomer?.phone || ''
+
   // Modais de Ação Rápida (Cliente, Desconto, Cancelar, Suprimento, Sangria)
   const [showCustomerModal, setShowCustomerModal] = useState(false)
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
+  const [customerSelectedIndex, setCustomerSelectedIndex] = useState(0)
+  const customerSearchInputRef = useRef<HTMLInputElement>(null)
+
+  const customerCandidates = useMemo(() => {
+    const list: Array<{ id: string; name: string; document?: string | null; phone?: string | null; isDefault?: boolean }> = [
+      { id: '', name: 'Consumidor Final', document: undefined, phone: undefined, isDefault: true },
+    ]
+    const query = customerSearchQuery.trim().toLowerCase()
+    const filtered = customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(query) ||
+        (c.document && c.document.includes(query)) ||
+        (c.phone && c.phone.includes(query)),
+    )
+    for (const c of filtered.slice(0, 25)) {
+      list.push({ id: c.id, name: c.name, document: c.document, phone: c.phone })
+    }
+    return list
+  }, [customers, customerSearchQuery])
+
   const [showDiscountModal, setShowDiscountModal] = useState(false)
   const [discountInput, setDiscountInput] = useState('')
+
+  // Quantidade para o Próximo Item (F9) — Multiplicar ou Subtrair
+  const [nextItemQuantity, setNextItemQuantity] = useState(0)
+  const [quantityOperation, setQuantityOperation] = useState<'multiply' | 'subtract'>('multiply')
+  const [showQuantityModal, setShowQuantityModal] = useState(false)
+  const [quantityInput, setQuantityInput] = useState('')
+  const [modalOperation, setModalOperation] = useState<'multiply' | 'subtract'>('multiply')
+
+  const handleOpenQuantityModal = () => {
+    setQuantityInput('')
+    setModalOperation('multiply')
+    setShowQuantityModal(true)
+  }
+
+  const handleConfirmQuantity = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const parsed = parseInt(quantityInput.replace(/\D/g, ''), 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      setNextItemQuantity(parsed)
+      setQuantityOperation(modalOperation)
+      pdvSound.playScan()
+    } else {
+      setNextItemQuantity(0)
+      setQuantityOperation('multiply')
+    }
+    setShowQuantityModal(false)
+    focusBarcodeInput()
+  }
   const [showCancelSaleModal, setShowCancelSaleModal] = useState(false)
   const [showMovementModal, setShowMovementModal] = useState(false)
   const [movementType, setMovementType] = useState<'supply' | 'bleed'>('supply')
@@ -122,8 +246,8 @@ export function PdvTerminalPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
+    const timer = setInterval(() => { setCurrentTime(new Date()); }, 1000)
+    return () => { clearInterval(timer); }
   }, [])
 
   // Carrega Sessão de Caixa Atual
@@ -182,10 +306,10 @@ export function PdvTerminalPage() {
   }, [])
 
   useEffect(() => {
-    if (session && !showPaymentModal && !showCloseModal && !showCustomerModal && !showDiscountModal && !showCancelSaleModal && !showMovementModal && !showReceiptModal && !closedSessionReport) {
+    if (session && !showPaymentModal && !showCloseModal && !showCustomerModal && !showDiscountModal && !showCancelSaleModal && !showMovementModal && !showQuantityModal && !showReceiptModal && !closedSessionReport) {
       focusBarcodeInput()
     }
-  }, [session, showPaymentModal, showCloseModal, showCustomerModal, showDiscountModal, showCancelSaleModal, showMovementModal, showReceiptModal, closedSessionReport, focusBarcodeInput])
+  }, [session, showPaymentModal, showCloseModal, showCustomerModal, showDiscountModal, showCancelSaleModal, showMovementModal, showQuantityModal, showReceiptModal, closedSessionReport, focusBarcodeInput])
 
   // Cálculo dos Totais
   const subtotal = useMemo(() => {
@@ -225,12 +349,12 @@ export function PdvTerminalPage() {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (session && session.status === 'open') {
         e.preventDefault()
-        e.returnValue = 'O caixa do PDV continua aberto. É obrigatório realizar o fechamento do caixa (Tecla 9) antes de sair.'
+        e.returnValue = 'O caixa do PDV continua aberto. É obrigatório realizar o fechamento do caixa (Tecla F12) antes de sair.'
         return e.returnValue
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    return () => { window.removeEventListener('beforeunload', handleBeforeUnload); }
   }, [session])
 
   // Abertura de Caixa
@@ -264,7 +388,12 @@ export function PdvTerminalPage() {
   const handleScanBarcode = (e: React.FormEvent) => {
     e.preventDefault()
     const code = barcodeQuery.trim()
-    if (!code) return
+    if (!code) {
+      if (cart.length > 0) {
+        handleOpenPayment()
+      }
+      return
+    }
 
     // Busca exata por barcode, depois sku, depois nome
     const found = inventoryItems.find((item) => {
@@ -283,16 +412,73 @@ export function PdvTerminalPage() {
       return
     }
 
+    const qtyModifier = nextItemQuantity > 0 ? nextItemQuantity : 1
+    const isSubtraction = nextItemQuantity > 0 && quantityOperation === 'subtract'
+
+    // OPERAÇÃO SUBTRAIR DA PRÓXIMA LEITURA (F9)
+    if (isSubtraction) {
+      const existingIndex = cart.findIndex((item) => item.inventoryItemId === found.id)
+      if (existingIndex < 0) {
+        pdvSound.playError()
+        setScanFeedback({
+          type: 'error',
+          message: `O item "${found.name}" não está no carrinho para subtrair.`,
+        })
+        setBarcodeQuery('')
+        setNextItemQuantity(0)
+        setQuantityOperation('multiply')
+        return
+      }
+
+      const current = cart[existingIndex]
+      const currentQty = parseInt(current.quantity, 10)
+
+      pdvSound.playScan()
+
+      let updatedCart: CartItem[]
+      if (currentQty <= qtyModifier) {
+        // Remove totalmente o item do carrinho
+        updatedCart = cart.filter((_, idx) => idx !== existingIndex)
+        setScanFeedback({
+          type: 'success',
+          message: `Item "${found.name}" removido do carrinho (-${currentQty} ${found.unit}).`,
+        })
+        setLastScannedItem(null)
+      } else {
+        // Reduz a quantidade
+        const newQty = String(currentQty - qtyModifier)
+        const newTotal = calculateItemTotal(newQty, current.unitPrice)
+        const updatedItem = { ...current, quantity: newQty, total: newTotal }
+        updatedCart = [...cart]
+        updatedCart[existingIndex] = updatedItem
+        setLastScannedItem(updatedItem)
+        setScanFeedback({
+          type: 'success',
+          message: `-${qtyModifier} ${found.name} (Restam ${newQty} ${found.unit}).`,
+        })
+      }
+
+      setCart(updatedCart)
+      setBarcodeQuery('')
+      setNextItemQuantity(0) // Volta para zero na próxima leitura
+      setQuantityOperation('multiply')
+      focusBarcodeInput()
+      return
+    }
+
+    // OPERAÇÃO MULTIPLICAR / ADICIONAR (COMPORTAMENTO PADRÃO)
+    const qtyToAdd = qtyModifier
+
     // Valida estoque disponível
     const existingIndex = cart.findIndex((item) => item.inventoryItemId === found.id)
     const currentQtyInCart = existingIndex >= 0 ? parseInt(cart[existingIndex].quantity, 10) : 0
     const available = parseFloat(found.quantityOnHand)
 
-    if (!found.allowNegativeStock && available < currentQtyInCart + 1) {
+    if (!found.allowNegativeStock && available < currentQtyInCart + qtyToAdd) {
       pdvSound.playError()
       setScanFeedback({
         type: 'error',
-        message: `Estoque insuficiente para "${found.name}". Saldo disponível: ${found.quantityOnHand} ${found.unit}.`,
+        message: `Estoque insuficiente para "${found.name}". Saldo disponível: ${found.quantityOnHand} ${found.unit} (solicitado: ${currentQtyInCart + qtyToAdd}).`,
       })
       setBarcodeQuery('')
       return
@@ -306,22 +492,23 @@ export function PdvTerminalPage() {
     if (existingIndex >= 0) {
       // Incrementa quantidade
       const current = cart[existingIndex]
-      const newQty = String(parseInt(current.quantity, 10) + 1)
+      const newQty = String(parseInt(current.quantity, 10) + qtyToAdd)
       const newTotal = calculateItemTotal(newQty, current.unitPrice)
       scannedItem = { ...current, quantity: newQty, total: newTotal }
 
       updatedCart = [...cart]
       updatedCart[existingIndex] = scannedItem
     } else {
-      // Novo item
+      // Novo item com quantidade definida pelo F9 (ou 1 por padrão)
+      const initialQtyStr = String(qtyToAdd)
       scannedItem = {
         id: `pdv-item-${Date.now()}-${Math.random().toString().slice(2, 6)}`,
         inventoryItemId: found.id,
         description: found.name,
         unit: found.unit || 'UN',
-        quantity: '1',
+        quantity: initialQtyStr,
         unitPrice: found.unitPrice,
-        total: calculateItemTotal('1', found.unitPrice),
+        total: calculateItemTotal(initialQtyStr, found.unitPrice),
         barcode: found.barcode || undefined,
         sku: found.sku || undefined,
         availableStock: found.quantityOnHand,
@@ -334,9 +521,11 @@ export function PdvTerminalPage() {
     setLastScannedItem(scannedItem)
     setScanFeedback({
       type: 'success',
-      message: `+1 ${found.name} (${formatCurrency(found.unitPrice)})`,
+      message: `+${qtyToAdd} ${found.name} (${formatCurrency(scannedItem.total)})`,
     })
     setBarcodeQuery('')
+    setNextItemQuantity(0) // Volta para zero na próxima leitura
+    setQuantityOperation('multiply')
     focusBarcodeInput()
   }
 
@@ -472,6 +661,10 @@ export function PdvTerminalPage() {
       setClosedSessionReport(res.data)
       setShowCloseModal(false)
       setSession(null)
+      // Dispara automaticamente a impressão do comprovante de encerramento
+      setTimeout(() => {
+        window.print()
+      }, 400)
     } else {
       pdvSound.playError()
       setClosureError(res.error)
@@ -515,7 +708,10 @@ export function PdvTerminalPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement
-      const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || activeEl?.tagName === 'SELECT'
+      const isInput =
+        activeEl?.tagName === 'INPUT' ||
+        activeEl?.tagName === 'TEXTAREA' ||
+        activeEl?.tagName === 'SELECT'
 
       // Quando nenhum modal estiver aberto
       const anyModalOpen =
@@ -526,10 +722,26 @@ export function PdvTerminalPage() {
         showDiscountModal ||
         showCancelSaleModal ||
         showMovementModal ||
+        showQuantityModal ||
         showReceiptModal ||
         Boolean(closedSessionReport)
 
       if (!anyModalOpen) {
+        // F11 — Alternar Tela Cheia
+        if (e.key === 'F11') {
+          e.preventDefault()
+          void toggleFullscreen()
+          return
+        }
+
+        // F12 — Fechamento de Caixa
+        if (e.key === 'F12') {
+          e.preventDefault()
+          e.stopPropagation()
+          handleOpenCloseSession()
+          return
+        }
+
         // Tecla 1 — Iniciar leitura / Foco no código de barras
         if (e.key === '1' && !isInput) {
           e.preventDefault()
@@ -537,18 +749,28 @@ export function PdvTerminalPage() {
           return
         }
 
-        // Tecla 9 — Fechamento de Caixa
-        if (e.key === '9' && !isInput) {
-          e.preventDefault()
-          handleOpenCloseSession()
-          return
+        // Enter — Finalizar Venda (quando campo de barcode vazio e carrinho com itens)
+        if (
+          e.key === 'Enter' &&
+          (!isInput || (activeEl === barcodeInputRef.current && barcodeQuery.trim() === ''))
+        ) {
+          if (cart.length > 0) {
+            e.preventDefault()
+            handleOpenPayment()
+            return
+          }
         }
 
-        // Enter — Finalizar Venda
-        if (e.key === 'Enter' && !isInput) {
-          e.preventDefault()
-          handleOpenPayment()
-          return
+        // Delete — Remover último item registrado
+        if (
+          e.key === 'Delete' &&
+          (!isInput || (activeEl === barcodeInputRef.current && barcodeQuery.trim() === ''))
+        ) {
+          if (lastScannedItem) {
+            e.preventDefault()
+            handleRemoveItem(lastScannedItem.id)
+            return
+          }
         }
 
         // F2 — Selecionar Cliente
@@ -588,26 +810,95 @@ export function PdvTerminalPage() {
           setShowMovementModal(true)
           return
         }
+
+        // F9 — Definir Quantidade do Próximo Item (Multiplicar ou Subtrair)
+        if (e.key === 'F9') {
+          e.preventDefault()
+          handleOpenQuantityModal()
+          return
+        }
+
+        // Escape — Limpar código ou refocar leitor
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          if (barcodeQuery) {
+            setBarcodeQuery('')
+          } else {
+            focusBarcodeInput()
+          }
+          return
+        }
+      } else if (showCustomerModal) {
+        // Navegação de clientes por teclado (F2)
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setCustomerSelectedIndex((prev) => Math.min(customerCandidates.length - 1, prev + 1))
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setCustomerSelectedIndex((prev) => Math.max(0, prev - 1))
+          return
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          const chosen = customerCandidates[customerSelectedIndex]
+          if (chosen) {
+            if (chosen.isDefault) {
+              setSelectedCustomerId('')
+              setCustomerName('Consumidor Final')
+              setCustomerDocument('')
+            } else {
+              setSelectedCustomerId(chosen.id)
+              setCustomerName(chosen.name)
+              setCustomerDocument(chosen.document || '')
+            }
+            setShowCustomerModal(false)
+            focusBarcodeInput()
+          }
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowCustomerModal(false)
+          focusBarcodeInput()
+          return
+        }
       } else if (showPaymentModal) {
-        // Atalhos do Modal de Pagamento: D (Dinheiro), P (Pix), C (Cartão)
-        if (!showCardTypeSelection) {
-          if (e.key.toLowerCase() === 'd' && !isInput) {
+        // Atalhos do Modal de Pagamento: D (Dinheiro), P (Pix), C (Cartão), Enter (Confirmar), Escape (Cancelar)
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          void handleConfirmSale()
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowPaymentModal(false)
+          setShowCardTypeSelection(false)
+          focusBarcodeInput()
+          return
+        }
+
+        const isTypingAmount = activeEl?.getAttribute('data-money-input') === 'true'
+
+        if (!showCardTypeSelection && !isTypingAmount) {
+          if (e.key.toLowerCase() === 'd') {
             e.preventDefault()
             setSelectedPaymentMethod('money')
             return
           }
-          if (e.key.toLowerCase() === 'p' && !isInput) {
+          if (e.key.toLowerCase() === 'p') {
             e.preventDefault()
             setSelectedPaymentMethod('pix')
             return
           }
-          if (e.key.toLowerCase() === 'c' && !isInput) {
+          if (e.key.toLowerCase() === 'c') {
             e.preventDefault()
             setSelectedPaymentMethod('credit_card')
             setShowCardTypeSelection(true)
             return
           }
-        } else {
+        } else if (showCardTypeSelection) {
           // Submenu Cartão: C (Crédito), D (Débito)
           if (e.key.toLowerCase() === 'c') {
             e.preventDefault()
@@ -622,19 +913,99 @@ export function PdvTerminalPage() {
             return
           }
         }
-
+      } else if (showCloseModal) {
         if (e.key === 'Escape') {
           e.preventDefault()
-          setShowPaymentModal(false)
-          setShowCardTypeSelection(false)
+          setShowCloseModal(false)
           focusBarcodeInput()
+          return
+        }
+        if (e.key === 'Enter' && activeEl?.tagName !== 'TEXTAREA') {
+          e.preventDefault()
+          void handleConfirmCloseSession()
+          return
+        }
+      } else if (closedSessionReport) {
+        if (e.key === 'Enter' || e.key.toLowerCase() === 'p') {
+          e.preventDefault()
+          window.print()
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          navigate('/orcafacil/sales')
+          return
+        }
+      } else if (showDiscountModal) {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          setDiscount(discountInput)
+          setShowDiscountModal(false)
+          focusBarcodeInput()
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowDiscountModal(false)
+          focusBarcodeInput()
+          return
+        }
+      } else if (showCancelSaleModal) {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          setCart([])
+          setDiscount('0,00')
+          setLastScannedItem(null)
+          setShowCancelSaleModal(false)
+          pdvSound.playError()
+          focusBarcodeInput()
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowCancelSaleModal(false)
+          focusBarcodeInput()
+          return
+        }
+      } else if (showMovementModal) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowMovementModal(false)
+          focusBarcodeInput()
+          return
+        }
+      } else if (showQuantityModal) {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          handleConfirmQuantity()
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowQuantityModal(false)
+          focusBarcodeInput()
+          return
+        }
+        if (e.key.toLowerCase() === 'm') {
+          e.preventDefault()
+          setModalOperation('multiply')
+          return
+        }
+        if (e.key.toLowerCase() === 's') {
+          e.preventDefault()
+          setModalOperation('subtract')
+          return
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault()
+          setModalOperation((prev) => (prev === 'multiply' ? 'subtract' : 'multiply'))
           return
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => { window.removeEventListener('keydown', handleKeyDown); }
   }, [
     showPaymentModal,
     showCloseModal,
@@ -643,12 +1014,24 @@ export function PdvTerminalPage() {
     showDiscountModal,
     showCancelSaleModal,
     showMovementModal,
+    showQuantityModal,
     showReceiptModal,
+    quantityInput,
+    modalOperation,
     closedSessionReport,
     showCardTypeSelection,
+    customerCandidates,
+    customerSelectedIndex,
     cart,
     discount,
+    discountInput,
+    barcodeQuery,
+    lastScannedItem,
     focusBarcodeInput,
+    handleConfirmSale,
+    handleConfirmCloseSession,
+    toggleFullscreen,
+    navigate,
   ])
 
   // Dados de conciliação para o fechamento
@@ -706,7 +1089,25 @@ export function PdvTerminalPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-3 text-xs">
+          <button
+            type="button"
+            onClick={() => { void toggleFullscreen(); }}
+            title={isFullscreen ? 'Sair da Tela Cheia [F11]' : 'Tela Cheia [F11]'}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-2.5 py-1.5 text-slate-300 border border-slate-700/50 transition-colors"
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize className="h-3.5 w-3.5 text-amber-400" />
+                <span className="hidden sm:inline font-mono">Normal [F11]</span>
+              </>
+            ) : (
+              <>
+                <Maximize className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="hidden sm:inline font-mono">Tela Cheia [F11]</span>
+              </>
+            )}
+          </button>
           <div className="hidden sm:flex items-center gap-2 rounded-lg bg-slate-800/80 px-3 py-1.5 text-slate-300 border border-slate-700/50">
             <User className="h-3.5 w-3.5 text-blue-400" />
             <span>Cliente: <b className="text-white">{customerName}</b></span>
@@ -727,6 +1128,48 @@ export function PdvTerminalPage() {
         <section className="lg:col-span-8 flex flex-col gap-4 overflow-hidden">
           {/* CAMPO DE LEITURA DE CÓDIGO DE BARRAS */}
           <div className="rounded-2xl border-2 border-emerald-500/40 bg-slate-900 p-3 shadow-lg relative">
+            <div className="flex items-center justify-between pb-1.5 px-1 text-xs text-slate-400">
+              <span className="font-semibold flex items-center gap-1.5">
+                <Barcode className="h-4 w-4 text-emerald-400" />
+                Leitor de Código de Barras / SKU
+              </span>
+              {nextItemQuantity > 0 ? (
+                <span
+                  className={`flex items-center gap-1.5 font-bold px-2.5 py-0.5 rounded-md border font-mono text-xs animate-pulse ${
+                    quantityOperation === 'subtract'
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                  }`}
+                >
+                  {quantityOperation === 'subtract' ? (
+                    <>
+                      <Minus className="h-3 w-3" />
+                      <span>Subtrair F9: <b>-{nextItemQuantity}x</b> no próximo produto</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3 w-3" />
+                      <span>Multiplicar F9: <b>+{nextItemQuantity}x</b> no próximo produto</span>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNextItemQuantity(0)
+                      setQuantityOperation('multiply')
+                    }}
+                    className="ml-1 text-slate-400 hover:text-white"
+                    title="Cancelar operação [Esc]"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ) : (
+                <span className="text-[11px] text-slate-500">
+                  Pressione <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-400 font-mono font-bold">F9</kbd> para Quantidade (+ / -)
+                </span>
+              )}
+            </div>
             <form onSubmit={handleScanBarcode} className="relative flex items-center">
               <div className="absolute left-3.5 flex items-center pointer-events-none text-emerald-400">
                 <Barcode className="h-6 w-6 animate-pulse" />
@@ -735,7 +1178,7 @@ export function PdvTerminalPage() {
                 ref={barcodeInputRef}
                 type="text"
                 value={barcodeQuery}
-                onChange={(e) => setBarcodeQuery(e.target.value)}
+                onChange={(e) => { setBarcodeQuery(e.target.value); }}
                 placeholder="Pressione [1] ou aponte o leitor de código de barras / digite o SKU..."
                 className="w-full rounded-xl bg-slate-950 py-3.5 pl-12 pr-28 text-base font-semibold text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 tracking-wide"
                 autoComplete="off"
@@ -830,7 +1273,7 @@ export function PdvTerminalPage() {
                           <td className="py-3 px-3 text-center">
                             <button
                               type="button"
-                              onClick={() => handleRemoveItem(item.id)}
+                              onClick={() => { handleRemoveItem(item.id); }}
                               title="Remover Item"
                               className="rounded-lg p-1 text-slate-500 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
                             >
@@ -847,8 +1290,56 @@ export function PdvTerminalPage() {
           </div>
         </section>
 
-        {/* COLUNA DIREITA: DISPLAY DE VALORES, ÚLTIMO ITEM E BOTÃO FINALIZAR (4/12) */}
+        {/* COLUNA DIREITA: DISPLAY DE VALORES, CLIENTE, ÚLTIMO ITEM E BOTÃO FINALIZAR (4/12) */}
         <section className="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
+          {/* CAIXA DE IDENTIFICAÇÃO DO CLIENTE */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-md">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-blue-400" />
+                Cliente Selecionado
+              </span>
+              <button
+                type="button"
+                onClick={() => { setShowCustomerModal(true); }}
+                className="text-[11px] font-mono text-blue-400 hover:text-blue-300 font-semibold bg-blue-500/10 hover:bg-blue-500/20 px-2 py-0.5 rounded border border-blue-500/30 transition-colors"
+                title="Pressione F2 para selecionar ou alterar o cliente"
+              >
+                [F2] Alterar
+              </button>
+            </div>
+
+            <div className="mt-3 flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 font-bold border border-blue-500/30 text-sm">
+                {getCustomerInitials(customerName)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-white truncate" title={customerName}>
+                  {customerName}
+                </h3>
+                <div className="mt-1 flex flex-col gap-0.5 text-xs">
+                  {customerPhone ? (
+                    <div className="flex items-center gap-1.5 text-emerald-400 font-mono">
+                      <Phone className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{customerPhone}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                      <Phone className="h-3 w-3 shrink-0 opacity-40" />
+                      <span>Sem telefone informado</span>
+                    </div>
+                  )}
+
+                  {customerDocument ? (
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      Doc: {customerDocument}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ÚLTIMO PRODUTO BIPADO */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-md">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -944,7 +1435,7 @@ export function PdvTerminalPage() {
 
           <button
             type="button"
-            onClick={() => setShowCustomerModal(true)}
+            onClick={() => { setShowCustomerModal(true); }}
             className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
           >
             <kbd className="rounded bg-blue-500/20 px-1 text-blue-400 font-bold">F2</kbd>
@@ -998,9 +1489,32 @@ export function PdvTerminalPage() {
             <kbd className="rounded bg-purple-500/20 px-1 text-purple-400 font-bold">F8</kbd>
             <span>Sangria</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleOpenQuantityModal}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold border transition-colors ${
+              nextItemQuantity > 0
+                ? quantityOperation === 'subtract'
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-xs'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-xs'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+            }`}
+          >
+            <kbd className={`rounded px-1 font-bold ${
+              quantityOperation === 'subtract' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
+            }`}>
+              F9
+            </kbd>
+            <span>
+              {nextItemQuantity > 0
+                ? `${quantityOperation === 'subtract' ? 'Subtrair' : 'Multiplicar'} (${nextItemQuantity}x)`
+                : 'Quantidade'}
+            </span>
+          </button>
         </div>
 
-        {/* ATALHO TECLA 9: FECHAMENTO DE CAIXA */}
+        {/* ATALHO TECLA F12: FECHAMENTO DE CAIXA */}
         <div className="font-mono">
           <button
             type="button"
@@ -1008,7 +1522,7 @@ export function PdvTerminalPage() {
             className="flex items-center gap-2 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 px-4 py-2 text-rose-300 font-bold border border-rose-600/50 shadow-md transition-all"
           >
             <Lock className="h-4 w-4 text-rose-400" />
-            <kbd className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-300 font-bold">9</kbd>
+            <kbd className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-300 font-bold">F12</kbd>
             <span>FECHAMENTO DE CAIXA</span>
           </button>
         </div>
@@ -1066,7 +1580,7 @@ export function PdvTerminalPage() {
                   type="text"
                   autoFocus
                   value={openingBalanceInput}
-                  onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                  onChange={(e) => { setOpeningBalanceInput(e.target.value); }}
                   placeholder="0,00"
                   className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2.5 text-lg font-bold text-emerald-400 font-mono border border-slate-800 focus:border-emerald-500 focus:outline-hidden"
                 />
@@ -1102,7 +1616,7 @@ export function PdvTerminalPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowPaymentModal(false)}
+                onClick={() => { setShowPaymentModal(false); }}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
               >
                 <X className="h-5 w-5" />
@@ -1225,7 +1739,7 @@ export function PdvTerminalPage() {
                       type="text"
                       autoFocus
                       value={amountReceivedInput}
-                      onChange={(e) => setAmountReceivedInput(e.target.value)}
+                      onChange={(e) => { setAmountReceivedInput(e.target.value); }}
                       placeholder="0,00"
                       className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-white border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
                     />
@@ -1278,7 +1792,7 @@ export function PdvTerminalPage() {
             <div className="pt-4 border-t border-slate-800 flex gap-2">
               <button
                 type="button"
-                onClick={() => setShowPaymentModal(false)}
+                onClick={() => { setShowPaymentModal(false); }}
                 className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
               >
                 [Esc] Cancelar
@@ -1315,7 +1829,7 @@ export function PdvTerminalPage() {
                   <Lock className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Fechamento de Caixa — Tecla 9</h3>
+                  <h3 className="text-lg font-bold text-white">Fechamento de Caixa — Tecla F12</h3>
                   <p className="text-xs text-slate-400">
                     Conferência obrigatória dos valores físicos antes de encerrar o turno
                   </p>
@@ -1429,7 +1943,7 @@ export function PdvTerminalPage() {
                     type="text"
                     autoFocus
                     value={countedMoneyInput}
-                    onChange={(e) => setCountedMoneyInput(e.target.value)}
+                    onChange={(e) => { setCountedMoneyInput(e.target.value); }}
                     placeholder="0,00"
                     className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-emerald-400 border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
                   />
@@ -1486,7 +2000,7 @@ export function PdvTerminalPage() {
                       <textarea
                         rows={2}
                         value={closureJustification}
-                        onChange={(e) => setClosureJustification(e.target.value)}
+                        onChange={(e) => { setClosureJustification(e.target.value); }}
                         placeholder="Explique o motivo da sobra ou falta de caixa encontrada..."
                         className="mt-1 w-full rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:border-amber-500 focus:outline-hidden"
                       />
@@ -1498,7 +2012,7 @@ export function PdvTerminalPage() {
                       <input
                         type="text"
                         value={supervisorAuthInput}
-                        onChange={(e) => setSupervisorAuthInput(e.target.value)}
+                        onChange={(e) => { setSupervisorAuthInput(e.target.value); }}
                         placeholder="Nome ou código do supervisor autorizador"
                         className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-1.5 text-xs text-white border border-slate-700 focus:outline-hidden"
                       />
@@ -1567,7 +2081,7 @@ export function PdvTerminalPage() {
             <div className="pt-2 flex gap-2">
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => { window.print(); }}
                 className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5"
               >
                 <Printer className="h-4 w-4" />
@@ -1592,7 +2106,10 @@ export function PdvTerminalPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">[F2] Selecionar Cliente</h3>
+              <div>
+                <h3 className="text-base font-bold text-white">[F2] Selecionar Cliente</h3>
+                <p className="text-[11px] text-slate-400">Navegue com [↑/↓] e pressione [Enter] para selecionar</p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1607,57 +2124,77 @@ export function PdvTerminalPage() {
 
             <div className="my-3">
               <input
+                ref={customerSearchInputRef}
                 type="text"
                 autoFocus
-                placeholder="Buscar cliente por nome ou CPF..."
+                placeholder="Buscar por nome, CPF ou telefone..."
                 value={customerSearchQuery}
-                onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                className="w-full rounded-xl bg-slate-950 px-3 py-2 text-xs text-white border border-slate-700 focus:outline-hidden"
+                onChange={(e) => { setCustomerSearchQuery(e.target.value); }}
+                className="w-full rounded-xl bg-slate-950 px-3 py-2 text-xs text-white border border-slate-700 focus:border-blue-500 focus:outline-hidden"
               />
             </div>
 
             <div className="flex-1 overflow-y-auto divide-y divide-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCustomerId('')
-                  setCustomerName('Consumidor Final')
-                  setCustomerDocument('')
-                  setShowCustomerModal(false)
-                  focusBarcodeInput()
-                }}
-                className="w-full py-2.5 px-3 text-left hover:bg-slate-800/50 flex items-center justify-between text-emerald-400 font-semibold"
-              >
-                <span>Consumidor Final (Padrão)</span>
-                <span className="text-[10px] text-slate-500">Sem cadastro</span>
-              </button>
-
-              {customers
-                .filter((c) =>
-                  c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-                  (c.document && c.document.includes(customerSearchQuery)),
-                )
-                .slice(0, 15)
-                .map((cust) => (
+              {customerCandidates.map((candidate, idx) => {
+                const isSelected = idx === customerSelectedIndex
+                return (
                   <button
-                    key={cust.id}
+                    key={candidate.id || 'default'}
                     type="button"
                     onClick={() => {
-                      setSelectedCustomerId(cust.id)
-                      setCustomerName(cust.name)
-                      setCustomerDocument(cust.document || '')
+                      if (candidate.isDefault) {
+                        setSelectedCustomerId('')
+                        setCustomerName('Consumidor Final')
+                        setCustomerDocument('')
+                      } else {
+                        setSelectedCustomerId(candidate.id)
+                        setCustomerName(candidate.name)
+                        setCustomerDocument(candidate.document || '')
+                      }
                       setShowCustomerModal(false)
                       focusBarcodeInput()
                     }}
-                    className="w-full py-2.5 px-3 text-left hover:bg-slate-800/50 flex items-center justify-between text-slate-200"
+                    className={`w-full py-2.5 px-3 text-left transition-colors flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-blue-600/20 text-blue-200 border-l-4 border-blue-500 pl-2 font-medium'
+                        : 'hover:bg-slate-800/50 text-slate-200'
+                    }`}
                   >
                     <div>
-                      <p className="font-semibold">{cust.name}</p>
-                      {cust.document && <p className="text-[11px] text-slate-400">{cust.document}</p>}
+                      <p className="font-semibold flex items-center gap-1.5">
+                        {candidate.name}
+                        {candidate.isDefault && (
+                          <span className="text-[10px] text-emerald-400 font-mono font-normal">(Padrão)</span>
+                        )}
+                      </p>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                        {candidate.document && <span>CPF: {candidate.document}</span>}
+                        {candidate.phone && (
+                          <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
+                            <Phone className="h-2.5 w-2.5" />
+                            {candidate.phone}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-slate-600" />
+                    <ChevronRight className={`h-4 w-4 ${isSelected ? 'text-blue-400' : 'text-slate-600'}`} />
                   </button>
-                ))}
+                )
+              })}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-[11px] text-slate-400 font-mono">
+              <span>[↑/↓] Navegar • [Enter] Selecionar</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCustomerModal(false)
+                  focusBarcodeInput()
+                }}
+                className="hover:text-white"
+              >
+                [Esc] Fechar
+              </button>
             </div>
           </div>
         </div>
@@ -1676,7 +2213,7 @@ export function PdvTerminalPage() {
                 type="text"
                 autoFocus
                 value={discountInput}
-                onChange={(e) => setDiscountInput(e.target.value)}
+                onChange={(e) => { setDiscountInput(e.target.value); }}
                 placeholder="0,00"
                 className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-rose-400 border border-slate-700 focus:outline-hidden"
               />
@@ -1766,7 +2303,7 @@ export function PdvTerminalPage() {
                 type="text"
                 autoFocus
                 value={movementAmountInput}
-                onChange={(e) => setMovementAmountInput(e.target.value)}
+                onChange={(e) => { setMovementAmountInput(e.target.value); }}
                 placeholder="0,00"
                 className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-white border border-slate-700 focus:outline-hidden"
               />
@@ -1776,7 +2313,7 @@ export function PdvTerminalPage() {
               <input
                 type="text"
                 value={movementReasonInput}
-                onChange={(e) => setMovementReasonInput(e.target.value)}
+                onChange={(e) => { setMovementReasonInput(e.target.value); }}
                 placeholder={movementType === 'supply' ? 'Ex: Reforço de troco da manhã' : 'Ex: Recolhimento para o cofre'}
                 className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-xs text-white border border-slate-700 focus:outline-hidden"
               />
@@ -1804,6 +2341,132 @@ export function PdvTerminalPage() {
         </div>
       )}
 
+      
+      {/* ============================================================== */}
+      {/* MODAL DE QUANTIDADE (F9)                                       */}
+      {/* ============================================================== */}
+      {showQuantityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className={`rounded-lg p-1.5 ${
+                  modalOperation === 'subtract' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
+                }`}>
+                  <Hash className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">[F9] Quantidade de Itens</h3>
+                  <p className="text-[11px] text-slate-400">Defina a operação e a quantidade para a próxima leitura</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuantityModal(false)
+                  focusBarcodeInput()
+                }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmQuantity} className="space-y-4">
+              {/* SELEÇÃO DA OPERAÇÃO: MULTIPLICAR OU SUBTRAIR */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">
+                  Operação para a próxima leitura:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalOperation('multiply')}
+                    className={`flex items-center justify-center gap-2 rounded-xl p-3 border font-bold text-xs transition-all ${
+                      modalOperation === 'multiply'
+                        ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300 ring-2 ring-emerald-500/40'
+                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <div className="text-left">
+                      <p className="leading-none">Multiplicar</p>
+                      <span className="text-[10px] font-normal text-slate-400">[M] Próxima leitura</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalOperation('subtract')}
+                    className={`flex items-center justify-center gap-2 rounded-xl p-3 border font-bold text-xs transition-all ${
+                      modalOperation === 'subtract'
+                        ? 'border-rose-500 bg-rose-950/40 text-rose-300 ring-2 ring-rose-500/40'
+                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <Minus className="h-4 w-4" />
+                    <div className="text-left">
+                      <p className="leading-none">Subtrair</p>
+                      <span className="text-[10px] font-normal text-slate-400">[S] Próxima leitura</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* INPUT DE QUANTIDADE */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300">
+                  {modalOperation === 'multiply' ? 'Multiplicar por (UN):' : 'Subtrair quantidade (UN):'}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  autoFocus
+                  value={quantityInput}
+                  onChange={(e) => setQuantityInput(e.target.value)}
+                  placeholder="Ex: 5"
+                  className={`mt-1.5 w-full rounded-xl bg-slate-950 px-4 py-3 text-2xl font-bold font-mono border focus:outline-hidden ${
+                    modalOperation === 'subtract'
+                      ? 'text-rose-400 border-slate-700 focus:border-rose-500'
+                      : 'text-amber-400 border-slate-700 focus:border-emerald-500'
+                  }`}
+                />
+                <span className="text-[11px] text-slate-400 mt-1.5 block">
+                  {modalOperation === 'multiply'
+                    ? 'O próximo código de barras lido adicionará esta quantidade e retornará a zero na leitura seguinte.'
+                    : 'O próximo código de barras lido deduzirá esta quantidade do carrinho e retornará a zero na leitura seguinte.'}
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowQuantityModal(false)
+                    focusBarcodeInput()
+                  }}
+                  className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  [Esc] Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-bold text-white shadow-lg transition-colors flex items-center justify-center gap-1.5 ${
+                    modalOperation === 'subtract'
+                      ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-900/40'
+                      : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/40'
+                  }`}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>[Enter] Confirmar</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ============================================================== */}
       {/* 12. COMPROVANTE DE VENDA (INTEGRADO COM SALERECEIPTMODAL)      */}
       {/* ============================================================== */}
@@ -1815,6 +2478,160 @@ export function PdvTerminalPage() {
           focusBarcodeInput()
         }}
       />
+
+      {/* ============================================================== */}
+      {/* COMPROVANTE DE ENCERRAMENTO DE CAIXA (IMPRESSÃO TÉRMICA / A4) */}
+      {/* ============================================================== */}
+      {closedSessionReport && (
+        <>
+          <style>{`
+            @media print {
+              body * {
+                visibility: hidden !important;
+              }
+              .pdv-closure-receipt-print, .pdv-closure-receipt-print * {
+                visibility: visible !important;
+              }
+              .pdv-closure-receipt-print {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 80mm !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+                padding: 4mm !important;
+                font-family: monospace !important;
+                font-size: 11px !important;
+                line-height: 1.35 !important;
+              }
+            }
+          `}</style>
+
+          <div className="pdv-closure-receipt-print" style={{ display: 'none' }}>
+            <div style={{ textAlign: 'center', borderBottom: '1px dashed #000', paddingBottom: '8px', marginBottom: '8px' }}>
+              <p style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase' }}>
+                {currentOrganization?.name || 'JB GESTÃO COMERCIAL'}
+              </p>
+              <p style={{ fontWeight: 'bold', fontSize: '11px', marginTop: '2px' }}>
+                COMPROVANTE DE FECHAMENTO DE CAIXA
+              </p>
+              <p style={{ fontSize: '10px', marginTop: '2px' }}>
+                DEMONSTRATIVO DE ENCERRAMENTO DE TURNO
+              </p>
+            </div>
+
+            <div style={{ borderBottom: '1px dashed #000', paddingBottom: '6px', marginBottom: '6px', fontSize: '10px', lineHeight: '1.4' }}>
+              <p><strong>TERMINAL:</strong> {closedSessionReport.registerId}</p>
+              <p><strong>OPERADOR:</strong> {closedSessionReport.operatorName}</p>
+              <p>
+                <strong>ABERTURA:</strong>{' '}
+                {new Date(closedSessionReport.openedAt).toLocaleString('pt-BR')}
+              </p>
+              <p>
+                <strong>FECHAMENTO:</strong>{' '}
+                {closedSessionReport.closedAt
+                  ? new Date(closedSessionReport.closedAt).toLocaleString('pt-BR')
+                  : new Date().toLocaleString('pt-BR')}
+              </p>
+            </div>
+
+            <div style={{ borderBottom: '1px dashed #000', paddingBottom: '6px', marginBottom: '6px', fontSize: '10px', lineHeight: '1.4' }}>
+              <p style={{ fontWeight: 'bold', textAlign: 'center', marginBottom: '4px' }}>
+                -- RESUMO FINANCEIRO DO TURNO --
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>SALDO INICIAL (TROCO):</span>
+                <strong>{formatCurrency(closedSessionReport.openingBalance)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>QTD. TOTAL DE VENDAS:</span>
+                <strong>{closedSessionReport.salesCount}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>TOTAL BRUTO DE VENDAS:</span>
+                <strong>{formatCurrency(closedSessionReport.totalSales)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '8px' }}>
+                <span>• EM DINHEIRO:</span>
+                <span>{formatCurrency(closedSessionReport.totalMoney)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '8px' }}>
+                <span>• EM PIX:</span>
+                <span>{formatCurrency(closedSessionReport.totalPix)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '8px' }}>
+                <span>• CARTÃO DE CRÉDITO:</span>
+                <span>{formatCurrency(closedSessionReport.totalCreditCard)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '8px' }}>
+                <span>• CARTÃO DE DÉBITO:</span>
+                <span>{formatCurrency(closedSessionReport.totalDebitCard)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>SUPRIMENTOS (+):</span>
+                <span>{formatCurrency(closedSessionReport.totalAdditionalEntries)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>SANGRIAS (-):</span>
+                <span>{formatCurrency(closedSessionReport.totalWithdrawals)}</span>
+              </div>
+            </div>
+
+            <div style={{ borderBottom: '1px dashed #000', paddingBottom: '6px', marginBottom: '6px', fontSize: '10px', lineHeight: '1.4' }}>
+              <p style={{ fontWeight: 'bold', textAlign: 'center', marginBottom: '4px' }}>
+                -- CONCILIAÇÃO DA GAVETA (DINHEIRO) --
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>VALOR ESPERADO EM DINHEIRO:</span>
+                <strong>{formatCurrency(closedSessionReport.expectedMoney)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>VALOR FÍSICO CONTADO:</span>
+                <strong>{formatCurrency(closedSessionReport.countedMoney || '0')}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>DIVERGÊNCIA / QUEBRA:</span>
+                <strong>{closedSessionReport.difference || '0.00'}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                <span>SITUAÇÃO DO CAIXA:</span>
+                <strong>
+                  {closedSessionReport.difference === '0.00'
+                    ? 'CONFERIDO / CORRETO'
+                    : parseFloat(closedSessionReport.difference || '0') > 0
+                    ? 'SOBRA DE CAIXA'
+                    : 'FALTA DE CAIXA'}
+                </strong>
+              </div>
+              {closedSessionReport.discrepancyJustification && (
+                <p style={{ marginTop: '4px', fontSize: '9px' }}>
+                  <strong>JUSTIFICATIVA:</strong> {closedSessionReport.discrepancyJustification}
+                </p>
+              )}
+              {closedSessionReport.supervisorAuthorizedBy && (
+                <p style={{ marginTop: '2px', fontSize: '9px' }}>
+                  <strong>SUPERVISOR:</strong> {closedSessionReport.supervisorAuthorizedBy}
+                </p>
+              )}
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '9px' }}>
+              <p style={{ marginBottom: '24px' }}>
+                __________________________________________<br />
+                Assinatura do Operador ({closedSessionReport.operatorName})
+              </p>
+              <p style={{ marginBottom: '16px' }}>
+                __________________________________________<br />
+                Visto da Supervisão / Gerência
+              </p>
+              <p style={{ fontSize: '8px', color: '#555' }}>
+                Impresso em: {new Date().toLocaleString('pt-BR')} • PDV JB Software
+              </p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

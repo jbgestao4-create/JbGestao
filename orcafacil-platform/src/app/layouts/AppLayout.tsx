@@ -58,7 +58,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
   }, [isMobileMenuOpen])
 
-  const handleCreateOrg = async (e: React.FormEvent) => {
+  const handleCreateOrg = async (e: React.SyntheticEvent) => {
     e.preventDefault()
     if (!newOrgName || !newOrgSlug) {
       setOrgError('Preencha todos os campos.')
@@ -80,18 +80,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const handleSignOut = async () => {
     const result = await signOut()
-    if (result.success) navigate('/login')
+    if (result.success) {
+      void navigate('/login')
+    }
     return result
   }
 
   // Se o usuário ainda não tiver nenhuma organização cadastrada
   if (organizations.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
+      <div className="min-h-screen bg-gray-50 dark:bg-[#0b0f19] flex flex-col justify-center items-center p-4">
+        <div className="max-w-md w-full bg-white dark:bg-[#111827] p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800">
           <BrandLogo size="lg" className="mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Crie sua primeira organização</h2>
-          <p className="text-sm text-gray-500 mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Crie sua primeira organização</h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">
             Para começar a usar a plataforma, informe o nome do seu negócio ou trabalho autônomo.
           </p>
 
@@ -122,7 +124,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
               label="Identificador Único (Slug)"
               placeholder="ex: alfa-reformas"
               value={newOrgSlug}
-              onChange={(e) => setNewOrgSlug(e.target.value)}
+              onChange={(e) => {
+                setNewOrgSlug(e.target.value)
+              }}
               helperText="Usado para identificar sua organização no sistema."
               required
             />
@@ -163,18 +167,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }}
         className={`flex min-h-11 items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
           isActive
-            ? 'bg-blue-50 text-blue-700 font-semibold'
-            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            ? 'bg-white text-blue-700 font-semibold shadow-xs dark:bg-blue-950/60 dark:text-blue-300'
+            : 'text-slate-700 hover:bg-white/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white'
         } ${sidebarCollapsed ? 'justify-center' : ''}`}
       >
-        <span className={`shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>{icon}</span>
+        <span className={`shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>{icon}</span>
         {!sidebarCollapsed && label}
       </Link>
     )
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${isDashboard ? '' : 'flex'}`}>
+    <div className={`min-h-screen bg-gray-50 dark:bg-[#0b0f19] ${isDashboard ? '' : 'flex'}`}>
       {!isDashboard && (
         <>
           {isMobileMenuOpen && (
@@ -189,7 +193,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           )}
         <aside
           id="mobile-navigation"
-          className={`relative shrink-0 flex-col border-r border-gray-200 bg-white transition-all duration-300 ${
+          className={`relative shrink-0 flex-col border-r border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827] transition-all duration-300 ${
             isMobileMenuOpen
               ? 'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shadow-xl md:static md:z-auto md:max-w-none md:shadow-none'
               : 'hidden md:flex'
@@ -197,20 +201,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
         >
           {/* BOTÃO DE COLAPSAR/EXPANDIR */}
           <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-3 top-7 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm transition-colors hover:bg-gray-50 hover:shadow md:flex md:h-6 md:w-6"
+            onClick={() => {
+              setSidebarCollapsed(!sidebarCollapsed)
+            }}
+            className="absolute -right-3 top-7 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-sky-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs transition-colors hover:bg-sky-50 dark:hover:bg-slate-700 hover:shadow-sm md:flex md:h-6 md:w-6"
             title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
             aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
           >
             {sidebarCollapsed ? (
-              <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             ) : (
-              <ChevronLeft className="w-3.5 h-3.5 text-gray-500" />
+              <ChevronLeft className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             )}
           </button>
 
           {/* LOGO & ORG SELECTOR */}
-          <div className="p-4 border-b border-gray-100">
+          <div className="p-4 border-b border-sky-200/60 dark:border-slate-800">
             <div className={`mb-3 flex items-center justify-between ${sidebarCollapsed ? 'md:justify-center' : ''}`}>
               <BrandLogo size="sm" showName={!sidebarCollapsed} />
               <button
@@ -219,7 +225,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 onClick={() => {
                   setMobileMenuPath(null)
                 }}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 md:hidden"
               >
                 <X aria-hidden="true" className="h-5 w-5" />
               </button>
@@ -252,7 +258,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           >
             <div>
               {!sidebarCollapsed && (
-                <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                   Geral
                 </span>
               )}
@@ -270,7 +276,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 canAccessSuppliers) && (
                 <div>
                   {!sidebarCollapsed && (
-                    <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                       JB Software
                     </span>
                   )}
@@ -304,7 +310,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             {canAccessOrganization && (
               <div>
                 {!sidebarCollapsed && (
-                  <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                     Administração
                   </span>
                 )}
@@ -320,7 +326,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </nav>
 
           {/* FOOTER DO USUÁRIO */}
-          <div className={`p-3 border-t border-gray-100 bg-gray-50/50 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+          <div className={`p-3 border-t border-sky-200/60 dark:border-slate-800/80 bg-sky-100/30 dark:bg-slate-900/40 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
             {sidebarCollapsed ? (
               <ProfileMenu
                 variant="header"
@@ -345,11 +351,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       {/* CONTEÚDO PRINCIPAL */}
       <main
-        className={isDashboard ? 'min-h-screen' : 'flex-1 flex flex-col min-w-0 overflow-y-auto'}
+        className={isDashboard ? 'min-h-screen bg-slate-50 dark:bg-[#0b0f19]' : 'flex-1 flex flex-col min-w-0 overflow-y-auto'}
       >
         {!isDashboard && (
-          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 sm:px-6 lg:px-8">
-            <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827] px-3 sm:px-6 lg:px-8">
+            <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
               <button
                 type="button"
                 aria-label="Abrir menu"
@@ -359,7 +365,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   setSidebarCollapsed(false)
                   setMobileMenuPath(location.pathname)
                 }}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-blue-600 md:hidden"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-600 dark:text-slate-300 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-blue-600 md:hidden"
               >
                 {isMobileMenuOpen ? (
                   <X aria-hidden="true" className="h-5 w-5" />
@@ -367,8 +373,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <Menu aria-hidden="true" className="h-5 w-5" />
                 )}
               </button>
-              <Building2 className="hidden h-4 w-4 shrink-0 text-gray-400 md:block" />
-              <span className="truncate font-semibold text-gray-900">
+              <Building2 className="hidden h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500 md:block" />
+              <span className="truncate font-semibold text-gray-900 dark:text-white">
                 {currentOrganization?.name}
               </span>
             </div>
@@ -388,7 +394,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         <div
           className={
-            isDashboard ? 'w-full' : 'mx-auto flex-1 min-w-0 w-full max-w-7xl p-4 sm:p-6 lg:p-8'
+            isDashboard ? 'w-full' : 'mx-auto flex-1 min-w-0 w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 sm:py-4'
           }
         >
           {children}
