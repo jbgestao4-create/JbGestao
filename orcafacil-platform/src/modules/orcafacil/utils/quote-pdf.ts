@@ -147,7 +147,7 @@ export function generateQuotePdf(
   const colItemTotal = pageWidth - margin - 3
 
   doc.text('#', colItem, currentY + 5.5)
-  doc.text('DESCRIÇÃO DO ITEM / PRODUTO', colDesc, currentY + 5.5)
+  doc.text('DESCRIÇÃO DO ITEM / PRODUTO / SERVIÇO', colDesc, currentY + 5.5)
   doc.text('QTD.', colQty, currentY + 5.5)
   doc.text('UNID.', colUnit, currentY + 5.5)
   doc.text('VALOR UNIT.', colUnitPrice, currentY + 5.5)
@@ -171,7 +171,7 @@ export function generateQuotePdf(
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(51, 65, 85)
       doc.text('#', colItem, currentY + 5.5)
-      doc.text('DESCRIÇÃO DO ITEM / PRODUTO', colDesc, currentY + 5.5)
+      doc.text('DESCRIÇÃO DO ITEM / PRODUTO / SERVIÇO', colDesc, currentY + 5.5)
       doc.text('QTD.', colQty, currentY + 5.5)
       doc.text('UNID.', colUnit, currentY + 5.5)
       doc.text('VALOR UNIT.', colUnitPrice, currentY + 5.5)
@@ -189,9 +189,11 @@ export function generateQuotePdf(
 
     doc.text(String(index + 1), colItem, currentY + 5)
 
-    const desc = item.description.length > 55
-      ? item.description.substring(0, 52) + '...'
-      : item.description
+    const isService = item.itemType === 'service' || Boolean(item.serviceId)
+    const baseDesc = isService ? `[Serviço] ${item.description}` : item.description
+    const desc = baseDesc.length > 55
+      ? baseDesc.substring(0, 52) + '...'
+      : baseDesc
     doc.text(desc, colDesc, currentY + 5)
 
     const qty = Number(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 })

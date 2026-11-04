@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   DollarSign,
+  FileSpreadsheet,
   FileText,
   Filter,
   Plus,
@@ -25,8 +26,10 @@ import {
   type SaleListItem,
   PAYMENT_METHOD_LABELS,
 } from '../services/sales.service'
+import { quoteService, type QuoteDetail } from '@modules/orcafacil/services/quote.service'
 import { SaleReceiptModal } from '../components/SaleReceiptModal'
 import { FiscalInvoiceModal } from '../components/FiscalInvoiceModal'
+import { LinkedQuoteModal } from '../components/LinkedQuoteModal'
 
 export function SalesListPage() {
   const { currentOrganization } = useOrganization()
@@ -46,6 +49,10 @@ export function SalesListPage() {
   const [receiptModalOpen, setReceiptModalOpen] = useState(false)
   const [fiscalModalOpen, setFiscalModalOpen] = useState(false)
   const [isFaturando, setIsFaturando] = useState<string | null>(null)
+
+  // Orçamento vinculado
+  const [selectedLinkedQuote, setSelectedLinkedQuote] = useState<QuoteDetail | null>(null)
+  const [linkedQuoteModalOpen, setLinkedQuoteModalOpen] = useState(false)
 
   const loadSales = async () => {
     if (!currentOrganization) return
@@ -115,6 +122,17 @@ export function SalesListPage() {
     if (res.success) {
       setSelectedSaleDetail(res.data)
       setFiscalModalOpen(true)
+    }
+  }
+
+  const handleOpenLinkedQuote = async (quoteId: string) => {
+    if (!currentOrganization) return
+    const res = await quoteService.getQuote(currentOrganization.id, quoteId)
+    if (res.success) {
+      setSelectedLinkedQuote(res.data)
+      setLinkedQuoteModalOpen(true)
+    } else {
+      alert(res.error || 'Não foi possível carregar os detalhes do orçamento.')
     }
   }
 
@@ -315,6 +333,7 @@ export function SalesListPage() {
                     <th className="px-4 py-3 font-semibold">Nº Pedido / Venda</th>
                     <th className="px-3 py-3 font-semibold">Data / Hora</th>
                     <th className="px-3 py-3 font-semibold">Cliente</th>
+                    <th className="px-3 py-3 font-semibold">Vendedor</th>
                     <th className="px-3 py-3 text-center font-semibold">Itens</th>
                     <th className="px-3 py-3 text-right font-semibold">Total</th>
                     <th className="px-3 py-3 font-semibold">Pagamento</th>
@@ -339,6 +358,19 @@ export function SalesListPage() {
                               </span>
                             )}
                           </div>
+                          {s.originQuoteId && (
+                            <div className="mt-1">
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenLinkedQuote(s.originQuoteId!)}
+                                className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 transition cursor-pointer"
+                                title="Visualizar orçamento de origem"
+                              >
+                                <FileSpreadsheet className="h-3 w-3 text-amber-600" />
+                                {s.originQuoteNumber || 'Ver Orçamento'}
+                              </button>
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-3 text-gray-600 whitespace-nowrap">
                           {new Intl.DateTimeFormat('pt-BR', {
@@ -350,6 +382,16 @@ export function SalesListPage() {
                           <p className="font-semibold text-gray-900">{s.customerName}</p>
                           {s.customerDocument && (
                             <p className="text-[10px] text-gray-400">{s.customerDocument}</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <p className="font-semibold text-gray-800">
+                            {s.sellerName || s.creatorName || 'Operador'}
+                          </p>
+                          {s.originQuoteCreatorName && (
+                            <p className="text-[10px] text-gray-400">
+                              Orçado por: {s.originQuoteCreatorName}
+                            </p>
                           )}
                         </td>
                         <td className="px-3 py-3 text-center text-gray-600 font-medium">
@@ -412,6 +454,19 @@ export function SalesListPage() {
                               </Button>
                             )}
 
+                            {s.originQuoteId && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleOpenLinkedQuote(s.originQuoteId!)}
+                                className="h-7 w-7 p-0 text-amber-700 border-amber-200 hover:bg-amber-50"
+                                title={`Visualizar orçamento ${s.originQuoteNumber || ''}`}
+                              >
+                                <FileSpreadsheet className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+
                             <Button
                               type="button"
                               variant="outline"
@@ -459,6 +514,16 @@ export function SalesListPage() {
         onClose={() => setFiscalModalOpen(false)}
         onEmitted={() => {
           void loadSales()
+        }}
+      />
+
+      <LinkedQuoteModal
+        open={linkedQuoteModalOpen}
+        quote={selectedLinkedQuote}
+        organizationName={currentOrganization?.name}
+        onClose={() => {
+          setLinkedQuoteModalOpen(false)
+          setSelectedLinkedQuote(null)
         }}
       />
     </div>

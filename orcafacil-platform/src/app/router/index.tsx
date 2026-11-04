@@ -22,11 +22,14 @@ import {
   SaleFormPage,
   SalesHomePage,
   PdvTerminalPage,
+  ReportsPage,
   SalesInvoicesPage,
   SalesListPage,
   SupplierFormPage,
   SuppliersHomePage,
   SuppliersListPage,
+  ServicesListPage,
+  ServiceFormPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -136,6 +139,18 @@ export const router = createBrowserRouter([
         <RequireDashboardModule moduleCode="MOD-01">
           <RequireModule moduleCode="orcafacil">
             <SalesInvoicesPage />
+          </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/reports',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-08">
+          <RequireModule moduleCode="orcafacil">
+            <ReportsPage />
           </RequireModule>
         </RequireDashboardModule>
       </ProtectedRoute>
@@ -341,6 +356,42 @@ export const router = createBrowserRouter([
           <RequireModule moduleCode="orcafacil">
             <CustomerFormPage />
           </RequireModule>
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Módulo de Cadastro e Gestão de Serviços (MOD-09)
+  {
+    path: '/services',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-09">
+          <ServicesListPage />
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/services',
+    element: <Navigate to="/services" replace />,
+  },
+  {
+    path: '/services/new',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-09">
+          <ServiceFormPage />
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/services/:id/edit',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-09">
+          <ServiceFormPage />
         </RequireDashboardModule>
       </ProtectedRoute>
     ),

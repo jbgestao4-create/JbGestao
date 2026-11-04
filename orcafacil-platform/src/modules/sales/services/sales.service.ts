@@ -53,10 +53,16 @@ export interface SaleMetadata {
   changeAmount?: string
   operatorId?: string
   operatorName?: string
+  sellerName?: string
+  originQuoteId?: string
+  originQuoteNumber?: string
+  originQuoteCreatorName?: string
 }
 
 export interface SaleItemInput {
   inventoryItemId?: string | null
+  serviceId?: string | null
+  itemType?: 'product' | 'service'
   description: string
   unit: string
   quantity: string
@@ -79,6 +85,10 @@ export interface CreateSaleParams {
   changeAmount?: string
   operatorId?: string
   operatorName?: string
+  sellerName?: string
+  originQuoteId?: string
+  originQuoteNumber?: string
+  originQuoteCreatorName?: string
 }
 
 export interface SaleListItem {
@@ -97,11 +107,18 @@ export interface SaleListItem {
   isPdv: boolean
   hasFiscalInvoice: boolean
   fiscalInvoice?: FiscalInvoiceData
+  creatorName?: string | null
+  sellerName?: string | null
+  originQuoteId?: string | null
+  originQuoteNumber?: string | null
+  originQuoteCreatorName?: string | null
 }
 
 export interface SaleItemDetail {
   id: UUID
   inventoryItemId: string | null
+  serviceId?: string | null
+  itemType?: 'product' | 'service'
   description: string
   unit: string
   quantity: string
@@ -121,10 +138,17 @@ export interface SaleDetail {
   customerDocument: string | null
   customerAddress: string | null
   creatorName: string | null
+  sellerName?: string | null
+  operatorName?: string | null
+  originQuoteId?: string | null
+  originQuoteNumber?: string | null
+  originQuoteCreatorName?: string | null
   status: QuoteStatus
   subtotal: string
   discount: string
   total: string
+  productsSubtotal?: string
+  servicesSubtotal?: string
   paymentMethod: PaymentMethod
   notes: string | null
   createdAt: string
@@ -185,7 +209,7 @@ export function encodeSaleNotes(metadata: SaleMetadata, userNotes?: string): str
 
 export const salesService = {
   /**
-   * Lista todas as vendas da organização
+   * Lista todas as vendas da organização (excluindo orçamentos puros)
    */
   async listSales(organizationId: UUID): Promise<ServiceResult<SaleListItem[]>> {
     try {
@@ -195,12 +219,21 @@ export const salesService = {
           id,
           quote_number,
           customer_id,
+          creator_name,
+          seller_name,
+          origin_quote_id,
+          sale_id,
           total,
           subtotal,
           discount,
           status,
           notes,
           created_at,
+          origin_quote:origin_quote_id (
+            id,
+            quote_number,
+            creator_name
+          ),
           customers (
             id,
             name,
@@ -218,30 +251,41 @@ export const salesService = {
         return { success: false, error: 'Não foi possível carregar as vendas da organização.' }
       }
 
-      const list: SaleListItem[] = (quotes || []).map((q) => {
-        const { metadata } = parseSaleNotes(q.notes)
-        // Se a quote começa com VND ou tem metadata de venda ou status aprovado/concluído
-        const isVnd = q.quote_number.startsWith('VND-') || metadata.isSale
-        const customer = q.customers as unknown as { id: string; name: string; document: string | null } | null
+      const list: SaleListItem[] = (quotes || [])
+        .filter((q) => {
+          const { metadata } = parseSaleNotes(q.notes)
+          // Exclui orçamentos gerados (ORC-...) que não sejam vendas
+          return q.quote_number?.startsWith('VND-') || metadata.isSale === true
+        })
+        .map((q) => {
+          const { metadata } = parseSaleNotes(q.notes)
+          const isVnd = q.quote_number.startsWith('VND-') || metadata.isSale
+          const customer = q.customers as unknown as { id: string; name: string; document: string | null } | null
+          const origin = q.origin_quote as unknown as { id: string; quote_number: string; creator_name: string | null } | null
 
-        return {
-          id: q.id,
-          saleNumber: q.quote_number,
-          customerId: q.customer_id,
-          customerName: metadata.customerName || customer?.name || 'Consumidor Final',
-          customerDocument: metadata.customerDocument || customer?.document || null,
-          total: q.total,
-          subtotal: q.subtotal,
-          discount: q.discount,
-          status: q.status as QuoteStatus,
-          createdAt: q.created_at,
-          paymentMethod: metadata.paymentMethod || 'money',
-          itemsCount: q.quote_items?.length || 0,
-          isPdv: metadata.isPdv ?? isVnd,
-          hasFiscalInvoice: Boolean(metadata.fiscalInvoice),
-          fiscalInvoice: metadata.fiscalInvoice,
-        }
-      })
+          return {
+            id: q.id,
+            saleNumber: q.quote_number,
+            customerId: q.customer_id,
+            customerName: metadata.customerName || customer?.name || 'Consumidor Final',
+            customerDocument: metadata.customerDocument || customer?.document || null,
+            total: q.total,
+            subtotal: q.subtotal,
+            discount: q.discount,
+            status: q.status as QuoteStatus,
+            createdAt: q.created_at,
+            paymentMethod: metadata.paymentMethod || 'money',
+            itemsCount: q.quote_items?.length || 0,
+            isPdv: metadata.isPdv ?? isVnd,
+            hasFiscalInvoice: Boolean(metadata.fiscalInvoice),
+            fiscalInvoice: metadata.fiscalInvoice,
+            creatorName: q.creator_name || null,
+            sellerName: q.seller_name || metadata.sellerName || metadata.operatorName || q.creator_name || null,
+            originQuoteId: q.origin_quote_id || metadata.originQuoteId || origin?.id || null,
+            originQuoteNumber: origin?.quote_number || metadata.originQuoteNumber || null,
+            originQuoteCreatorName: origin?.creator_name || metadata.originQuoteCreatorName || null,
+          }
+        })
 
       return { success: true, data: list }
     } catch (err) {
@@ -263,6 +307,9 @@ export const salesService = {
           organization_id,
           customer_id,
           creator_name,
+          seller_name,
+          origin_quote_id,
+          sale_id,
           status,
           subtotal,
           discount,
@@ -270,6 +317,11 @@ export const salesService = {
           notes,
           created_at,
           updated_at,
+          origin_quote:origin_quote_id (
+            id,
+            quote_number,
+            creator_name
+          ),
           customers (
             id,
             name,
@@ -294,6 +346,8 @@ export const salesService = {
         .select(`
           id,
           inventory_item_id,
+          service_id,
+          item_type,
           description,
           unit,
           quantity,
@@ -321,6 +375,12 @@ export const salesService = {
         postal_code: string | null
       } | null
 
+      const origin = quote.origin_quote as unknown as {
+        id: string
+        quote_number: string
+        creator_name: string | null
+      } | null
+
       const fullAddress = [
         customer?.address,
         customer?.address_number ? `nº ${customer.address_number}` : '',
@@ -328,6 +388,28 @@ export const salesService = {
       ]
         .filter(Boolean)
         .join(', ')
+
+      const mappedItems: SaleItemDetail[] = (items || []).map((it) => ({
+        id: it.id,
+        inventoryItemId: it.inventory_item_id,
+        serviceId: it.service_id,
+        itemType: (it.item_type as 'product' | 'service') || (it.service_id ? 'service' : 'product'),
+        description: it.description,
+        unit: it.unit || 'UN',
+        quantity: it.quantity,
+        unitPrice: it.unit_price,
+        total: it.total,
+      }))
+
+      const productsSubtotal = mappedItems
+        .filter((it) => it.itemType !== 'service')
+        .reduce((acc, it) => acc + Number(it.total || 0), 0)
+        .toFixed(2)
+
+      const servicesSubtotal = mappedItems
+        .filter((it) => it.itemType === 'service')
+        .reduce((acc, it) => acc + Number(it.total || 0), 0)
+        .toFixed(2)
 
       return {
         success: true,
@@ -341,26 +423,25 @@ export const salesService = {
           customerPhone: customer?.phone || null,
           customerDocument: metadata.customerDocument || customer?.document || null,
           customerAddress: fullAddress || null,
-          creatorName: quote.creator_name,
+          creatorName: quote.creator_name || null,
+          sellerName: quote.seller_name || metadata.sellerName || metadata.operatorName || quote.creator_name || null,
+          operatorName: metadata.operatorName || quote.seller_name || quote.creator_name || null,
+          originQuoteId: quote.origin_quote_id || metadata.originQuoteId || origin?.id || null,
+          originQuoteNumber: origin?.quote_number || metadata.originQuoteNumber || null,
+          originQuoteCreatorName: origin?.creator_name || metadata.originQuoteCreatorName || null,
           status: quote.status as QuoteStatus,
           subtotal: quote.subtotal,
           discount: quote.discount,
           total: quote.total,
+          productsSubtotal,
+          servicesSubtotal,
           paymentMethod: metadata.paymentMethod || 'money',
           notes: cleanNotes || null,
           createdAt: quote.created_at,
           updatedAt: quote.updated_at,
           isPdv: metadata.isPdv ?? quote.quote_number.startsWith('VND-'),
           fiscalInvoice: metadata.fiscalInvoice,
-          items: (items || []).map((it) => ({
-            id: it.id,
-            inventoryItemId: it.inventory_item_id,
-            description: it.description,
-            unit: it.unit || 'UN',
-            quantity: it.quantity,
-            unitPrice: it.unit_price,
-            total: it.total,
-          })),
+          items: mappedItems,
         },
       }
     } catch (err) {
@@ -476,6 +557,10 @@ export const salesService = {
         changeAmount: params.changeAmount,
         operatorId: params.operatorId,
         operatorName: params.operatorName,
+        sellerName: params.sellerName || params.operatorName,
+        originQuoteId: params.originQuoteId,
+        originQuoteNumber: params.originQuoteNumber,
+        originQuoteCreatorName: params.originQuoteCreatorName,
       }
 
       const fullNotes = encodeSaleNotes(metadata, params.notes)
@@ -514,8 +599,10 @@ export const salesService = {
           discount,
           total,
           notes: fullNotes,
+          origin_quote_id: params.originQuoteId || null,
+          seller_name: params.sellerName || params.operatorName || null,
         })
-        .select('id')
+        .select('id, creator_name')
         .single()
 
       if (quoteError || !quote) {
@@ -535,7 +622,9 @@ export const salesService = {
         unit_price: item.unitPrice,
         total: item.total,
         sort_order: item.sortOrder,
-        inventory_item_id: item.inventoryItemId || null,
+        inventory_item_id: item.itemType === 'service' ? null : (item.inventoryItemId || null),
+        item_type: item.itemType || (item.serviceId ? 'service' : 'product'),
+        service_id: item.serviceId || null,
       }))
 
       const { error: itemsError } = await supabase.from('quote_items').insert(itemsPayload)
@@ -578,8 +667,79 @@ export const salesService = {
         }
       }
 
-      // 4. Marca como concluída (completed)
-      await supabase.from('quotes').update({ status: 'completed' }).eq('id', saleId)
+      // 4. Marca como concluída (completed) e salva o vendedor
+      await supabase
+        .from('quotes')
+        .update({
+          status: 'completed',
+          seller_name: params.sellerName || params.operatorName || quote.creator_name || null,
+        })
+        .eq('id', saleId)
+
+      // Baixa de estoque dos insumos vinculados aos serviços vendidos
+      const serviceItems = itemsWithTotals.filter(
+        (i) => (i.itemType === 'service' || i.serviceId) && i.serviceId,
+      )
+      if (serviceItems.length > 0) {
+        const serviceIds = [...new Set(serviceItems.map((i) => i.serviceId).filter(Boolean))] as string[]
+        if (serviceIds.length > 0) {
+          const { data: svcMaterials } = await supabase
+            .from('service_materials')
+            .select('service_id, inventory_item_id, quantity, unit')
+            .eq('organization_id', organizationId)
+            .in('service_id', serviceIds)
+
+          if (svcMaterials && svcMaterials.length > 0) {
+            for (const sItem of serviceItems) {
+              const mats = svcMaterials.filter((m) => m.service_id === sItem.serviceId)
+              for (const mat of mats) {
+                const deductQty = (Number(sItem.quantity) || 1) * (Number(mat.quantity) || 1)
+                const { data: currentStock } = await supabase
+                  .from('inventory_items')
+                  .select('id, quantity_on_hand, name')
+                  .eq('organization_id', organizationId)
+                  .eq('id', mat.inventory_item_id)
+                  .single()
+
+                if (currentStock) {
+                  const beforeBalance = Number(currentStock.quantity_on_hand) || 0
+                  const afterBalance = beforeBalance - deductQty
+                  await supabase
+                    .from('inventory_items')
+                    .update({ quantity_on_hand: afterBalance })
+                    .eq('organization_id', organizationId)
+                    .eq('id', mat.inventory_item_id)
+
+                  await supabase.from('inventory_movements').insert({
+                    organization_id: organizationId,
+                    inventory_item_id: mat.inventory_item_id,
+                    movement_type: 'quote_approval',
+                    quantity: deductQty,
+                    balance_before: beforeBalance,
+                    balance_after: afterBalance,
+                    reason: `Baixa de insumos do serviço "${sItem.description}" na venda ${saleNumber}`,
+                    quote_id: saleId,
+                    user_id: params.operatorId || null,
+                  })
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Se originou de um orçamento, atualiza o orçamento com o ID da venda, status completed e vendedor
+      if (params.originQuoteId) {
+        await supabase
+          .from('quotes')
+          .update({
+            status: 'completed',
+            sale_id: saleId,
+            seller_name: params.sellerName || params.operatorName || quote.creator_name || null,
+          })
+          .eq('organization_id', organizationId)
+          .eq('id', params.originQuoteId)
+      }
 
       // 5. Integra com o Caixa (Recebível / Cash Entry)
       void cashService.createQuoteReceivable(organizationId, saleId).catch((cashErr) => {

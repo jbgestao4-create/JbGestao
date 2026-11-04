@@ -21,6 +21,10 @@ export interface QuoteListItem {
   validUntil: string | null
   createdAt: string
   updatedAt: string
+  creatorName?: string | null
+  sellerName?: string | null
+  saleId?: string | null
+  saleNumber?: string | null
 }
 
 export interface QuoteDetailItem {
@@ -32,6 +36,8 @@ export interface QuoteDetailItem {
   sortOrder: number
   inventoryItemId: UUID | null
   unit: string | null
+  itemType?: 'product' | 'service'
+  serviceId?: UUID | null
 }
 
 interface QuoteItemRow {
@@ -43,6 +49,8 @@ interface QuoteItemRow {
   sort_order: number
   inventory_item_id: UUID | null
   unit: string | null
+  item_type?: 'product' | 'service'
+  service_id?: UUID | null
 }
 
 interface InventoryMinimumPriceRow {
@@ -56,11 +64,16 @@ interface InventoryMinimumPriceRow {
 export interface QuoteItemInput extends QuoteItemCalculationInput {
   inventoryItemId?: UUID | null
   unit?: string | null
+  itemType?: 'product' | 'service'
+  serviceId?: UUID | null
 }
 
 export interface QuoteDetail extends QuoteListItem {
   notes: string | null
   creatorName: string | null
+  sellerName?: string | null
+  saleId?: string | null
+  saleNumber?: string | null
   customerPhone: string | null
   customerEmail: string | null
   customerAddress: string | null
@@ -144,9 +157,43 @@ async function validateMinimumSalePrices(
   return { success: true, data: undefined }
 }
 
+async function validateServiceMinimumPrices(
+  organizationId: UUID,
+  items: QuoteItemInput[],
+): Promise<ServiceResult<void>> {
+  const serviceIds = [...new Set(items.map((i) => i.serviceId).filter(Boolean))] as string[]
+  if (serviceIds.length === 0) return { success: true, data: undefined }
+
+  const { data, error } = await supabase
+    .from('services')
+    .select('id, name, minimum_sale_price')
+    .eq('organization_id', organizationId)
+    .in('id', serviceIds)
+
+  if (error || !data) return { success: true, data: undefined }
+
+  for (const s of data) {
+    const min = Number(s.minimum_sale_price) || 0
+    if (min <= 0) continue
+
+    const matchingItems = items.filter((i) => i.serviceId === s.id)
+    for (const mi of matchingItems) {
+      const price = Number(mi.unitPrice) || 0
+      if (price < min) {
+        return {
+          success: false,
+          error: `O preço do serviço "${s.name}" (${formatCurrency(price)}) está abaixo do preço mínimo cadastrado (${formatCurrency(min)}).`,
+        }
+      }
+    }
+  }
+
+  return { success: true, data: undefined }
+}
+
 export const quoteService = {
   /**
-   * Lista todos os orçamentos da organização.
+   * Lista todos os orçamentos da organização (excluindo vendas VND).
    */
   async listQuotes(organizationId: UUID): Promise<ServiceResult<QuoteListItem[]>> {
     try {
@@ -163,8 +210,17 @@ export const quoteService = {
           discount,
           total,
           valid_until,
+          creator_name,
+          seller_name,
+          sale_id,
           created_at,
           updated_at,
+          sale:sale_id (
+            id,
+            quote_number,
+            seller_name,
+            creator_name
+          ),
           customers (
             name,
             phone
@@ -179,24 +235,37 @@ export const quoteService = {
         return { success: false, error: 'Não foi possível carregar os orçamentos.' }
       }
 
-      const list: QuoteListItem[] = (data ?? []).map((q) => {
-        const cust = Array.isArray(q.customers) ? q.customers[0] : q.customers
-        return {
-          id: q.id,
-          organizationId: q.organization_id,
-          customerId: q.customer_id,
-          customerName: cust?.name ?? 'Cliente Desconhecido',
-          customerPhone: cust?.phone ?? null,
-          quoteNumber: q.quote_number,
-          status: q.status as QuoteStatus,
-          subtotal: q.subtotal,
-          discount: q.discount,
-          total: q.total,
-          validUntil: q.valid_until,
-          createdAt: q.created_at,
-          updatedAt: q.updated_at,
-        }
-      })
+      const list: QuoteListItem[] = (data ?? [])
+        .filter((q) => !q.quote_number?.startsWith('VND-'))
+        .map((q) => {
+          const cust = Array.isArray(q.customers) ? q.customers[0] : q.customers
+          const linkedSale = q.sale as unknown as {
+            id: string
+            quote_number: string
+            seller_name: string | null
+            creator_name: string | null
+          } | null
+
+          return {
+            id: q.id,
+            organizationId: q.organization_id,
+            customerId: q.customer_id,
+            customerName: cust?.name ?? 'Cliente Desconhecido',
+            customerPhone: cust?.phone ?? null,
+            quoteNumber: q.quote_number,
+            status: q.status as QuoteStatus,
+            subtotal: q.subtotal,
+            discount: q.discount,
+            total: q.total,
+            validUntil: q.valid_until,
+            createdAt: q.created_at,
+            updatedAt: q.updated_at,
+            creatorName: q.creator_name || null,
+            sellerName: q.seller_name || linkedSale?.seller_name || linkedSale?.creator_name || null,
+            saleId: q.sale_id || linkedSale?.id || null,
+            saleNumber: linkedSale?.quote_number || null,
+          }
+        })
 
       return { success: true, data: list }
     } catch (err) {
@@ -225,8 +294,16 @@ export const quoteService = {
           valid_until,
           notes,
           creator_name,
+          seller_name,
+          sale_id,
           created_at,
           updated_at,
+          sale:sale_id (
+            id,
+            quote_number,
+            seller_name,
+            creator_name
+          ),
           customers (
             name,
             phone,
@@ -261,6 +338,12 @@ export const quoteService = {
 
       const cust = Array.isArray(quote.customers) ? quote.customers[0] : quote.customers
       const customerAddress = [cust?.address, cust?.address_number].filter(Boolean).join(', ')
+      const linkedSale = quote.sale as unknown as {
+        id: string
+        quote_number: string
+        seller_name: string | null
+        creator_name: string | null
+      } | null
 
       return {
         success: true,
@@ -276,7 +359,10 @@ export const quoteService = {
           total: quote.total,
           validUntil: quote.valid_until,
           notes: quote.notes,
-          creatorName: quote.creator_name,
+          creatorName: quote.creator_name || null,
+          sellerName: quote.seller_name || linkedSale?.seller_name || linkedSale?.creator_name || null,
+          saleId: quote.sale_id || linkedSale?.id || null,
+          saleNumber: linkedSale?.quote_number || null,
           createdAt: quote.created_at,
           updatedAt: quote.updated_at,
           customerPhone: cust?.phone ?? null,
@@ -291,6 +377,8 @@ export const quoteService = {
             sortOrder: item.sort_order,
             inventoryItemId: item.inventory_item_id,
             unit: item.unit,
+            itemType: (item.item_type as 'product' | 'service') || (item.service_id ? 'service' : 'product'),
+            serviceId: item.service_id,
           })),
         },
       }
@@ -307,6 +395,9 @@ export const quoteService = {
     try {
       const minimumPriceValidation = await validateMinimumSalePrices(organizationId, params.items)
       if (!minimumPriceValidation.success) return minimumPriceValidation
+
+      const servicePriceValidation = await validateServiceMinimumPrices(organizationId, params.items)
+      if (!servicePriceValidation.success) return servicePriceValidation
 
       // 1. Recalcula valores de forma confiável
       const calculated = recalculateQuote(params.items, params.discount ?? '0.00')
@@ -382,6 +473,8 @@ export const quoteService = {
           sort_order: item.sortOrder,
           inventory_item_id: params.items[index]?.inventoryItemId ?? null,
           unit: params.items[index]?.unit?.trim() || null,
+          item_type: params.items[index]?.itemType || (params.items[index]?.serviceId ? 'service' : 'product'),
+          service_id: params.items[index]?.serviceId ?? null,
         }))
 
         const { error: itemsError } = await supabase.from('quote_items').insert(itemsToInsert)
@@ -581,19 +674,37 @@ export const quoteService = {
   },
 
   /**
-   * Exclui um orçamento e seus itens (via CASCADE no banco).
+   * Exclui um orçamento e seus itens (via CASCADE e estorno seguro de lançamentos).
    */
   async deleteQuote(organizationId: UUID, quoteId: UUID): Promise<ServiceResult<void>> {
     try {
-      const { error } = await supabase
+      // 1. Tenta exclusão segura via RPC delete_quote (trata pagamentos, lançamentos de caixa e estoque)
+      const { error: rpcError } = await supabase.rpc('delete_quote', {
+        p_organization_id: organizationId,
+        p_quote_id: quoteId,
+      })
+
+      if (!rpcError) {
+        return { success: true, data: undefined }
+      }
+
+      logger.warn('Falha na RPC delete_quote, tentando exclusão direta', {
+        message: rpcError.message,
+      })
+
+      // 2. Fallback para exclusão direta na tabela quotes
+      const { error: directError } = await supabase
         .from('quotes')
         .delete()
         .eq('organization_id', organizationId)
         .eq('id', quoteId)
 
-      if (error) {
-        logger.error('Erro ao excluir orçamento', error)
-        return { success: false, error: 'Não foi possível excluir o orçamento.' }
+      if (directError) {
+        logger.error('Erro ao excluir orçamento', {
+          rpcMessage: rpcError.message,
+          directMessage: directError.message,
+        })
+        return { success: false, error: directError.message || 'Não foi possível excluir o orçamento.' }
       }
 
       return { success: true, data: undefined }

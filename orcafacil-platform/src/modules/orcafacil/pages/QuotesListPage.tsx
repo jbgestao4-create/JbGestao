@@ -15,13 +15,16 @@ import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { ListBox } from '@shared/components/ui/ListBox'
 import {
+  Ban,
   FileDown,
   FileSpreadsheet,
   MessageCircle,
   Pencil,
   Plus,
   Printer,
+  Receipt,
   Search,
+  ShoppingCart,
   Trash2,
 } from 'lucide-react'
 import { SendQuoteWhatsAppModal } from '../components/SendQuoteWhatsAppModal'
@@ -29,6 +32,8 @@ import { downloadQuotePdf } from '../utils/quote-pdf'
 import type { QuoteStatus } from '@shared/types/database'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import type { ServiceResult } from '@shared/types/common'
+import { salesService, type SaleDetail } from '@modules/sales/services/sales.service'
+import { SaleReceiptModal } from '@modules/sales/components/SaleReceiptModal'
 
 function getLocalDateValue(value: string) {
   const date = new Date(value)
@@ -49,10 +54,13 @@ export function QuotesListPage() {
   const [statusError, setStatusError] = useState<string | null>(null)
   const [printError, setPrintError] = useState<string | null>(null)
   const [quoteToDelete, setQuoteToDelete] = useState<QuoteListItem | null>(null)
+  const [quoteToCancel, setQuoteToCancel] = useState<QuoteListItem | null>(null)
   const [quoteToPrint, setQuoteToPrint] = useState<QuoteDetail | null>(null)
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false)
   const [quoteForWhatsApp, setQuoteForWhatsApp] = useState<QuoteListItem | null>(null)
   const [quoteDetailForWhatsApp, setQuoteDetailForWhatsApp] = useState<QuoteDetail | null>(null)
+  const [selectedSaleDetail, setSelectedSaleDetail] = useState<SaleDetail | null>(null)
+  const [saleModalOpen, setSaleModalOpen] = useState(false)
 
   const loadQuotes = useCallback(async () => {
     if (!currentOrganization) return
@@ -122,6 +130,11 @@ export function QuotesListPage() {
     if (res.success) {
       await loadQuotes()
 
+      // Acompanha o orçamento para a respectiva aba, exceto se for recusado
+      if (newStatus !== 'rejected') {
+        setFilterStatus(newStatus)
+      }
+
       if (isTransitioningFromDraftToSent) {
         const found = quotes.find((q) => q.id === quoteId) ?? null
         setQuoteForWhatsApp(found)
@@ -163,6 +176,21 @@ export function QuotesListPage() {
     return res
   }
 
+  const handleCancelQuote = async (): Promise<ServiceResult<void>> => {
+    if (!currentOrganization || !quoteToCancel) {
+      return { success: false, error: 'Não foi possível identificar o orçamento.' }
+    }
+
+    const res = await quoteService.updateStatus(currentOrganization.id, quoteToCancel.id, 'rejected')
+    if (res.success) {
+      setQuoteToCancel(null)
+      await loadQuotes()
+    } else {
+      setStatusError(res.error)
+    }
+    return res
+  }
+
   const handlePrint = async (quoteId: string) => {
     if (!currentOrganization) return
     setPrintError(null)
@@ -185,9 +213,24 @@ export function QuotesListPage() {
     }
   }
 
+  const handleViewLinkedSale = async (saleId: string) => {
+    if (!currentOrganization) return
+    setPrintError(null)
+    const res = await salesService.getSaleById(currentOrganization.id, saleId)
+    if (res.success) {
+      setSelectedSaleDetail(res.data)
+      setSaleModalOpen(true)
+    } else {
+      setPrintError(res.error || 'Não foi possível carregar os dados da venda vinculada.')
+    }
+  }
+
   const normalizedCustomerName = filterCustomerName.trim().toLocaleLowerCase('pt-BR')
   const normalizedQuoteNumber = filterQuoteNumber.trim().toLocaleLowerCase('pt-BR')
   const filteredQuotes = quotes.filter((quote) => {
+    // Exclui vendas geradas pelo PDV ou faturamento direto (devem aparecer somente em Vendas)
+    if (quote.quoteNumber.startsWith('VND-')) return false
+
     const matchesStatus = filterStatus === 'all' || quote.status === filterStatus
     const matchesCustomer =
       !normalizedCustomerName ||
@@ -319,15 +362,15 @@ export function QuotesListPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1260px] table-fixed text-left text-sm text-gray-600 dark:text-slate-300">
                 <colgroup>
-                  <col className="w-24" />
-                  <col className="w-[148px]" />
+                  <col className="w-[140px]" />
+                  <col className="w-[160px]" />
                   <col className="w-[120px]" />
                   <col className="w-[104px]" />
                   <col className="w-[120px]" />
                   <col className="w-[136px]" />
                   <col className="w-[100px]" />
                   <col className="w-24" />
-                  <col className="w-[340px]" />
+                  <col className="w-[380px]" />
                 </colgroup>
                 <thead className="bg-gray-50/75 dark:bg-slate-800/60 text-xs uppercase text-gray-400 dark:text-slate-400 font-semibold border-b border-gray-100 dark:border-slate-800">
                   <tr>
@@ -349,7 +392,28 @@ export function QuotesListPage() {
                     return (
                       <tr key={q.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="break-all px-3 py-2.5 font-semibold text-gray-900 dark:text-white">
-                          {q.quoteNumber}
+                          <div className="font-bold">{q.quoteNumber}</div>
+                          <div className="text-[11px] font-normal text-gray-500 dark:text-slate-400">
+                            Por: <span className="font-medium text-gray-700 dark:text-slate-300">{q.creatorName || 'Sistema'}</span>
+                          </div>
+                          {q.saleId && (
+                            <div className="mt-1">
+                              <button
+                                type="button"
+                                onClick={() => void handleViewLinkedSale(q.saleId!)}
+                                className="inline-flex items-center gap-1 rounded bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900 transition cursor-pointer"
+                                title={`Visualizar venda gerada (${q.saleNumber || 'Venda'})`}
+                              >
+                                <ShoppingCart className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                {q.saleNumber || 'Ver Venda'}
+                              </button>
+                              {q.sellerName && (
+                                <div className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">
+                                  Vendido por: <span className="font-medium text-gray-600 dark:text-slate-400">{q.sellerName}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="break-words px-3 py-2.5 text-gray-800 dark:text-slate-200" title={q.customerName}>
                           {q.customerName}
@@ -380,7 +444,27 @@ export function QuotesListPage() {
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {allowedNext.length > 0 && (
+                            {q.status === 'approved' ? (
+                              <>
+                                <Link
+                                  to={`/orcafacil/sales/new?quoteId=${q.id}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+                                  title="Abrir tela de venda com as informações deste orçamento preenchidas automaticamente"
+                                >
+                                  <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
+                                  Enviar para Venda
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => setQuoteToCancel(q)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 px-2 py-1.5 text-xs font-semibold shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
+                                  title="Cancelar orçamento aprovado"
+                                >
+                                  <Ban className="w-3.5 h-3.5 shrink-0" />
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : allowedNext.length > 0 ? (
                               <div className="w-36 text-left">
                                 <ListBox
                                   placeholder="Mudar status..."
@@ -401,7 +485,7 @@ export function QuotesListPage() {
                                   }))}
                                 />
                               </div>
-                            )}
+                            ) : null}
                             {canEditQuote(q.status, userRole) && (
                               <Link
                                 to={`/orcafacil/quotes/${q.id}/edit`}
@@ -449,6 +533,19 @@ export function QuotesListPage() {
                                 </button>
                               </>
                             )}
+                            {q.saleId && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleViewLinkedSale(q.saleId!)
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                                title={`Visualizar venda gerada (${q.saleNumber || 'Venda'})`}
+                                aria-label={`Visualizar venda gerada ${q.saleNumber || ''}`}
+                              >
+                                <Receipt className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
@@ -491,6 +588,16 @@ export function QuotesListPage() {
           setQuoteToDelete(null)
         }}
         onConfirm={handleDelete}
+      />
+      <ConfirmActionDialog
+        open={quoteToCancel !== null}
+        title="Cancelar orçamento aprovado?"
+        description={`Tem certeza de que deseja cancelar o orçamento ${quoteToCancel?.quoteNumber}? Ele será marcado como cancelado/recusado.`}
+        confirmLabel="Sim, cancelar orçamento"
+        onCancel={() => {
+          setQuoteToCancel(null)
+        }}
+        onConfirm={handleCancelQuote}
       />
       {quoteToPrint && (
         <>
@@ -604,6 +711,15 @@ export function QuotesListPage() {
           </section>
         </>
       )}
+
+      <SaleReceiptModal
+        open={saleModalOpen}
+        sale={selectedSaleDetail}
+        onClose={() => {
+          setSaleModalOpen(false)
+          setSelectedSaleDetail(null)
+        }}
+      />
     </div>
   )
 }

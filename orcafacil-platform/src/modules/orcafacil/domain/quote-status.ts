@@ -15,7 +15,7 @@ import type { OrganizationRole } from '@shared/types/common'
 export const ALLOWED_STATUS_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
   draft: ['sent', 'rejected'],
   sent: ['approved', 'rejected', 'expired', 'draft'],
-  approved: ['completed'],
+  approved: ['completed', 'rejected'],
   completed: [],
   rejected: ['draft'],
   expired: ['draft'],
@@ -34,7 +34,8 @@ export function isValidStatusTransition(
 }
 
 export function canEditQuote(status: QuoteStatus, role: OrganizationRole | null): boolean {
-  const isOperationallyEditable = status === 'draft' || status === 'sent' || status === 'approved'
+  if (status === 'approved' || status === 'completed') return false
+  const isOperationallyEditable = status === 'draft' || status === 'sent'
   return role !== null && (isOperationallyEditable || role === 'owner' || role === 'admin')
 }
 

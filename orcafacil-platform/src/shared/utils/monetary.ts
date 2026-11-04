@@ -131,3 +131,27 @@ export function normalizeUnitPrice(value: string): string {
   if (!isFinite(num) || num < 0) return '0.00'
   return roundHalfUp(num, UNIT_PRICE_DECIMALS).toFixed(UNIT_PRICE_DECIMALS)
 }
+
+/**
+ * Máscara dinâmica em tempo real para inputs monetários em reais (R$).
+ * Transforma números digitados em formato monetário com 2 casas decimais (ex: "1" -> "0,01", "12300" -> "123,00").
+ */
+export function formatCurrencyInput(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return '0,00'
+  const cents = parseInt(digits, 10)
+  return (cents / 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+/**
+ * Converte valor formatado em moeda brasileira (ex: "1.250,50") para string decimal com ponto ("1250.50").
+ */
+export function parseCurrencyInput(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return '0.00'
+  const cents = parseInt(digits, 10)
+  return (cents / 100).toFixed(2)
+}

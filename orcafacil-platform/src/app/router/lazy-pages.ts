@@ -114,3 +114,18 @@ export const PdvTerminalPage = lazy(() =>
     default: module.PdvTerminalPage,
   })),
 )
+export const ReportsPage = lazy(() =>
+  import('@modules/reports/pages/ReportsPage').then((module) => ({
+    default: module.ReportsPage,
+  })),
+)
+export const ServicesListPage = lazy(() =>
+  import('@modules/services/pages/ServicesListPage').then((module) => ({
+    default: module.ServicesListPage,
+  })),
+)
+export const ServiceFormPage = lazy(() =>
+  import('@modules/services/pages/ServiceFormPage').then((module) => ({
+    default: module.ServiceFormPage,
+  })),
+)

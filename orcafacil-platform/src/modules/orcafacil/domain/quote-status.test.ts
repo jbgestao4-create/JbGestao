@@ -27,8 +27,8 @@ describe('Quote Status FSM', () => {
     expect(isValidStatusTransition('draft', 'approved')).toBe(false)
   })
 
-  it('deve rejeitar transição direta de approved para rejected', () => {
-    expect(isValidStatusTransition('approved', 'rejected')).toBe(false)
+  it('deve permitir transição de approved para rejected (cancelamento)', () => {
+    expect(isValidStatusTransition('approved', 'rejected')).toBe(true)
   })
 
   it('deve permitir manter o mesmo status', () => {
@@ -36,20 +36,19 @@ describe('Quote Status FSM', () => {
     expect(isValidStatusTransition('approved', 'approved')).toBe(true)
   })
 
-  it('permite membros editar Rascunho, Enviado e Aprovado', () => {
+  it('permite membros editar Rascunho e Enviado, mas não Aprovado ou Concluído', () => {
     expect(canEditQuote('draft', 'member')).toBe(true)
     expect(canEditQuote('sent', 'member')).toBe(true)
-    expect(canEditQuote('approved', 'member')).toBe(true)
+    expect(canEditQuote('approved', 'member')).toBe(false)
+    expect(canEditQuote('completed', 'member')).toBe(false)
     expect(canEditQuote('draft', null)).toBe(false)
   })
 
-  it('permite somente proprietários e administradores editar estados finais', () => {
-    for (const status of ['completed', 'rejected', 'expired'] as const) {
-      expect(canEditQuote(status, 'owner')).toBe(true)
-      expect(canEditQuote(status, 'admin')).toBe(true)
-      expect(canEditQuote(status, 'member')).toBe(false)
-      expect(canEditQuote(status, null)).toBe(false)
-    }
+  it('não permite edição em Aprovado e Concluído nem mesmo por administradores ou donos', () => {
+    expect(canEditQuote('approved', 'owner')).toBe(false)
+    expect(canEditQuote('approved', 'admin')).toBe(false)
+    expect(canEditQuote('completed', 'owner')).toBe(false)
+    expect(canEditQuote('completed', 'admin')).toBe(false)
   })
 
   it('deve permitir imprimir comprovantes de orçamentos enviados, aprovados e concluídos', () => {

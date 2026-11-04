@@ -17,7 +17,15 @@ export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 
 /** Códigos dos módulos exibidos na página inicial */
 export type DashboardModuleCode =
-  'MOD-01' | 'MOD-02' | 'MOD-03' | 'MOD-04' | 'MOD-05' | 'MOD-06' | 'MOD-07'
+  | 'MOD-01'
+  | 'MOD-02'
+  | 'MOD-03'
+  | 'MOD-04'
+  | 'MOD-05'
+  | 'MOD-06'
+  | 'MOD-07'
+  | 'MOD-08'
+  | 'MOD-09'
 
 /** Estado de uma concessão de módulo a uma organização */
 export type ModuleGrantStatus = 'active' | 'inactive' | 'suspended'

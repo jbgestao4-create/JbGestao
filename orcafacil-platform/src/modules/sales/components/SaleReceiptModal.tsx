@@ -76,6 +76,17 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
               <p className="text-[11px] text-gray-500 mt-0.5">COMPROVANTE DE VENDA NÃO FISCAL</p>
               <p className="text-[10px] text-gray-400 mt-1">{formattedDate}</p>
               <p className="text-xs font-semibold text-gray-900 mt-1">Pedido: {sale.saleNumber}</p>
+              {(sale.sellerName || sale.operatorName) && (
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  Vendedor: {sale.sellerName || sale.operatorName}
+                </p>
+              )}
+              {sale.originQuoteNumber && (
+                <p className="text-[10px] text-amber-700 font-medium mt-0.5">
+                  Origem: Orçamento {sale.originQuoteNumber}
+                  {sale.originQuoteCreatorName && ` (Orçado por ${sale.originQuoteCreatorName})`}
+                </p>
+              )}
             </div>
 
             {/* Dados do Cliente */}
@@ -108,6 +119,11 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
                     <div className="min-w-0 flex-1 truncate">
                       <span className="text-gray-400 mr-1">{idx + 1}.</span>
                       <span className="font-medium text-gray-900">{it.description}</span>
+                      {it.itemType === 'service' && (
+                        <span className="ml-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded">
+                          (Serviço)
+                        </span>
+                      )}
                     </div>
                     <div className="shrink-0 text-right text-gray-600">
                       {it.quantity} {it.unit} x {formatCurrency(it.unitPrice)}
@@ -126,6 +142,18 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
                 <span>Subtotal:</span>
                 <span>{formatCurrency(sale.subtotal)}</span>
               </div>
+              {Number(sale.productsSubtotal) > 0 && Number(sale.servicesSubtotal) > 0 && (
+                <>
+                  <div className="flex justify-between text-gray-500 text-[10px] pl-2">
+                    <span>• Materiais:</span>
+                    <span>{formatCurrency(sale.productsSubtotal || '0.00')}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500 text-[10px] pl-2">
+                    <span>• Serviços:</span>
+                    <span>{formatCurrency(sale.servicesSubtotal || '0.00')}</span>
+                  </div>
+                </>
+              )}
               {Number(sale.discount) > 0 && (
                 <div className="flex justify-between text-emerald-700">
                   <span>Desconto:</span>

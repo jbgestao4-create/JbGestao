@@ -22,6 +22,8 @@ import {
   calculateSubtotal,
   calculateTotal,
   formatCurrency,
+  formatCurrencyInput,
+  parseCurrencyInput,
 } from '@shared/utils/monetary'
 import {
   AlertTriangle,
@@ -33,7 +35,6 @@ import {
   Hash,
   Lock,
   Maximize,
-  Minimize,
   Minus,
   Plus,
   Phone,
@@ -120,57 +121,127 @@ export function PdvTerminalPage() {
   const [closureError, setClosureError] = useState<string | null>(null)
   const [closedSessionReport, setClosedSessionReport] = useState<CashSession | null>(null)
 
-  // Modo Tela Cheia (Fullscreen)
+  // Modo Tela Cheia Fixa (Terminal PDV)
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement))
 
-  const toggleFullscreen = useCallback(async () => {
+  // Bloqueio da tecla Escape via Keyboard Lock API (Chromium/Edge/Chrome)
+  const lockEscapeKey = useCallback(async () => {
+    try {
+      const nav = navigator as unknown as {
+        keyboard?: {
+          lock?: (keys?: string[]) => Promise<void>
+          unlock?: () => void
+        }
+      }
+      if (nav.keyboard && typeof nav.keyboard.lock === 'function') {
+        await nav.keyboard.lock(['Escape'])
+      }
+    } catch {
+      // Ignora caso o navegador não suporte
+    }
+  }, [])
+
+  const unlockEscapeKey = useCallback(() => {
+    try {
+      const nav = navigator as unknown as {
+        keyboard?: {
+          unlock?: () => void
+        }
+      }
+      if (nav.keyboard && typeof nav.keyboard.unlock === 'function') {
+        nav.keyboard.unlock()
+      }
+    } catch {
+      // Ignora
+    }
+  }, [])
+
+  const enterFullscreen = useCallback(async () => {
     try {
       if (!document.fullscreenElement) {
         await document.documentElement.requestFullscreen()
-      } else {
+      }
+      await lockEscapeKey()
+      sessionStorage.setItem('pdv_fullscreen_locked', 'true')
+      setIsFullscreen(true)
+    } catch {
+      // Bloqueios de auto-início do navegador são resolvidos no próximo gesto/toque
+    }
+  }, [lockEscapeKey])
+
+  // Desativa tela cheia e libera bloqueios somente ao clicar em "Sair para Vendas"
+  const handleExitToSales = useCallback(async () => {
+    sessionStorage.removeItem('pdv_fullscreen_locked')
+    unlockEscapeKey()
+    try {
+      if (document.fullscreenElement) {
         await document.exitFullscreen()
       }
     } catch {
-      // Ignora restrições do navegador
+      // Ignora erros ao sair de fullscreen
     }
-  }, [])
+    navigate('/orcafacil/sales')
+  }, [navigate, unlockEscapeKey])
 
+  // Imprime o comprovante de fechamento e sai do PDV imediatamente
+  const handlePrintAndExit = useCallback(() => {
+    window.print()
+    setTimeout(() => {
+      void handleExitToSales()
+    }, 400)
+  }, [handleExitToSales])
+
+  // Gerenciador de Fullscreen: auto-ativação, persistência após refresh (F5), proteção contra ESC e beforeunload
   useEffect(() => {
+    sessionStorage.setItem('pdv_fullscreen_locked', 'true')
+    void enterFullscreen()
+
     const onFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement))
-    }
-    document.addEventListener('fullscreenchange', onFullscreenChange)
-    return () => { document.removeEventListener('fullscreenchange', onFullscreenChange); }
-  }, [])
-
-  // Auto-fullscreen ao abrir a tela (com tentativa imediata e fallback na 1ª tecla/clique)
-  useEffect(() => {
-    const tryEnterFullscreen = async () => {
-      try {
-        if (!document.fullscreenElement) {
-          await document.documentElement.requestFullscreen()
-        }
-      } catch {
-        // Silenciosamente capturado na primeira interação
+      const inFull = Boolean(document.fullscreenElement)
+      setIsFullscreen(inFull)
+      if (inFull) {
+        void lockEscapeKey()
       }
     }
 
-    void tryEnterFullscreen()
-
-    const handleFirstGesture = () => {
-      void tryEnterFullscreen()
-      window.removeEventListener('keydown', handleFirstGesture)
-      window.removeEventListener('pointerdown', handleFirstGesture)
+    // Qualquer clique ou tecla na janela reentra em fullscreen se tiver saído (ex: após refresh F5)
+    const handleGlobalInteraction = () => {
+      if (!document.fullscreenElement && sessionStorage.getItem('pdv_fullscreen_locked') === 'true') {
+        void enterFullscreen()
+      }
     }
 
-    window.addEventListener('keydown', handleFirstGesture, { once: true })
-    window.addEventListener('pointerdown', handleFirstGesture, { once: true })
+    // Intercepta Escape no nível de captura para garantir que não saia do modo Fullscreen do browser
+    const handleEscapeCapture = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && sessionStorage.getItem('pdv_fullscreen_locked') === 'true') {
+        if (document.fullscreenElement) {
+          void lockEscapeKey()
+        }
+      }
+    }
+
+    // Previne atualização / fechamento acidental da página durante o PDV
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (sessionStorage.getItem('pdv_fullscreen_locked') === 'true') {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    window.addEventListener('pointerdown', handleGlobalInteraction, { capture: true })
+    window.addEventListener('keydown', handleGlobalInteraction, { capture: true })
+    window.addEventListener('keydown', handleEscapeCapture, { capture: true })
+    window.addEventListener('beforeunload', handleBeforeUnload)
 
     return () => {
-      window.removeEventListener('keydown', handleFirstGesture)
-      window.removeEventListener('pointerdown', handleFirstGesture)
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
+      window.removeEventListener('pointerdown', handleGlobalInteraction, { capture: true })
+      window.removeEventListener('keydown', handleGlobalInteraction, { capture: true })
+      window.removeEventListener('keydown', handleEscapeCapture, { capture: true })
+      window.removeEventListener('beforeunload', handleBeforeUnload)
     }
-  }, [])
+  }, [enterFullscreen, lockEscapeKey])
 
   // Dados do Cliente Selecionado
   const selectedCustomer = useMemo(
@@ -283,7 +354,10 @@ export function PdvTerminalPage() {
         setInventoryItems(
           invRes.data.filter(
             (item: InventoryItem) =>
-              item.isActive && item.canSell && item.registrationStatus !== 'awaiting_information',
+              item.isActive &&
+              item.canSell &&
+              item.registrationStatus !== 'awaiting_information' &&
+              Number(item.quantityOnHand) > 0,
           ),
         )
       }
@@ -364,7 +438,7 @@ export function PdvTerminalPage() {
 
     setOpenSessionError(null)
     const opName = profile?.displayName || user.email?.split('@')[0] || 'Operador'
-    const cleanBalance = openingBalanceInput.replace(',', '.')
+    const cleanBalance = parseCurrencyInput(openingBalanceInput)
 
     const res = await cashSessionService.openSession(currentOrganization.id, {
       registerId: 'Caixa 01',
@@ -384,29 +458,29 @@ export function PdvTerminalPage() {
     }
   }
 
-  // Bipar / Adicionar Produto pelo Código de Barras ou SKU
-  const handleScanBarcode = (e: React.FormEvent) => {
-    e.preventDefault()
-    const code = barcodeQuery.trim()
-    if (!code) {
-      if (cart.length > 0) {
-        handleOpenPayment()
-      }
-      return
-    }
+  // Produtos filtrados para sugestão rápida durante digitação (apenas com estoque disponível)
+  const matchedProducts = useMemo(() => {
+    const q = barcodeQuery.trim().toLowerCase()
+    if (!q || q.length < 2) return []
+    return inventoryItems
+      .filter((item) => {
+        if (!item.isActive || !item.canSell || item.registrationStatus === 'awaiting_information') return false
+        if (Number(item.quantityOnHand) <= 0) return false
+        const matchName = item.name.toLowerCase().includes(q)
+        const matchSku = item.sku.toLowerCase().includes(q)
+        const matchBarcode = item.barcode ? item.barcode.toLowerCase().includes(q) : false
+        return matchName || matchSku || matchBarcode
+      })
+      .slice(0, 6)
+  }, [barcodeQuery, inventoryItems])
 
-    // Busca exata por barcode, depois sku, depois nome
-    const found = inventoryItems.find((item) => {
-      if (item.barcode && item.barcode.trim().toLowerCase() === code.toLowerCase()) return true
-      if (item.sku && item.sku.trim().toLowerCase() === code.toLowerCase()) return true
-      return false
-    }) || inventoryItems.find((item) => item.name.toLowerCase().includes(code.toLowerCase()))
-
-    if (!found) {
+  // Função centralizada para adicionar produto ao carrinho do PDV
+  const handleAddProductToCart = (found: InventoryItem) => {
+    if (Number(found.quantityOnHand) <= 0) {
       pdvSound.playError()
       setScanFeedback({
         type: 'error',
-        message: `Código "${code}" não cadastrado no estoque.`,
+        message: `Produto "${found.name}" sem estoque disponível no momento.`,
       })
       setBarcodeQuery('')
       return
@@ -474,7 +548,7 @@ export function PdvTerminalPage() {
     const currentQtyInCart = existingIndex >= 0 ? parseInt(cart[existingIndex].quantity, 10) : 0
     const available = parseFloat(found.quantityOnHand)
 
-    if (!found.allowNegativeStock && available < currentQtyInCart + qtyToAdd) {
+    if (available < currentQtyInCart + qtyToAdd) {
       pdvSound.playError()
       setScanFeedback({
         type: 'error',
@@ -527,6 +601,37 @@ export function PdvTerminalPage() {
     setNextItemQuantity(0) // Volta para zero na próxima leitura
     setQuantityOperation('multiply')
     focusBarcodeInput()
+  }
+
+  // Bipar / Adicionar Produto pelo Código de Barras ou SKU
+  const handleScanBarcode = (e: React.FormEvent) => {
+    e.preventDefault()
+    const code = barcodeQuery.trim()
+    if (!code) {
+      if (cart.length > 0) {
+        handleOpenPayment()
+      }
+      return
+    }
+
+    // Busca exata por barcode, depois sku, depois nome
+    const found = inventoryItems.find((item) => {
+      if (item.barcode && item.barcode.trim().toLowerCase() === code.toLowerCase()) return true
+      if (item.sku && item.sku.trim().toLowerCase() === code.toLowerCase()) return true
+      return false
+    }) || inventoryItems.find((item) => item.name.toLowerCase().includes(code.toLowerCase()))
+
+    if (!found) {
+      pdvSound.playError()
+      setScanFeedback({
+        type: 'error',
+        message: `Código "${code}" não cadastrado ou sem estoque disponível.`,
+      })
+      setBarcodeQuery('')
+      return
+    }
+
+    handleAddProductToCart(found)
   }
 
   // Remover Item do Carrinho
@@ -585,6 +690,7 @@ export function PdvTerminalPage() {
       changeAmount: selectedPaymentMethod === 'money' ? cashChange.change.toFixed(2) : '0.00',
       operatorId: user?.id,
       operatorName: session.operatorName,
+      sellerName: session.operatorName || profile?.displayName || user?.email?.split('@')[0] || 'Operador',
     })
 
     if (res.success) {
@@ -639,7 +745,7 @@ export function PdvTerminalPage() {
   const handleConfirmCloseSession = async () => {
     if (!currentOrganization || !session || !user || isClosingSession) return
 
-    const countedVal = countedMoneyInput.replace(',', '.')
+    const countedVal = parseCurrencyInput(countedMoneyInput)
     if (countedVal.trim() === '') {
       setClosureError('Informe o valor físico existente em dinheiro na gaveta.')
       pdvSound.playError()
@@ -661,10 +767,6 @@ export function PdvTerminalPage() {
       setClosedSessionReport(res.data)
       setShowCloseModal(false)
       setSession(null)
-      // Dispara automaticamente a impressão do comprovante de encerramento
-      setTimeout(() => {
-        window.print()
-      }, 400)
     } else {
       pdvSound.playError()
       setClosureError(res.error)
@@ -677,7 +779,7 @@ export function PdvTerminalPage() {
   // Registrar Sangria / Suprimento
   const handleConfirmMovement = async () => {
     if (!currentOrganization || !session || !user) return
-    const cleanAmount = movementAmountInput.replace(',', '.')
+    const cleanAmount = parseCurrencyInput(movementAmountInput)
     if (!cleanAmount || parseFloat(cleanAmount) <= 0) {
       pdvSound.playError()
       return
@@ -727,10 +829,10 @@ export function PdvTerminalPage() {
         Boolean(closedSessionReport)
 
       if (!anyModalOpen) {
-        // F11 — Alternar Tela Cheia
+        // F11 — Garantir / Reentrar em Tela Cheia
         if (e.key === 'F11') {
           e.preventDefault()
-          void toggleFullscreen()
+          void enterFullscreen()
           return
         }
 
@@ -928,12 +1030,12 @@ export function PdvTerminalPage() {
       } else if (closedSessionReport) {
         if (e.key === 'Enter' || e.key.toLowerCase() === 'p') {
           e.preventDefault()
-          window.print()
+          handlePrintAndExit()
           return
         }
         if (e.key === 'Escape') {
           e.preventDefault()
-          navigate('/orcafacil/sales')
+          void handleExitToSales()
           return
         }
       } else if (showDiscountModal) {
@@ -1030,14 +1132,16 @@ export function PdvTerminalPage() {
     focusBarcodeInput,
     handleConfirmSale,
     handleConfirmCloseSession,
-    toggleFullscreen,
+    enterFullscreen,
+    handleExitToSales,
+    handlePrintAndExit,
     navigate,
   ])
 
   // Dados de conciliação para o fechamento
   const reconciliation = useMemo(() => {
     if (!session) return null
-    return reconcileCash(countedMoneyInput.replace(',', '.'), session.expectedMoney)
+    return reconcileCash(parseCurrencyInput(countedMoneyInput), session.expectedMoney)
   }, [session, countedMoneyInput])
 
   if (isLoadingSession) {
@@ -1090,24 +1194,25 @@ export function PdvTerminalPage() {
         </div>
 
         <div className="flex items-center gap-3 text-xs">
-          <button
-            type="button"
-            onClick={() => { void toggleFullscreen(); }}
-            title={isFullscreen ? 'Sair da Tela Cheia [F11]' : 'Tela Cheia [F11]'}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-2.5 py-1.5 text-slate-300 border border-slate-700/50 transition-colors"
-          >
-            {isFullscreen ? (
-              <>
-                <Minimize className="h-3.5 w-3.5 text-amber-400" />
-                <span className="hidden sm:inline font-mono">Normal [F11]</span>
-              </>
-            ) : (
-              <>
-                <Maximize className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="hidden sm:inline font-mono">Tela Cheia [F11]</span>
-              </>
-            )}
-          </button>
+          {isFullscreen ? (
+            <div
+              title="PDV em Modo Tela Cheia Bloqueado"
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-emerald-400 border border-emerald-500/30 select-none"
+            >
+              <Maximize className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline font-mono text-[11px] font-semibold">Tela Cheia Fixa</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { void enterFullscreen(); }}
+              title="Restaurar Tela Cheia [F11]"
+              className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 px-2.5 py-1.5 text-amber-300 border border-amber-500/40 transition-colors animate-pulse"
+            >
+              <Maximize className="h-3.5 w-3.5" />
+              <span className="font-mono text-[11px] font-bold">Restaurar Tela Cheia [F11]</span>
+            </button>
+          )}
           <div className="hidden sm:flex items-center gap-2 rounded-lg bg-slate-800/80 px-3 py-1.5 text-slate-300 border border-slate-700/50">
             <User className="h-3.5 w-3.5 text-blue-400" />
             <span>Cliente: <b className="text-white">{customerName}</b></span>
@@ -1170,26 +1275,63 @@ export function PdvTerminalPage() {
                 </span>
               )}
             </div>
-            <form onSubmit={handleScanBarcode} className="relative flex items-center">
-              <div className="absolute left-3.5 flex items-center pointer-events-none text-emerald-400">
-                <Barcode className="h-6 w-6 animate-pulse" />
-              </div>
-              <input
-                ref={barcodeInputRef}
-                type="text"
-                value={barcodeQuery}
-                onChange={(e) => { setBarcodeQuery(e.target.value); }}
-                placeholder="Pressione [1] ou aponte o leitor de código de barras / digite o SKU..."
-                className="w-full rounded-xl bg-slate-950 py-3.5 pl-12 pr-28 text-base font-semibold text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 tracking-wide"
-                autoComplete="off"
-              />
-              <button
-                type="submit"
-                className="absolute right-2.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white uppercase hover:bg-emerald-500 transition-colors"
-              >
-                Enter (Bipar)
-              </button>
-            </form>
+            <div className="relative">
+              <form onSubmit={handleScanBarcode} className="relative flex items-center">
+                <div className="absolute left-3.5 flex items-center pointer-events-none text-emerald-400">
+                  <Barcode className="h-6 w-6 animate-pulse" />
+                </div>
+                <input
+                  ref={barcodeInputRef}
+                  type="text"
+                  value={barcodeQuery}
+                  onChange={(e) => { setBarcodeQuery(e.target.value); }}
+                  placeholder="Pressione [1] ou aponte o leitor de código de barras / digite o SKU..."
+                  className="w-full rounded-xl bg-slate-950 py-3.5 pl-12 pr-28 text-base font-semibold text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 tracking-wide"
+                  autoComplete="off"
+                />
+                <button
+                  type="submit"
+                  className="absolute right-2.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white uppercase hover:bg-emerald-500 transition-colors"
+                >
+                  Enter (Bipar)
+                </button>
+              </form>
+
+              {/* SUGESTÕES DE PRODUTOS COM ESTOQUE DISPONÍVEL */}
+              {matchedProducts.length > 0 && barcodeQuery.trim().length >= 2 && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden divide-y divide-slate-800">
+                  <div className="px-3 py-1.5 bg-slate-950/80 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex justify-between items-center">
+                    <span>Produtos com Estoque Disponível</span>
+                    <span>Clique para bipar</span>
+                  </div>
+                  {matchedProducts.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleAddProductToCart(p)}
+                      className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/90 transition-colors cursor-pointer group"
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                          {p.name}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          SKU: {p.sku} {p.barcode ? `· EAN: ${p.barcode}` : ''} · Un: {p.unit}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-emerald-400">
+                          {formatCurrency(p.unitPrice)}
+                        </p>
+                        <p className="text-[10px] text-emerald-500 font-semibold">
+                          Saldo: {p.quantityOnHand} {p.unit}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* FEEDBACK DA LEITURA */}
             {scanFeedback && (
@@ -1580,7 +1722,8 @@ export function PdvTerminalPage() {
                   type="text"
                   autoFocus
                   value={openingBalanceInput}
-                  onChange={(e) => { setOpeningBalanceInput(e.target.value); }}
+                  onChange={(e) => { setOpeningBalanceInput(formatCurrencyInput(e.target.value)); }}
+                  onFocus={(e) => e.target.select()}
                   placeholder="0,00"
                   className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2.5 text-lg font-bold text-emerald-400 font-mono border border-slate-800 focus:border-emerald-500 focus:outline-hidden"
                 />
@@ -1943,7 +2086,8 @@ export function PdvTerminalPage() {
                     type="text"
                     autoFocus
                     value={countedMoneyInput}
-                    onChange={(e) => { setCountedMoneyInput(e.target.value); }}
+                    onChange={(e) => { setCountedMoneyInput(formatCurrencyInput(e.target.value)); }}
+                    onFocus={(e) => e.target.select()}
                     placeholder="0,00"
                     className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-emerald-400 border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
                   />
@@ -2078,21 +2222,21 @@ export function PdvTerminalPage() {
               <p><span className="text-slate-400">Divergência:</span> {closedSessionReport.difference || '0.00'}</p>
             </div>
 
-            <div className="pt-2 flex gap-2">
+            <div className="pt-2 flex flex-col sm:flex-row gap-2">
               <button
                 type="button"
-                onClick={() => { window.print(); }}
-                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                onClick={() => { void handleExitToSales(); }}
+                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
               >
-                <Printer className="h-4 w-4" />
-                <span>Imprimir Resumo</span>
+                [Esc] Sair do PDV
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/orcafacil/sales')}
-                className="flex-1 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white hover:bg-emerald-500 transition-colors"
+                onClick={handlePrintAndExit}
+                className="flex-1 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-1.5"
               >
-                Sair para Vendas
+                <Printer className="h-4 w-4" />
+                <span>[Enter] Imprimir e Sair</span>
               </button>
             </div>
           </div>
@@ -2213,7 +2357,8 @@ export function PdvTerminalPage() {
                 type="text"
                 autoFocus
                 value={discountInput}
-                onChange={(e) => { setDiscountInput(e.target.value); }}
+                onChange={(e) => { setDiscountInput(formatCurrencyInput(e.target.value)); }}
+                onFocus={(e) => e.target.select()}
                 placeholder="0,00"
                 className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-rose-400 border border-slate-700 focus:outline-hidden"
               />
@@ -2303,7 +2448,8 @@ export function PdvTerminalPage() {
                 type="text"
                 autoFocus
                 value={movementAmountInput}
-                onChange={(e) => { setMovementAmountInput(e.target.value); }}
+                onChange={(e) => { setMovementAmountInput(formatCurrencyInput(e.target.value)); }}
+                onFocus={(e) => e.target.select()}
                 placeholder="0,00"
                 className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-white border border-slate-700 focus:outline-hidden"
               />

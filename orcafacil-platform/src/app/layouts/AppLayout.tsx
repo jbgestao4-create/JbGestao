@@ -16,9 +16,11 @@ import {
   Settings,
   LogOut,
   Building2,
+  FileBarChart,
   Truck,
   Package,
   ShoppingCart,
+  Wrench,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -155,6 +157,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const canAccessQuotes = canAccessDashboardModule('MOD-04')
   const canAccessSuppliers = canAccessDashboardModule('MOD-06')
   const canAccessOrganization = canAccessDashboardModule('MOD-07')
+  const canAccessReports = canAccessDashboardModule('MOD-08')
+  const canAccessServices = canAccessDashboardModule('MOD-09')
 
   const navItem = (to: string, label: string, icon: ReactNode) => {
     const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
@@ -303,6 +307,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       )}
                     {canAccessInventory &&
                       navItem('/orcafacil/inventory', 'Estoque', <Package className="w-4 h-4" />)}
+                    {canAccessReports &&
+                      navItem(
+                        '/orcafacil/reports',
+                        'Relatórios',
+                        <FileBarChart className="w-4 h-4" />,
+                      )}
+                    {canAccessServices &&
+                      navItem(
+                        '/services',
+                        'Serviços',
+                        <Wrench className="w-4 h-4" />,
+                      )}
                   </div>
                 </div>
               )}

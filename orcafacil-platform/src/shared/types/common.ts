@@ -17,7 +17,15 @@ export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 
 /** Cartões da página inicial que podem ser liberados individualmente para operadores */
 export type DashboardModuleCode =
-  'MOD-01' | 'MOD-02' | 'MOD-03' | 'MOD-04' | 'MOD-05' | 'MOD-06' | 'MOD-07'
+  | 'MOD-01'
+  | 'MOD-02'
+  | 'MOD-03'
+  | 'MOD-04'
+  | 'MOD-05'
+  | 'MOD-06'
+  | 'MOD-07'
+  | 'MOD-08'
+  | 'MOD-09'
 
 /** Perfil do usuário autenticado */
 export interface UserProfile {

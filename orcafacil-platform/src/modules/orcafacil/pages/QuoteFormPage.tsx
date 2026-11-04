@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -23,6 +23,7 @@ import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import { Plus, Trash2, ArrowLeft, Search, UserRoundPlus } from 'lucide-react'
+import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
 
 function ProductCodeSearch({
   value,
@@ -159,6 +160,123 @@ function ProductCodeSearch({
   )
 }
 
+function ServiceCodeSearch({
+  value,
+  services,
+  onSelect,
+}: {
+  value: string
+  services: ServiceListItem[]
+  onSelect: (serviceId: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [isFocused, setIsFocused] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+  })
+
+  const updateCoords = useCallback(() => {
+    if (!inputRef.current) return
+    const rect = inputRef.current.getBoundingClientRect()
+    setCoords({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: Math.max(rect.width, 240),
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isFocused) return
+    updateCoords()
+    const handleScrollOrResize = () => {
+      updateCoords()
+    }
+    window.addEventListener('scroll', handleScrollOrResize, true)
+    window.addEventListener('resize', handleScrollOrResize)
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true)
+      window.removeEventListener('resize', handleScrollOrResize)
+    }
+  }, [isFocused, updateCoords])
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const matches = normalizedQuery
+    ? services.filter(
+        (s) =>
+          s.serviceCode.toLowerCase().includes(normalizedQuery) ||
+          s.name.toLowerCase().includes(normalizedQuery),
+      )
+    : []
+
+  const showDropdown = isFocused && query.trim().length > 0
+
+  return (
+    <div className="relative w-full">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder="Cód. serviço"
+        value={isFocused ? query : value}
+        onFocus={() => {
+          setIsFocused(true)
+          setQuery('')
+        }}
+        onBlur={() => {
+          setTimeout(() => {
+            setIsFocused(false)
+          }, 200)
+        }}
+        onChange={(e) => {
+          setQuery(e.target.value)
+        }}
+        className="h-10 w-full rounded-lg border border-gray-300 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      {showDropdown &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: 'fixed',
+              top: `${coords.top}px`,
+              left: `${coords.left}px`,
+              width: `${coords.width}px`,
+              zIndex: 99999,
+            }}
+            className="max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          >
+            {matches.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-gray-500">Nenhum serviço localizado</div>
+            ) : (
+              matches.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    onSelect(item.id)
+                    setIsFocused(false)
+                    setQuery('')
+                  }}
+                  className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-blue-50 focus:bg-blue-50"
+                >
+                  <span className="font-mono font-semibold text-blue-700">
+                    Código: {item.serviceCode}
+                  </span>
+                  <span className="truncate text-gray-700">{item.name}</span>
+                </button>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
+    </div>
+  )
+}
+
 interface FormItem {
   id: string
   itemType: 'service' | 'material'
@@ -166,6 +284,7 @@ interface FormItem {
   quantity: string
   unitPrice: string
   inventoryItemId: string
+  serviceId?: string
   unit: string
 }
 
@@ -201,6 +320,7 @@ export function QuoteFormPage() {
 
   const [customers, setCustomers] = useState<Customer[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
+  const [availableServices, setAvailableServices] = useState<ServiceListItem[]>([])
   const [inventoryLoadError, setInventoryLoadError] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [customerSearch, setCustomerSearch] = useState('')
@@ -224,11 +344,16 @@ export function QuoteFormPage() {
 
     const loadForm = async () => {
       setQuoteLoadError('')
-      const [customersResult, inventoryResult] = await Promise.all([
+      const [customersResult, inventoryResult, servicesResult] = await Promise.all([
         customerService.list(currentOrganization.id),
         inventoryService.list(currentOrganization.id),
+        serviceService.listServices(currentOrganization.id, { status: 'active', pageSize: 100 }),
       ])
       if (!isCurrentEffect()) return
+
+      if (servicesResult.success) {
+        setAvailableServices(servicesResult.data.items)
+      }
 
       if (inventoryResult.success) {
         setInventoryItems(inventoryResult.data)
@@ -286,11 +411,12 @@ export function QuoteFormPage() {
       setItems(
         quote.items.map((item) => ({
           id: item.id,
-          itemType: item.inventoryItemId ? 'material' : 'service',
+          itemType: item.itemType === 'service' || (!item.inventoryItemId && item.serviceId) ? 'service' : (item.inventoryItemId ? 'material' : 'service'),
           description: item.description,
           quantity: item.quantity,
           unitPrice: toMoneyInput(item.unitPrice),
           inventoryItemId: item.inventoryItemId ?? '',
+          serviceId: item.serviceId ?? '',
           unit: item.unit ?? '',
         })),
       )
@@ -324,6 +450,7 @@ export function QuoteFormPage() {
         quantity: '1',
         unitPrice: '0.00',
         inventoryItemId: '',
+        serviceId: '',
         unit: '',
       },
     ])
@@ -364,6 +491,23 @@ export function QuoteFormPage() {
     )
   }
 
+  const handleSelectService = (itemId: string, serviceId: string) => {
+    const s = availableServices.find((srv) => srv.id === serviceId)
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              serviceId,
+              description: s?.name ?? item.description,
+              unit: s?.billingUnit ?? item.unit,
+              unitPrice: s ? toMoneyInput(s.salePrice) : item.unitPrice,
+            }
+          : item,
+      ),
+    )
+  }
+
   // Cálculos dinâmicos em tempo real para a interface
   const itemTotals = items.map((i) => calculateItemTotal(i.quantity, i.unitPrice))
   const subtotal = calculateSubtotal(itemTotals)
@@ -379,6 +523,26 @@ export function QuoteFormPage() {
   const minimumPriceViolationsByIndex = new Map(
     minimumPriceViolations.map((violation) => [violation.itemIndex, violation]),
   )
+
+  const serviceMinimumPriceViolations = useMemo(() => {
+    const violations: { itemIndex: number; serviceName: string; minimumSalePrice: number }[] = []
+    items.forEach((item, index) => {
+      if (item.itemType === 'service' && item.serviceId) {
+        const s = availableServices.find((srv) => srv.id === item.serviceId)
+        if (s && Number(s.minimumSalePrice) > 0) {
+          const price = Number(item.unitPrice) || 0
+          if (price < Number(s.minimumSalePrice)) {
+            violations.push({
+              itemIndex: index,
+              serviceName: s.name,
+              minimumSalePrice: Number(s.minimumSalePrice),
+            })
+          }
+        }
+      }
+    })
+    return violations
+  }, [items, availableServices])
   const normalizedCustomerSearch = customerSearch.trim().toLocaleLowerCase('pt-BR')
   const matchingCustomers = normalizedCustomerSearch
     ? customers.filter((customer) =>
@@ -441,6 +605,12 @@ export function QuoteFormPage() {
       )
       return
     }
+    if (serviceMinimumPriceViolations.length > 0) {
+      setError(
+        'O valor de venda não pode ficar abaixo do preço mínimo cadastrado para os serviços vinculados.',
+      )
+      return
+    }
     if (
       items.some((item) => !Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0)
     ) {
@@ -460,7 +630,9 @@ export function QuoteFormPage() {
         description: i.description,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
-        inventoryItemId: i.inventoryItemId || null,
+        inventoryItemId: i.itemType === 'material' ? (i.inventoryItemId || null) : null,
+        serviceId: i.itemType === 'service' ? (i.serviceId || null) : null,
+        itemType: (i.itemType === 'service' ? 'service' : 'product') as 'product' | 'service',
         unit: i.unit || null,
       })),
     }
@@ -758,6 +930,21 @@ export function QuoteFormPage() {
                     .
                   </p>
                 )}
+                {serviceMinimumPriceViolations.length > 0 && (
+                  <p
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  >
+                    O valor de venda não pode ficar abaixo do preço mínimo do serviço:{' '}
+                    {serviceMinimumPriceViolations
+                      .map(
+                        (violation: { serviceName: string; minimumSalePrice: number }) =>
+                          `${violation.serviceName} (mínimo ${formatCurrency(violation.minimumSalePrice)})`,
+                      )
+                      .join('; ')}
+                    .
+                  </p>
+                )}
 
                 {items.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-gray-200 py-10 text-center text-sm text-gray-500">
@@ -815,9 +1002,16 @@ export function QuoteFormPage() {
                                     }}
                                   />
                                 ) : (
-                                  <div className="flex h-10 items-center pl-2">
-                                    <span className="text-xs text-gray-400">—</span>
-                                  </div>
+                                  <ServiceCodeSearch
+                                    value={
+                                      availableServices.find((s) => s.id === item.serviceId)
+                                        ?.serviceCode || ''
+                                    }
+                                    services={availableServices}
+                                    onSelect={(selectedId) => {
+                                      handleSelectService(item.id, selectedId)
+                                    }}
+                                  />
                                 )}
                               </td>
                               <td className="py-2 px-2 align-top">
@@ -858,16 +1052,32 @@ export function QuoteFormPage() {
                                     )}
                                   </div>
                                 ) : (
-                                  <input
-                                    type="text"
-                                    className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Descrição do serviço"
-                                    value={item.description}
-                                    onChange={(e) => {
-                                      handleUpdateItem(item.id, 'description', e.target.value)
-                                    }}
-                                    required
-                                  />
+                                  <div className="space-y-1">
+                                    <ListBox
+                                      id={`quote-service-${item.id}`}
+                                      placeholder="Selecione o serviço..."
+                                      searchPlaceholder="Buscar serviço por nome ou código..."
+                                      value={item.serviceId || ''}
+                                      onChange={(val) => {
+                                        handleSelectService(item.id, val as string)
+                                      }}
+                                      options={availableServices.map((srv) => ({
+                                        value: srv.id,
+                                        label: srv.name,
+                                        description: `Cód. ${srv.serviceCode} · ${srv.categoryName || 'Geral'} · Preço: ${formatCurrency(srv.salePrice)} / ${srv.billingUnit}`,
+                                      }))}
+                                    />
+                                    <input
+                                      type="text"
+                                      className="w-full text-xs text-gray-500 bg-transparent border-b border-dashed border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 px-1"
+                                      placeholder="Descrição detalhada do serviço ou observação"
+                                      value={item.description}
+                                      onChange={(e) => {
+                                        handleUpdateItem(item.id, 'description', e.target.value)
+                                      }}
+                                      required
+                                    />
+                                  </div>
                                 )}
                               </td>
                               <td className="py-2 px-2 align-top">
