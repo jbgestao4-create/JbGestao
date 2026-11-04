@@ -30,6 +30,7 @@ import {
   SuppliersListPage,
   ServicesListPage,
   ServiceFormPage,
+  CustomerQuotesPortalPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -45,6 +46,12 @@ export const router = createBrowserRouter([
   {
     path: '/forgot-password',
     element: <ForgotPasswordPage />,
+  },
+
+  // Portal Seguro de Orçamentos do Cliente (Acesso por Token único e validação de CPF)
+  {
+    path: '/portal/orcamentos/:token',
+    element: <CustomerQuotesPortalPage />,
   },
 
   // Rotas autenticadas protegidas

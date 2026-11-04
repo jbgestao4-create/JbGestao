@@ -39,6 +39,11 @@ export const QuoteFormPage = lazy(() =>
     default: module.QuoteFormPage,
   })),
 )
+export const CustomerQuotesPortalPage = lazy(() =>
+  import('@modules/orcafacil/pages/CustomerQuotesPortalPage').then((module) => ({
+    default: module.CustomerQuotesPortalPage,
+  })),
+)
 export const CustomersHomePage = lazy(() =>
   import('@modules/customers/pages/CustomersHomePage').then((module) => ({
     default: module.CustomersHomePage,

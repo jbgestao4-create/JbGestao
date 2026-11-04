@@ -31,6 +31,26 @@ describe('quote-whatsapp', () => {
     expect(msg).not.toContain('1.')
   })
 
+  it('includes portal url in message when provided', () => {
+    const msg = buildQuoteWhatsAppMessage(
+      {
+        customerName: 'Carlos Santos',
+        quoteNumber: 'ORC-202611-0002',
+        createdAt: '2026-11-04T10:00:00Z',
+        validUntil: null,
+        subtotal: '100.00',
+        discount: '0.00',
+        total: '100.00',
+      },
+      'JB Software',
+      'https://jbgestao.com/portal/orcamentos/abc123xyz',
+    )
+
+    expect(msg).toContain('PORTAL DE ORÇAMENTOS')
+    expect(msg).toContain('https://jbgestao.com/portal/orcamentos/abc123xyz')
+    expect(msg).toContain('confirme seu CPF ao acessar o link')
+  })
+
   it('formats openQuoteWhatsApp target url with country code 55', () => {
     let capturedUrl = ''
     const spy = vi.spyOn(window, 'open').mockImplementation((url: string | URL | undefined) => {

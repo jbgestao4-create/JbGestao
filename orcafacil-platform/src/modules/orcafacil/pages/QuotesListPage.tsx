@@ -573,6 +573,7 @@ export function QuotesListPage() {
         quote={quoteForWhatsApp}
         quoteDetail={quoteDetailForWhatsApp}
         organizationName={currentOrganization?.name}
+        organizationId={currentOrganization?.id}
         onClose={() => {
           setWhatsAppModalOpen(false)
           setQuoteForWhatsApp(null)
