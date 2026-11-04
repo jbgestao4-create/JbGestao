@@ -7,6 +7,7 @@ import { inventoryService } from '@modules/inventory/services/inventory.service'
 import { cashSessionService } from '@modules/cash/services/cash-session.service'
 import {
   reconcileCash,
+  type CashRegister,
   type CashSession,
 } from '@modules/cash/domain/cash-session'
 import {
@@ -78,7 +79,12 @@ export function PdvTerminalPage() {
   const { currentOrganization } = useOrganization()
   const navigate = useNavigate()
 
-  // Sessão de Caixa
+  // Sessão de Caixa e Seleção de Terminal PDV
+  const [registers, setRegisters] = useState<CashRegister[]>([])
+  const [selectedRegister, setSelectedRegister] = useState<string>('Caixa 01')
+  const [showInlineNewRegister, setShowInlineNewRegister] = useState(false)
+  const [inlineNewRegisterName, setInlineNewRegisterName] = useState('')
+  const [isCreatingInlineRegister, setIsCreatingInlineRegister] = useState(false)
   const [session, setSession] = useState<CashSession | null>(null)
   const [isLoadingSession, setIsLoadingSession] = useState(true)
   const [showOpenSessionModal, setShowOpenSessionModal] = useState(false)
@@ -321,20 +327,98 @@ export function PdvTerminalPage() {
     return () => { clearInterval(timer); }
   }, [])
 
-  // Carrega Sessão de Caixa Atual
-  const loadActiveSession = useCallback(async () => {
+  // Carrega Sessão de Caixa Atual e Caixas Cadastrados
+  const loadActiveSession = useCallback(
+    async (overrideRegisterName?: string) => {
+      if (!currentOrganization) return
+      setIsLoadingSession(true)
+
+      const savedRegister =
+        overrideRegisterName || cashSessionService.getSelectedRegisterName(currentOrganization.id)
+
+      const regRes = await cashSessionService.listRegisters(currentOrganization.id)
+      const regList = regRes.success ? regRes.data : []
+      setRegisters(regList)
+
+      const targetRegister = regList.some((r) => r.name === savedRegister)
+        ? savedRegister
+        : regList[0]?.name || 'Caixa 01'
+
+      setSelectedRegister(targetRegister)
+      cashSessionService.setSelectedRegisterName(currentOrganization.id, targetRegister)
+
+      const [res, openListRes] = await Promise.all([
+        cashSessionService.getOpenSession(currentOrganization.id, targetRegister),
+        cashSessionService.listOpenSessions(currentOrganization.id),
+      ])
+
+      const otherOpenByCurrentUser =
+        openListRes.success && user
+          ? openListRes.data.find(
+              (s) => s.openedBy === user.id && s.registerId !== targetRegister,
+            )
+          : undefined
+
+      if (res.success && res.data) {
+        if (user && res.data.openedBy !== user.id) {
+          setSession(null)
+          setOpenSessionError(
+            `O ${targetRegister} já consta aberto pelo usuário "${res.data.operatorName}". Você só poderá usar este caixa após o fechamento.`,
+          )
+          setShowOpenSessionModal(true)
+        } else {
+          setOpenSessionError(null)
+          setSession(res.data)
+          setShowOpenSessionModal(false)
+        }
+      } else {
+        setSession(null)
+        if (otherOpenByCurrentUser) {
+          setOpenSessionError(
+            `Você já possui o "${otherOpenByCurrentUser.registerId}" aberto. Cada usuário só pode ter um caixa aberto por vez. Feche primeiro o "${otherOpenByCurrentUser.registerId}" para mudar de caixa.`,
+          )
+        } else {
+          setOpenSessionError(null)
+        }
+        setShowOpenSessionModal(true)
+      }
+      setIsLoadingSession(false)
+    },
+    [currentOrganization, user],
+  )
+
+  const handleSelectTerminalInModal = async (registerName: string) => {
     if (!currentOrganization) return
-    setIsLoadingSession(true)
-    const res = await cashSessionService.getOpenSession(currentOrganization.id, 'Caixa 01')
-    if (res.success && res.data) {
-      setSession(res.data)
-      setShowOpenSessionModal(false)
-    } else {
-      setSession(null)
-      setShowOpenSessionModal(true)
+    setOpenSessionError(null)
+    cashSessionService.setSelectedRegisterName(currentOrganization.id, registerName)
+    setSelectedRegister(registerName)
+    await loadActiveSession(registerName)
+  }
+
+  const handleCreateInlineRegister = async () => {
+    if (!currentOrganization) return
+    const trimmed = inlineNewRegisterName.trim()
+    if (!trimmed) {
+      setOpenSessionError('Informe o nome do novo caixa PDV.')
+      return
     }
-    setIsLoadingSession(false)
-  }, [currentOrganization])
+    setIsCreatingInlineRegister(true)
+    setOpenSessionError(null)
+    const res = await cashSessionService.createRegister(currentOrganization.id, {
+      name: trimmed,
+    })
+    setIsCreatingInlineRegister(false)
+    if (res.success) {
+      const createdName = res.data.name
+      setInlineNewRegisterName('')
+      setShowInlineNewRegister(false)
+      cashSessionService.setSelectedRegisterName(currentOrganization.id, createdName)
+      setSelectedRegister(createdName)
+      await loadActiveSession(createdName)
+    } else {
+      setOpenSessionError(res.error)
+    }
+  }
 
   useEffect(() => {
     void loadActiveSession()
@@ -437,11 +521,12 @@ export function PdvTerminalPage() {
     if (!currentOrganization || !user) return
 
     setOpenSessionError(null)
+    cashSessionService.setSelectedRegisterName(currentOrganization.id, selectedRegister)
     const opName = profile?.displayName || user.email?.split('@')[0] || 'Operador'
     const cleanBalance = parseCurrencyInput(openingBalanceInput)
 
     const res = await cashSessionService.openSession(currentOrganization.id, {
-      registerId: 'Caixa 01',
+      registerId: selectedRegister,
       operatorId: user.id,
       operatorName: opName,
       openingBalance: cleanBalance,
@@ -1180,7 +1265,7 @@ export function PdvTerminalPage() {
           </div>
 
           <div className="hidden md:flex items-center gap-2 border-l border-slate-800 pl-4 text-xs text-slate-400">
-            <span className="font-semibold text-slate-200">{session?.registerId || 'Caixa 01'}</span>
+            <span className="font-semibold text-slate-200">{session?.registerId || selectedRegister}</span>
             <span>•</span>
             <span className="flex items-center gap-1 text-slate-300">
               <User className="h-3.5 w-3.5 text-slate-400" />
@@ -1695,13 +1780,58 @@ export function PdvTerminalPage() {
               )}
 
               <div>
-                <label className="block text-xs font-medium text-slate-400">Terminal</label>
-                <input
-                  type="text"
-                  readOnly
-                  value="Caixa 01"
-                  className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm text-slate-300 border border-slate-800 focus:outline-hidden"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-slate-400">
+                    Terminal / Caixa PDV
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInlineNewRegister((prev) => !prev)
+                      setOpenSessionError(null)
+                    }}
+                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer"
+                  >
+                    {showInlineNewRegister ? 'Cancelar novo caixa' : '+ Cadastrar novo caixa'}
+                  </button>
+                </div>
+
+                {showInlineNewRegister ? (
+                  <div className="mt-1.5 flex gap-2">
+                    <input
+                      type="text"
+                      value={inlineNewRegisterName}
+                      onChange={(e) => setInlineNewRegisterName(e.target.value)}
+                      placeholder="Ex.: Caixa 02, Balcão..."
+                      className="flex-1 rounded-xl bg-slate-950 px-3 py-2 text-sm text-white border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isCreatingInlineRegister}
+                      onClick={() => {
+                        void handleCreateInlineRegister()
+                      }}
+                      className="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-bold text-white transition-colors cursor-pointer"
+                    >
+                      {isCreatingInlineRegister ? 'Salvando...' : 'Salvar'}
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedRegister}
+                    onChange={(e) => {
+                      void handleSelectTerminalInModal(e.target.value)
+                    }}
+                    className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200 border border-slate-800 focus:border-emerald-500 focus:outline-hidden"
+                  >
+                    {registers.map((reg) => (
+                      <option key={reg.id} value={reg.name}>
+                        {reg.name}
+                        {reg.description ? ` — ${reg.description}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>

@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { cashSessionService } from '@modules/cash/services/cash-session.service'
-import type { CashSession } from '@modules/cash/domain/cash-session'
+import type { CashRegister, CashSession } from '@modules/cash/domain/cash-session'
 import { formatCurrencyInput, parseCurrencyInput } from '@shared/utils/monetary'
 import {
   AlertTriangle,
   Barcode,
+  CheckCircle2,
   ChevronRight,
   FileText,
   Plus,
@@ -17,6 +18,7 @@ import {
   Search,
   ShoppingCart,
   Store,
+  Trash2,
   X,
 } from 'lucide-react'
 
@@ -25,45 +27,130 @@ export function SalesHomePage() {
   const { user, profile } = useAuth()
   const { currentOrganization } = useOrganization()
 
+  const [registers, setRegisters] = useState<CashRegister[]>([])
+  const [selectedRegister, setSelectedRegister] = useState<string>('Caixa 01')
+  const [openSessions, setOpenSessions] = useState<CashSession[]>([])
   const [activeSession, setActiveSession] = useState<CashSession | null>(null)
   const [isLoadingSession, setIsLoadingSession] = useState(true)
+
+  // Modal de Abertura de Caixa
   const [showOpenModal, setShowOpenModal] = useState(false)
   const [openingBalance, setOpeningBalance] = useState('0,00')
   const [openError, setOpenError] = useState<string | null>(null)
   const [isOpening, setIsOpening] = useState(false)
 
-  useEffect(() => {
-    if (!currentOrganization) return
-    let active = true
+  // Modal de Cadastro / Gerenciamento de Caixas PDV
+  const [showRegistersModal, setShowRegistersModal] = useState(false)
+  const [newRegisterName, setNewRegisterName] = useState('')
+  const [newRegisterDescription, setNewRegisterDescription] = useState('')
+  const [registerModalError, setRegisterModalError] = useState<string | null>(null)
+  const [registerModalSuccess, setRegisterModalSuccess] = useState<string | null>(null)
+  const [isCreatingRegister, setIsCreatingRegister] = useState(false)
 
-    setIsLoadingSession(true)
-    cashSessionService.getOpenSession(currentOrganization.id, 'Caixa 01').then((res) => {
-      if (!active) return
-      if (res.success) {
-        setActiveSession(res.data)
+  const loadRegistersAndSession = useCallback(
+    async (overrideRegisterName?: string) => {
+      if (!currentOrganization) return
+      setIsLoadingSession(true)
+
+      const savedRegName =
+        overrideRegisterName || cashSessionService.getSelectedRegisterName(currentOrganization.id)
+
+      const [regRes, openListRes] = await Promise.all([
+        cashSessionService.listRegisters(currentOrganization.id),
+        cashSessionService.listOpenSessions(currentOrganization.id),
+      ])
+
+      const regList = regRes.success ? regRes.data : []
+      setRegisters(regList)
+
+      const validRegName =
+        regList.some((r) => r.name === savedRegName)
+          ? savedRegName
+          : regList[0]?.name || 'Caixa 01'
+
+      setSelectedRegister(validRegName)
+      cashSessionService.setSelectedRegisterName(currentOrganization.id, validRegName)
+
+      if (openListRes.success) {
+        setOpenSessions(openListRes.data)
+      }
+
+      const sessionRes = await cashSessionService.getOpenSession(
+        currentOrganization.id,
+        validRegName,
+      )
+      if (sessionRes.success) {
+        setActiveSession(sessionRes.data)
       }
       setIsLoadingSession(false)
+    },
+    [currentOrganization],
+  )
+
+  useEffect(() => {
+    void loadRegistersAndSession()
+  }, [loadRegistersAndSession])
+
+  const handleSelectRegister = async (registerName: string) => {
+    if (!currentOrganization) return
+    cashSessionService.setSelectedRegisterName(currentOrganization.id, registerName)
+    setSelectedRegister(registerName)
+    setOpenError(null)
+    await loadRegistersAndSession(registerName)
+  }
+
+  const handleCreateRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentOrganization) return
+
+    setRegisterModalError(null)
+    setRegisterModalSuccess(null)
+    setIsCreatingRegister(true)
+
+    const res = await cashSessionService.createRegister(currentOrganization.id, {
+      name: newRegisterName,
+      description: newRegisterDescription,
     })
 
-    return () => {
-      active = false
+    setIsCreatingRegister(false)
+
+    if (res.success) {
+      const createdName = res.data.name
+      setNewRegisterName('')
+      setNewRegisterDescription('')
+      cashSessionService.setSelectedRegisterName(currentOrganization.id, createdName)
+      setSelectedRegister(createdName)
+      setRegisterModalSuccess(`Caixa "${createdName}" cadastrado e selecionado com sucesso!`)
+      await loadRegistersAndSession(createdName)
+    } else {
+      setRegisterModalError(res.error)
     }
-  }, [currentOrganization])
+  }
+
+  const handleDeleteRegister = async (reg: CashRegister) => {
+    if (!currentOrganization) return
+    setRegisterModalError(null)
+    setRegisterModalSuccess(null)
+
+    const res = await cashSessionService.deleteRegister(
+      currentOrganization.id,
+      reg.id,
+      reg.name,
+    )
+    if (res.success) {
+      const nextReg = cashSessionService.getSelectedRegisterName(currentOrganization.id)
+      setRegisterModalSuccess(`Caixa "${reg.name}" removido.`)
+      await loadRegistersAndSession(nextReg)
+    } else {
+      setRegisterModalError(res.error)
+    }
+  }
 
   const handleAccessPdv = async () => {
     if (!currentOrganization) return
-
-    setIsLoadingSession(true)
-    const res = await cashSessionService.getOpenSession(currentOrganization.id, 'Caixa 01')
-    setIsLoadingSession(false)
-
-    if (res.success && res.data) {
-      // Caixa já aberto: entra direto no terminal
-      void navigate('/orcafacil/sales/pdv')
-    } else {
-      // Caixa fechado: solicita abertura
-      setShowOpenModal(true)
-    }
+    await loadRegistersAndSession()
+    setOpenError(null)
+    setShowOpenModal(true)
   }
 
   const handleConfirmOpenSession = async (e: React.FormEvent) => {
@@ -73,11 +160,41 @@ export function SalesHomePage() {
     setIsOpening(true)
     setOpenError(null)
 
+    cashSessionService.setSelectedRegisterName(currentOrganization.id, selectedRegister)
+
+    // Verifica se o mesmo usuário já possui outro caixa aberto
+    const otherOpenByCurrentUser = openSessions.find(
+      (s) => s.openedBy === user.id && s.registerId !== selectedRegister,
+    )
+    if (otherOpenByCurrentUser) {
+      setIsOpening(false)
+      setOpenError(
+        `Você já possui o "${otherOpenByCurrentUser.registerId}" aberto. Cada usuário só pode ter um caixa aberto por vez. Feche primeiro o "${otherOpenByCurrentUser.registerId}" para mudar de caixa.`,
+      )
+      return
+    }
+
+    // Verifica se o caixa selecionado já está aberto
+    const existingOpen = openSessions.find((s) => s.registerId === selectedRegister)
+    if (existingOpen) {
+      if (existingOpen.openedBy !== user.id) {
+        setIsOpening(false)
+        setOpenError(
+          `O ${selectedRegister} já consta aberto pelo usuário "${existingOpen.operatorName}". Você só poderá usar este caixa após o fechamento.`,
+        )
+        return
+      }
+      setIsOpening(false)
+      setShowOpenModal(false)
+      void navigate('/orcafacil/sales/pdv')
+      return
+    }
+
     const opName = profile?.displayName || user.email?.split('@')[0] || 'Operador'
     const cleanBalance = parseCurrencyInput(openingBalance)
 
     const res = await cashSessionService.openSession(currentOrganization.id, {
-      registerId: 'Caixa 01',
+      registerId: selectedRegister,
       operatorId: user.id,
       operatorName: opName,
       openingBalance: cleanBalance,
@@ -117,7 +234,7 @@ export function SalesHomePage() {
             />
             {activeSession
               ? `Caixa Aberto (${activeSession.registerId} • ${activeSession.operatorName})`
-              : 'Caixa Fechado'}
+              : `Caixa Fechado (${selectedRegister})`}
           </div>
         )}
       </div>
@@ -143,6 +260,7 @@ export function SalesHomePage() {
             <p className="mt-2 flex-1 text-xs leading-5 text-gray-600">
               Inicie uma nova venda rápida com seleção de itens e pagamento, ou acesse o terminal de frente de caixa PDV em tela cheia.
             </p>
+
             <div className="mt-5 flex flex-col gap-2">
               <Button
                 size="sm"
@@ -165,6 +283,22 @@ export function SalesHomePage() {
                 <span className="inline-flex items-center gap-2">
                   <Barcode className="h-4 w-4" aria-hidden="true" />
                   Ponto de Venda (PDV)
+                </span>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setRegisterModalError(null)
+                  setRegisterModalSuccess(null)
+                  setShowRegistersModal(true)
+                }}
+                className="w-full justify-between rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Store className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                  Cadastrar Caixa PDV
                 </span>
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </Button>
@@ -269,69 +403,312 @@ export function SalesHomePage() {
             </div>
 
             <form onSubmit={handleConfirmOpenSession} className="mt-4 space-y-4">
-              {openError && (
-                <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200 flex items-start gap-2">
+              {(() => {
+                const openForSelected = openSessions.find((s) => s.registerId === selectedRegister)
+                const isOpenedByAnotherUser = Boolean(
+                  openForSelected && user && openForSelected.openedBy !== user.id,
+                )
+                const isOpenedByCurrentUser = Boolean(
+                  openForSelected && user && openForSelected.openedBy === user.id,
+                )
+                const otherOpenByCurrentUser = openSessions.find(
+                  (s) => user && s.openedBy === user.id && s.registerId !== selectedRegister,
+                )
+                const hasAnotherOpenByCurrentUser = Boolean(otherOpenByCurrentUser)
+
+                return (
+                  <>
+                    {(openError || isOpenedByAnotherUser || hasAnotherOpenByCurrentUser) && (
+                      <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200 flex flex-col gap-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+                          <span>
+                            {openError ||
+                              (isOpenedByAnotherUser
+                                ? `O ${selectedRegister} já consta aberto pelo usuário "${openForSelected?.operatorName}". Você só poderá usar este caixa após o fechamento.`
+                                : `Você já possui o "${otherOpenByCurrentUser?.registerId}" aberto. Cada usuário tem a obrigação de ter só um caixa aberto por vez. Caso queira mudar de caixa, feche primeiro o "${otherOpenByCurrentUser?.registerId}".`)}
+                          </span>
+                        </div>
+                        {hasAnotherOpenByCurrentUser && otherOpenByCurrentUser && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleSelectRegister(otherOpenByCurrentUser.registerId)
+                            }}
+                            className="self-start rounded-lg bg-rose-100 hover:bg-rose-200 px-2.5 py-1 text-[11px] font-bold text-rose-800 transition-colors cursor-pointer"
+                          >
+                            Selecionar {otherOpenByCurrentUser.registerId} (Aberto por você)
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {isOpenedByCurrentUser && (
+                      <div className="rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 border border-emerald-200 flex items-start gap-2">
+                        <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+                        <span>
+                          Este caixa já está aberto em seu nome ({openForSelected?.operatorName}). Clique abaixo para retomar a operação.
+                        </span>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold text-gray-700">
+                          Terminal / Caixa PDV
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowOpenModal(false)
+                            setRegisterModalError(null)
+                            setRegisterModalSuccess(null)
+                            setShowRegistersModal(true)
+                          }}
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                        >
+                          + Cadastrar novo caixa
+                        </button>
+                      </div>
+                      <select
+                        value={selectedRegister}
+                        onChange={(e) => {
+                          void handleSelectRegister(e.target.value)
+                        }}
+                        className="mt-1 w-full rounded-xl bg-white px-3 py-2 text-xs font-semibold text-gray-800 border border-gray-300 focus:border-emerald-500 focus:outline-hidden"
+                      >
+                        {registers.map((reg) => {
+                          const openForReg = openSessions.find((s) => s.registerId === reg.name)
+                          return (
+                            <option key={reg.id} value={reg.name}>
+                              {reg.name}
+                              {openForReg ? ` (Aberto • ${openForReg.operatorName})` : ' (Fechado)'}
+                              {reg.description ? ` — ${reg.description}` : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700">Operador</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={profile?.displayName || user?.email?.split('@')[0] || 'Operador'}
+                        className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 focus:outline-hidden"
+                      />
+                    </div>
+
+                    {!isOpenedByCurrentUser && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700">
+                          Saldo Inicial / Fundo de Troco (R$)
+                        </label>
+                        <input
+                          type="text"
+                          autoFocus
+                          disabled={isOpenedByAnotherUser || hasAnotherOpenByCurrentUser}
+                          value={openingBalance}
+                          onChange={(e) => setOpeningBalance(formatCurrencyInput(e.target.value))}
+                          onFocus={(e) => e.target.select()}
+                          placeholder="0,00"
+                          className="mt-1 w-full rounded-xl bg-white px-3 py-2 text-base font-bold font-mono text-emerald-600 border border-gray-300 focus:border-emerald-500 focus:outline-hidden disabled:bg-gray-100 disabled:text-gray-400"
+                        />
+                        <span className="text-[11px] text-gray-500">
+                          Informe o valor das cédulas e moedas na gaveta ao iniciar o turno.
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="pt-2 flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowOpenModal(false)}
+                        className="flex-1 rounded-xl text-xs font-bold"
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={isOpening || isOpenedByAnotherUser || hasAnotherOpenByCurrentUser}
+                        className="flex-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
+                      >
+                        {isOpening
+                          ? 'Abrindo Caixa...'
+                          : isOpenedByCurrentUser
+                            ? 'Retomar Caixa Aberto'
+                            : 'Abrir Caixa e Entrar no PDV'}
+                      </Button>
+                    </div>
+                  </>
+                )
+              })()}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL DE CADASTRO E GERENCIAMENTO DE CAIXAS PDV                */}
+      {/* ============================================================== */}
+      {showRegistersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-gray-100 dark:border-slate-800 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-2 text-emerald-600 dark:text-emerald-400">
+                  <Store className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    Cadastro de Caixas PDV
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    Cadastre os caixas da empresa e escolha qual caixa você irá operar
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRegistersModal(false)}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-5 overflow-y-auto pr-1">
+              {registerModalError && (
+                <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
-                  <span>{openError}</span>
+                  <span>{registerModalError}</span>
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700">Terminal</label>
-                <input
-                  type="text"
-                  readOnly
-                  value="Caixa 01"
-                  className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 focus:outline-hidden"
-                />
-              </div>
+              {registerModalSuccess && (
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+                  <span>{registerModalSuccess}</span>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700">Operador</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={profile?.displayName || user?.email?.split('@')[0] || 'Operador'}
-                  className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 focus:outline-hidden"
-                />
-              </div>
+              {/* Formulário de Novo Caixa */}
+              <form
+                onSubmit={handleCreateRegister}
+                className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-800/40 p-4 space-y-3"
+              >
+                <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-slate-200">
+                  Novo Caixa PDV
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                      Nome / Identificação <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newRegisterName}
+                      onChange={(e) => setNewRegisterName(e.target.value)}
+                      placeholder="Ex.: Caixa 02, Balcão 01..."
+                      className="mt-1 w-full rounded-xl bg-white dark:bg-slate-900 px-3 py-2 text-xs text-gray-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                      Descrição / Local (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={newRegisterDescription}
+                      onChange={(e) => setNewRegisterDescription(e.target.value)}
+                      placeholder="Ex.: Frente de Loja, Rápido..."
+                      className="mt-1 w-full rounded-xl bg-white dark:bg-slate-900 px-3 py-2 text-xs text-gray-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isCreatingRegister}
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {isCreatingRegister ? 'Cadastrando...' : 'Cadastrar Caixa'}
+                  </Button>
+                </div>
+              </form>
 
+              {/* Lista de Caixas Cadastrados */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700">
-                  Saldo Inicial / Fundo de Troco (R$)
-                </label>
-                <input
-                  type="text"
-                  autoFocus
-                  value={openingBalance}
-                  onChange={(e) => setOpeningBalance(formatCurrencyInput(e.target.value))}
-                  onFocus={(e) => e.target.select()}
-                  placeholder="0,00"
-                  className="mt-1 w-full rounded-xl bg-white px-3 py-2 text-base font-bold font-mono text-emerald-600 border border-gray-300 focus:border-emerald-500 focus:outline-hidden"
-                />
-                <span className="text-[11px] text-gray-500">
-                  Informe o valor das cédulas e moedas na gaveta ao iniciar o turno.
-                </span>
-              </div>
+                <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-slate-300 mb-2.5">
+                  Caixas PDV Cadastrados ({registers.length})
+                </h4>
+                <div className="space-y-2">
+                  {registers.map((reg) => {
+                    const openForReg = openSessions.find((s) => s.registerId === reg.name)
 
-              <div className="pt-2 flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowOpenModal(false)}
-                  className="flex-1 rounded-xl text-xs font-bold"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isOpening}
-                  className="flex-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
-                >
-                  {isOpening ? 'Abrindo Caixa...' : 'Abrir Caixa e Entrar no PDV'}
-                </Button>
+                    return (
+                      <div
+                        key={reg.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                              {reg.name}
+                            </span>
+                            {openForReg ? (
+                              <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                                Aberto por {openForReg.operatorName}
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:text-slate-400">
+                                Fechado
+                              </span>
+                            )}
+                          </div>
+                          {reg.description && (
+                            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 truncate">
+                              {reg.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {registers.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleDeleteRegister(reg)
+                              }}
+                              title="Excluir Caixa PDV"
+                              className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </form>
+            </div>
+
+            <div className="mt-5 pt-3 border-t border-gray-100 dark:border-slate-800 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowRegistersModal(false)}
+                className="rounded-xl text-xs font-bold"
+              >
+                Fechar
+              </Button>
+            </div>
           </div>
         </div>
       )}

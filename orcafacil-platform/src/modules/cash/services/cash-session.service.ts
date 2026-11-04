@@ -3,6 +3,7 @@ import { logger } from '@shared/lib/logger'
 import type { ServiceResult, UUID } from '@shared/types/common'
 import type { PaymentMethod } from '@modules/sales/services/sales.service'
 import {
+  type CashRegister,
   type CashSession,
   type CashSessionMovement,
   calculateExpectedMoney,
@@ -14,13 +15,82 @@ import {
 
 const SESSIONS_STORAGE_KEY_PREFIX = 'orcafacil_cash_sessions_'
 const MOVEMENTS_STORAGE_KEY_PREFIX = 'orcafacil_cash_movements_'
+const REGISTERS_STORAGE_KEY_PREFIX = 'orcafacil_cash_registers_'
+const SELECTED_REGISTER_KEY_PREFIX = 'orcafacil_selected_register_'
+
+function getLocalStorageRegisters(orgId: string): CashRegister[] {
+  try {
+    const raw = localStorage.getItem(`${REGISTERS_STORAGE_KEY_PREFIX}${orgId}`)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as CashRegister[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function saveLocalStorageRegisters(orgId: string, registers: CashRegister[]) {
+  try {
+    localStorage.setItem(`${REGISTERS_STORAGE_KEY_PREFIX}${orgId}`, JSON.stringify(registers))
+  } catch {
+    // ignorar falha de gravação local
+  }
+}
+
+interface CashRegisterRow {
+  id: string
+  organization_id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+function mapRegisterRow(row: CashRegisterRow): CashRegister {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    name: row.name,
+    description: row.description,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+  }
+}
 
 function getLocalStorageSessions(orgId: string): CashSession[] {
   try {
     const raw = localStorage.getItem(`${SESSIONS_STORAGE_KEY_PREFIX}${orgId}`)
     if (!raw) return []
     const parsed = JSON.parse(raw) as CashSession[]
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+
+    // Garante que cada operador tenha no máximo 1 caixa aberto por vez no cache local
+    const seenOpenByOperator = new Set<string>()
+    let modified = false
+    const sanitized = parsed.map((session) => {
+      if (session.status === 'open') {
+        if (seenOpenByOperator.has(session.openedBy)) {
+          modified = true
+          return {
+            ...session,
+            status: 'closed' as const,
+            closedBy: session.openedBy,
+            closedAt: new Date().toISOString(),
+            countedMoney: session.expectedMoney,
+            difference: '0.00',
+          }
+        }
+        seenOpenByOperator.add(session.openedBy)
+      }
+      return session
+    })
+
+    if (modified) {
+      saveLocalStorageSessions(orgId, sanitized)
+    }
+
+    return sanitized
   } catch {
     return []
   }
@@ -151,6 +221,272 @@ export interface CloseSessionParams {
 
 export const cashSessionService = {
   /**
+   * Obtém o nome do Caixa PDV selecionado para este terminal/navegador (padrão: 'Caixa 01')
+   */
+  getSelectedRegisterName(organizationId: string): string {
+    try {
+      const saved = localStorage.getItem(`${SELECTED_REGISTER_KEY_PREFIX}${organizationId}`)
+      return saved?.trim() || 'Caixa 01'
+    } catch {
+      return 'Caixa 01'
+    }
+  },
+
+  /**
+   * Define o Caixa PDV selecionado para este terminal/navegador
+   */
+  setSelectedRegisterName(organizationId: string, registerName: string): void {
+    try {
+      const clean = registerName.trim() || 'Caixa 01'
+      localStorage.setItem(`${SELECTED_REGISTER_KEY_PREFIX}${organizationId}`, clean)
+    } catch {
+      // ignorar falha
+    }
+  },
+
+  /**
+   * Lista todos os Caixas PDV cadastrados na organização (garantindo 'Caixa 01' como padrão)
+   */
+  async listRegisters(organizationId: UUID): Promise<ServiceResult<CashRegister[]>> {
+    const defaultRegister: CashRegister = {
+      id: 'default-caixa-01',
+      organizationId,
+      name: 'Caixa 01',
+      description: 'Terminal principal de frente de caixa',
+      isActive: true,
+      createdAt: new Date(0).toISOString(),
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('cash_registers')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+
+      const localRegisters = getLocalStorageRegisters(organizationId).filter(
+        (r) => r.id !== 'default-caixa-01',
+      )
+      const combinedMap = new Map<string, CashRegister>()
+
+      if (!error && Array.isArray(data)) {
+        for (const row of data as CashRegisterRow[]) {
+          const mapped = mapRegisterRow(row)
+          combinedMap.set(mapped.name.toLocaleLowerCase('pt-BR'), mapped)
+        }
+      } else {
+        for (const loc of localRegisters) {
+          if (loc.isActive !== false) {
+            const key = loc.name.toLocaleLowerCase('pt-BR')
+            if (!combinedMap.has(key)) {
+              combinedMap.set(key, loc)
+            }
+          }
+        }
+      }
+
+      if (combinedMap.size === 0) {
+        combinedMap.set('caixa 01', defaultRegister)
+      }
+
+      const list = Array.from(combinedMap.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, 'pt-BR', { numeric: true }),
+      )
+      saveLocalStorageRegisters(
+        organizationId,
+        list.filter((r) => r.id !== 'default-caixa-01'),
+      )
+      return { success: true, data: list }
+    } catch {
+      const localRegisters = getLocalStorageRegisters(organizationId).filter(
+        (r) => r.id !== 'default-caixa-01',
+      )
+      const list = localRegisters.length > 0 ? localRegisters : [defaultRegister]
+      return {
+        success: true,
+        data: list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
+      }
+    }
+  },
+
+  /**
+   * Cadastra um novo Caixa PDV na organização
+   */
+  async createRegister(
+    organizationId: UUID,
+    params: { name: string; description?: string },
+  ): Promise<ServiceResult<CashRegister>> {
+    try {
+      const cleanName = params.name.trim()
+      const cleanDesc = params.description?.trim() || null
+
+      if (!cleanName) {
+        return { success: false, error: 'Informe o nome/identificação do Caixa PDV.' }
+      }
+      if (cleanName.length > 80) {
+        return { success: false, error: 'O nome do Caixa PDV deve ter no máximo 80 caracteres.' }
+      }
+
+      const existingRes = await this.listRegisters(organizationId)
+      const existingList = (existingRes.success ? existingRes.data : []).filter(
+        (r) => r.id !== 'default-caixa-01',
+      )
+      if (
+        existingList.some(
+          (r) => r.name.toLocaleLowerCase('pt-BR') === cleanName.toLocaleLowerCase('pt-BR'),
+        )
+      ) {
+        return { success: false, error: `Já existe um caixa cadastrado com o nome "${cleanName}".` }
+      }
+
+      const nowIso = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('cash_registers')
+        .insert({
+          organization_id: organizationId,
+          name: cleanName,
+          description: cleanDesc,
+          is_active: true,
+        })
+        .select('*')
+        .single()
+
+      let created: CashRegister
+      if (!error && data) {
+        created = mapRegisterRow(data as CashRegisterRow)
+      } else {
+        created = {
+          id: `local-reg-${Date.now()}`,
+          organizationId,
+          name: cleanName,
+          description: cleanDesc,
+          isActive: true,
+          createdAt: nowIso,
+        }
+      }
+
+      const updatedLocal = [
+        ...existingList.filter(
+          (r) => r.name.toLocaleLowerCase('pt-BR') !== cleanName.toLocaleLowerCase('pt-BR'),
+        ),
+        created,
+      ]
+      saveLocalStorageRegisters(organizationId, updatedLocal)
+
+      return { success: true, data: created }
+    } catch (err) {
+      logger.error('Erro ao cadastrar Caixa PDV', err)
+      return { success: false, error: 'Erro inesperado ao cadastrar Caixa PDV.' }
+    }
+  },
+
+  /**
+   * Remove um Caixa PDV cadastrado (desde que não esteja com sessão aberta)
+   */
+  async deleteRegister(
+    organizationId: UUID,
+    registerId: string,
+    registerName: string,
+  ): Promise<ServiceResult<void>> {
+    try {
+      const openRes = await this.getOpenSession(organizationId, registerName)
+      if (openRes.success && openRes.data) {
+        return {
+          success: false,
+          error: `Não é possível excluir o "${registerName}" pois ele está com sessão aberta pelo operador "${openRes.data.operatorName}".`,
+        }
+      }
+
+      if (!registerId.startsWith('local-') && registerId !== 'default-caixa-01') {
+        await supabase
+          .from('cash_registers')
+          .delete()
+          .eq('organization_id', organizationId)
+          .eq('id', registerId)
+      }
+
+      const local = getLocalStorageRegisters(organizationId).filter(
+        (r) =>
+          r.id !== registerId &&
+          r.name.toLocaleLowerCase('pt-BR') !== registerName.trim().toLocaleLowerCase('pt-BR'),
+      )
+      saveLocalStorageRegisters(organizationId, local)
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Erro ao remover Caixa PDV', err)
+      return { success: false, error: 'Erro ao remover Caixa PDV.' }
+    }
+  },
+
+  /**
+   * Lista todas as sessões abertas no momento em qualquer caixa da organização
+   */
+  async listOpenSessions(organizationId: UUID): Promise<ServiceResult<CashSession[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('cash_sessions')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('status', 'open')
+
+      const localOpen = getLocalStorageSessions(organizationId).filter((s) => s.status === 'open')
+
+      if (!error && Array.isArray(data)) {
+        const remoteOpen = (data as CashSessionRow[]).map(mapSessionRow)
+        const byRegister = new Map<string, CashSession>()
+        const seenOperators = new Set<string>()
+
+        for (const s of [...remoteOpen, ...localOpen]) {
+          if (!byRegister.has(s.registerId) && !seenOperators.has(s.openedBy)) {
+            byRegister.set(s.registerId, s)
+            seenOperators.add(s.openedBy)
+          }
+        }
+        return { success: true, data: Array.from(byRegister.values()) }
+      }
+
+      return { success: true, data: localOpen }
+    } catch {
+      const local = getLocalStorageSessions(organizationId).filter((s) => s.status === 'open')
+      return { success: true, data: local }
+    }
+  },
+
+  /**
+   * Busca uma sessão de caixa específica pelo ID (independente do nome do caixa)
+   */
+  async getSessionById(organizationId: UUID, sessionId: string): Promise<CashSession | null> {
+    try {
+      if (!sessionId.startsWith('local-')) {
+        const { data, error } = await supabase
+          .from('cash_sessions')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .eq('id', sessionId)
+          .maybeSingle()
+
+        if (!error && data) {
+          return mapSessionRow(data as CashSessionRow)
+        }
+      }
+    } catch {
+      // fallback abaixo
+    }
+
+    const local = getLocalStorageSessions(organizationId)
+    const foundLocal = local.find((s) => s.id === sessionId)
+    if (foundLocal) return foundLocal
+
+    const openRes = await this.getOpenSession(organizationId)
+    if (openRes.success && openRes.data && openRes.data.id === sessionId) {
+      return openRes.data
+    }
+    return null
+  },
+
+  /**
    * Obtém a sessão de caixa atualmente aberta para o caixa/operador da organização
    */
   async getOpenSession(
@@ -206,6 +542,20 @@ export const cashSessionService = {
           }
         }
         return { success: true, data: existing }
+      }
+
+      // 2. Impede que o mesmo usuário abra dois caixas diferentes simultaneamente
+      const openListRes = await this.listOpenSessions(organizationId)
+      if (openListRes.success) {
+        const otherOpenByUser = openListRes.data.find(
+          (s) => s.openedBy === params.operatorId && s.registerId !== registerId && s.status === 'open',
+        )
+        if (otherOpenByUser) {
+          return {
+            success: false,
+            error: `Você já possui o "${otherOpenByUser.registerId}" aberto. Cada usuário só pode ter um caixa aberto por vez. Feche primeiro o "${otherOpenByUser.registerId}" para abrir outro caixa.`,
+          }
+        }
       }
 
       const initialBalanceCents = toCents(params.openingBalance)
@@ -296,13 +646,7 @@ export const cashSessionService = {
     params: RecordSaleSessionParams,
   ): Promise<ServiceResult<CashSession>> {
     try {
-      const currentRes = await this.getOpenSession(organizationId)
-      let session: CashSession | null = currentRes.success ? currentRes.data : null
-      if (!session || session.id !== sessionId) {
-        // busca pelo id nas locais
-        const local = getLocalStorageSessions(organizationId)
-        session = local.find((s) => s.id === sessionId) || null
-      }
+      const session = await this.getSessionById(organizationId, sessionId)
 
       if (!session || session.status !== 'open') {
         return { success: false, error: 'Sessão de caixa não encontrada ou já encerrada.' }
@@ -391,8 +735,7 @@ export const cashSessionService = {
     params: RecordMovementParams,
   ): Promise<ServiceResult<CashSession>> {
     try {
-      const currentRes = await this.getOpenSession(organizationId)
-      const session: CashSession | null = currentRes.success ? currentRes.data : null
+      const session = await this.getSessionById(organizationId, sessionId)
       if (!session || session.id !== sessionId || session.status !== 'open') {
         return { success: false, error: 'Sessão de caixa não encontrada ou já encerrada.' }
       }
@@ -486,12 +829,7 @@ export const cashSessionService = {
     params: CloseSessionParams,
   ): Promise<ServiceResult<CashSession>> {
     try {
-      const currentRes = await this.getOpenSession(organizationId)
-      let session: CashSession | null = currentRes.success ? currentRes.data : null
-      if (!session || session.id !== sessionId) {
-        const local = getLocalStorageSessions(organizationId)
-        session = local.find((s) => s.id === sessionId) || null
-      }
+      const session = await this.getSessionById(organizationId, sessionId)
 
       if (!session || session.status !== 'open') {
         return { success: false, error: 'Sessão de caixa não encontrada ou já encerrada.' }

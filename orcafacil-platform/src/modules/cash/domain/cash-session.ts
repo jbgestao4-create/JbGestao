@@ -1,6 +1,15 @@
 export type CashSessionStatus = 'open' | 'closed'
 export type DiscrepancyType = 'correct' | 'surplus' | 'shortage'
 
+export interface CashRegister {
+  id: string
+  organizationId: string
+  name: string // ex: "Caixa 01", "Caixa 02", "Balcão"
+  description?: string | null
+  isActive: boolean
+  createdAt: string
+}
+
 export interface CashSessionMovement {
   id: string
   sessionId: string
