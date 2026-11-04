@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Sparkles,
   User,
+  XCircle,
 } from 'lucide-react'
 import { formatCurrency } from '@shared/utils/monetary'
 import { formatCustomerDocument } from '@modules/customers/utils/customer-document'
@@ -63,11 +64,19 @@ const STATUS_LABELS: Record<string, { label: string; bg: string; text: string; b
 
 function getPortalStatusConfig(q: PortalQuote) {
   if (q.status === 'approved') {
+    if (q.approvedBy === 'client' || q.approvedBy === 'customer') {
+      return {
+        label: 'Aprovado pelo cliente',
+        bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+        text: 'text-emerald-700 dark:text-emerald-300',
+        border: 'border-emerald-200 dark:border-emerald-800',
+      }
+    }
     return {
-      label: q.approvedBy === 'client' ? 'Aprovado pelo cliente' : 'Aprovado pelo usuário',
-      bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-      text: 'text-emerald-700 dark:text-emerald-300',
-      border: 'border-emerald-200 dark:border-emerald-800',
+      label: 'Aprovado pelo usuário',
+      bg: 'bg-teal-50 dark:bg-teal-950/40',
+      text: 'text-teal-700 dark:text-teal-300',
+      border: 'border-teal-200 dark:border-teal-800',
     }
   }
   return STATUS_LABELS[q.status] || STATUS_LABELS.draft
@@ -94,6 +103,8 @@ export function CustomerQuotesPortalPage() {
   // Aprovação de Orçamento pelo Cliente
   const [quoteToApprove, setQuoteToApprove] = useState<PortalQuote | null>(null)
   const [isApproving, setIsApproving] = useState(false)
+  const [quoteToReject, setQuoteToReject] = useState<PortalQuote | null>(null)
+  const [isRejecting, setIsRejecting] = useState(false)
   const [approvalFeedback, setApprovalFeedback] = useState<{
     type: 'success' | 'error'
     message: string
@@ -278,6 +289,52 @@ export function CustomerQuotesPortalPage() {
       })
     } finally {
       setIsApproving(false)
+    }
+  }
+
+  // 6. Confirmação direta da recusa do orçamento pelo cliente
+  const handleConfirmRejection = async () => {
+    if (!token || !quoteToReject) return
+    setIsRejecting(true)
+    setApprovalFeedback(null)
+
+    try {
+      const res = await customerPortalService.rejectQuote(token, quoteToReject.id)
+      if (res.success) {
+        setPortalData((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            quotes: prev.quotes.map((q) =>
+              q.id === quoteToReject.id
+                ? {
+                    ...q,
+                    status: 'rejected' as QuoteStatus,
+                    approvedBy: null,
+                    approvedAt: null,
+                  }
+                : q,
+            ),
+          }
+        })
+        setApprovalFeedback({
+          type: 'success',
+          message: `Orçamento #${quoteToReject.quoteNumber} recusado.`,
+        })
+        setQuoteToReject(null)
+      } else {
+        setApprovalFeedback({
+          type: 'error',
+          message: res.error || 'Não foi possível recusar o orçamento.',
+        })
+      }
+    } catch {
+      setApprovalFeedback({
+        type: 'error',
+        message: 'Erro inesperado ao recusar o orçamento. Tente novamente.',
+      })
+    } finally {
+      setIsRejecting(false)
     }
   }
 
@@ -698,15 +755,26 @@ export function CustomerQuotesPortalPage() {
 
                       <div className="flex items-center gap-2">
                         {canCustomerApprove && (
-                          <button
-                            type="button"
-                            onClick={() => setQuoteToApprove(q)}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:shadow-sm transition cursor-pointer"
-                            title="Aprovar este orçamento agora"
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            <span>Aprovar Orçamento</span>
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setQuoteToApprove(q)}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:shadow-sm transition cursor-pointer"
+                              title="Aprovar este orçamento agora"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>Aprovar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setQuoteToReject(q)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:scale-[0.98] px-3.5 py-2 text-xs font-bold text-rose-700 dark:text-rose-300 shadow-xs hover:shadow-sm transition cursor-pointer"
+                              title="Recusar este orçamento"
+                            >
+                              <XCircle className="h-4 w-4" />
+                              <span>Recusar</span>
+                            </button>
+                          </>
                         )}
 
                         <button
@@ -795,14 +863,24 @@ export function CustomerQuotesPortalPage() {
                       {/* Botões de Decisão e Contato */}
                       <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                         {canCustomerApprove && (
-                          <button
-                            type="button"
-                            onClick={() => setQuoteToApprove(q)}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition cursor-pointer"
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            Aprovar Orçamento
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setQuoteToApprove(q)}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                              Aprovar Orçamento
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setQuoteToReject(q)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:scale-[0.98] px-4 py-2 text-xs font-bold text-rose-700 dark:text-rose-300 shadow-xs transition cursor-pointer"
+                            >
+                              <XCircle className="h-4 w-4" />
+                              Recusar Orçamento
+                            </button>
+                          </>
                         )}
 
                         {portalData.organization.phone && (
@@ -876,6 +954,58 @@ export function CustomerQuotesPortalPage() {
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" /> Sim, Confirmar Aprovação
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Recusa pelo Cliente */}
+      {quoteToReject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <XCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                  Recusar Orçamento
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  #{quoteToReject.quoteNumber} • {formatCurrency(quoteToReject.total)}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              Você deseja recusar este orçamento? Ao confirmar, o status será atualizado para <strong className="text-rose-600 dark:text-rose-400">Recusado</strong> e a equipe da <strong>{portalData.organization.name}</strong> poderá entrar em contato caso deseje uma nova proposta ajustada.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isRejecting}
+                onClick={() => setQuoteToReject(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer disabled:opacity-50"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={isRejecting}
+                onClick={() => void handleConfirmRejection()}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-xs font-bold text-white shadow-md shadow-rose-600/20 transition cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              >
+                {isRejecting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Recusando...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4" /> Sim, Confirmar Recusa
                   </>
                 )}
               </button>

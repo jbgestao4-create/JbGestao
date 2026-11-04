@@ -150,4 +150,43 @@ describe('customerPortalService', () => {
       expect(res.error).toBe('Este orçamento já foi concluído.')
     }
   })
+
+  it('rejectQuote calls reject_customer_portal_quote rpc and returns success', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Orçamento recusado com sucesso.',
+      },
+      error: null,
+      count: null,
+      status: 200,
+      statusText: 'OK',
+    } as any)
+
+    const res = await customerPortalService.rejectQuote('valid-token', 'quote-123')
+    expect(res.success).toBe(true)
+    if (res.success) {
+      expect(res.data.message).toBe('Orçamento recusado com sucesso.')
+    }
+  })
+
+  it('rejectQuote returns error message on rpc failure', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: {
+        success: false,
+        error: 'QUOTE_ALREADY_APPROVED',
+        message: 'Este orçamento já foi aprovado e não pode ser recusado pelo portal.',
+      },
+      error: null,
+      count: null,
+      status: 200,
+      statusText: 'OK',
+    } as any)
+
+    const res = await customerPortalService.rejectQuote('valid-token', 'quote-123')
+    expect(res.success).toBe(false)
+    if (!res.success) {
+      expect(res.error).toBe('Este orçamento já foi aprovado e não pode ser recusado pelo portal.')
+    }
+  })
 })

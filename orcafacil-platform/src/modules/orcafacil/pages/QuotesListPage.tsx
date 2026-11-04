@@ -301,17 +301,19 @@ export function QuotesListPage() {
   const metrics = useMemo(() => {
     const commercialQuotes = quotes.filter((q) => !q.quoteNumber?.startsWith('VND-'))
     const totalCount = commercialQuotes.length
+    const draftCount = commercialQuotes.filter((q) => q.status === 'draft').length
     const approvedCount = commercialQuotes.filter(
       (q) => q.status === 'approved' || q.status === 'completed',
     ).length
     const sentCount = commercialQuotes.filter((q) => q.status === 'sent').length
-    const draftCount = commercialQuotes.filter((q) => q.status === 'draft').length
+    const rejectedCount = commercialQuotes.filter((q) => q.status === 'rejected').length
 
     return {
       totalCount,
+      draftCount,
       approvedCount,
       sentCount,
-      draftCount,
+      rejectedCount,
     }
   }, [quotes])
 
@@ -361,8 +363,9 @@ export function QuotesListPage() {
         </div>
       )}
 
-      {/* Cards de Métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      {/* Cards de Métricas - Sequência: Total, Em Rascunho, Aprovados, Enviado ao Cliente, Recusado */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        {/* 1. Total de Orçamentos */}
         <Card
           onClick={() => handleFilterStatusChange('all')}
           className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
@@ -384,6 +387,29 @@ export function QuotesListPage() {
           </CardContent>
         </Card>
 
+        {/* 2. Em Rascunho */}
+        <Card
+          onClick={() => handleFilterStatusChange('draft')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
+            filterStatus === 'draft' ? 'ring-2 ring-amber-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Em Rascunho
+              </p>
+              <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
+                {metrics.draftCount} rascunho(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+              <FileEdit className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 3. Orçamentos Aprovados */}
         <Card
           onClick={() => handleFilterStatusChange('approved')}
           className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
@@ -405,6 +431,7 @@ export function QuotesListPage() {
           </CardContent>
         </Card>
 
+        {/* 4. Enviado ao Cliente */}
         <Card
           onClick={() => handleFilterStatusChange('sent')}
           className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
@@ -414,7 +441,7 @@ export function QuotesListPage() {
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                Enviados ao Cliente
+                Enviado ao Cliente
               </p>
               <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
                 {metrics.sentCount} enviado(s)
@@ -426,23 +453,24 @@ export function QuotesListPage() {
           </CardContent>
         </Card>
 
+        {/* 5. Recusados */}
         <Card
-          onClick={() => handleFilterStatusChange('draft')}
-          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
-            filterStatus === 'draft' ? 'ring-2 ring-amber-500/50' : ''
+          onClick={() => handleFilterStatusChange('rejected')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-rose-100 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/50 to-white dark:from-rose-950/30 dark:to-slate-900 ${
+            filterStatus === 'rejected' ? 'ring-2 ring-rose-500/50' : ''
           }`}
         >
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                Em Rascunho
+                Recusados
               </p>
-              <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
-                {metrics.draftCount} rascunho(s)
+              <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5">
+                {metrics.rejectedCount} recusado(s)
               </p>
             </div>
-            <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
-              <FileEdit className="h-5 w-5" />
+            <div className="rounded-xl bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
+              <Ban className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
@@ -614,6 +642,7 @@ export function QuotesListPage() {
                           <span
                             className={`inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeClasses(
                               q.status,
+                              q.approvedBy || (q.status === 'approved' ? 'user' : undefined),
                             )}`}
                           >
                             {getStatusLabel(

@@ -224,5 +224,39 @@ export const customerPortalService = {
       return { success: false, error: 'Erro inesperado ao aprovar o orçamento.' }
     }
   },
+
+  /**
+   * Recusa um orçamento pelo cliente no portal público
+   */
+  async rejectQuote(token: string, quoteId: UUID): Promise<ServiceResult<{ message?: string }>> {
+    try {
+      const { data, error } = await supabase.rpc('reject_customer_portal_quote', {
+        p_token: token,
+        p_quote_id: quoteId,
+      })
+
+      if (error) {
+        logger.error('Erro ao recusar orçamento no portal do cliente', error)
+        return { success: false, error: 'Não foi possível recusar o orçamento. Tente novamente.' }
+      }
+
+      if (!data || !data.success) {
+        return {
+          success: false,
+          error: data?.message || 'Falha ao recusar o orçamento.',
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          message: data.message,
+        },
+      }
+    } catch (err) {
+      logger.error('Exceção ao recusar orçamento no portal', err)
+      return { success: false, error: 'Erro inesperado ao recusar o orçamento.' }
+    }
+  },
 }
 

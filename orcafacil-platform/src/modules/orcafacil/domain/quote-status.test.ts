@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   getStatusLabel,
+  getStatusBadgeClasses,
   canEditQuote,
   isQuotePrintable,
   isValidStatusTransition,
@@ -73,5 +74,14 @@ describe('Quote Status FSM', () => {
     expect(getStatusLabel('approved', 'client')).toBe('Aprovado pelo cliente')
     expect(getStatusLabel('approved', 'customer')).toBe('Aprovado pelo cliente')
     expect(getStatusLabel('approved', 'user')).toBe('Aprovado pelo usuário')
+  })
+
+  it('deve fornecer classes de badge distintas para aprovado pelo cliente vs usuário', () => {
+    const clientClasses = getStatusBadgeClasses('approved', 'client')
+    const userClasses = getStatusBadgeClasses('approved', 'user')
+
+    expect(clientClasses).toContain('emerald')
+    expect(userClasses).toContain('teal')
+    expect(clientClasses).not.toBe(userClasses)
   })
 })

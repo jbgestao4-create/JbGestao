@@ -41,6 +41,7 @@ export function LinkedQuoteModal({ open, quote, organizationName, onClose }: Lin
                 <span
                   className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeClasses(
                     quote.status,
+                    quote.approvedBy || (quote.status === 'approved' ? 'user' : undefined),
                   )}`}
                 >
                   {getStatusLabel(
