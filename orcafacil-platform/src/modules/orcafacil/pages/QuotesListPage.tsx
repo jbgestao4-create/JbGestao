@@ -26,6 +26,7 @@ import {
   Plus,
   Printer,
   Receipt,
+  RotateCcw,
   Search,
   Send,
   ShoppingCart,
@@ -57,6 +58,23 @@ const VALID_STATUSES: readonly ('all' | QuoteStatus)[] = [
   'expired',
 ]
 
+const FILTER_TABS: readonly ('all' | QuoteStatus)[] = [
+  'all',
+  'draft',
+  'sent',
+  'completed',
+  'rejected',
+]
+
+const STATUS_SORT_PRIORITY: Record<QuoteStatus, number> = {
+  draft: 1,
+  approved: 2,
+  sent: 3,
+  completed: 4,
+  rejected: 5,
+  expired: 6,
+}
+
 function parseStatusParam(value: string | null): ('all' | QuoteStatus) | null {
   if (value && (VALID_STATUSES as readonly string[]).includes(value)) {
     return value as 'all' | QuoteStatus
@@ -79,6 +97,10 @@ export function QuotesListPage() {
   const [printError, setPrintError] = useState<string | null>(null)
   const [quoteToDelete, setQuoteToDelete] = useState<QuoteListItem | null>(null)
   const [quoteToCancel, setQuoteToCancel] = useState<QuoteListItem | null>(null)
+  const [quoteToRestore, setQuoteToRestore] = useState<QuoteListItem | null>(null)
+  const [restoreReason, setRestoreReason] = useState('')
+  const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
   const [quoteToPrint, setQuoteToPrint] = useState<QuoteDetail | null>(null)
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false)
   const [quoteForWhatsApp, setQuoteForWhatsApp] = useState<QuoteListItem | null>(null)
@@ -263,6 +285,29 @@ export function QuotesListPage() {
     return res
   }
 
+  const handleRestoreQuote = async () => {
+    if (!currentOrganization || !quoteToRestore) return
+    const trimmed = restoreReason.trim()
+    if (!trimmed) {
+      setRestoreError('Informe o motivo para restaurar o orçamento.')
+      return
+    }
+
+    setIsRestoring(true)
+    setRestoreError(null)
+    const res = await quoteService.restoreQuote(currentOrganization.id, quoteToRestore.id, trimmed)
+    setIsRestoring(false)
+
+    if (res.success) {
+      setQuoteToRestore(null)
+      setRestoreReason('')
+      await loadQuotes()
+      handleFilterStatusChange('draft')
+    } else {
+      setRestoreError(res.error)
+    }
+  }
+
   const handlePrint = async (quoteId: string) => {
     if (!currentOrganization) return
     setPrintError(null)
@@ -319,21 +364,30 @@ export function QuotesListPage() {
 
   const normalizedCustomerName = filterCustomerName.trim().toLocaleLowerCase('pt-BR')
   const normalizedQuoteNumber = filterQuoteNumber.trim().toLocaleLowerCase('pt-BR')
-  const filteredQuotes = quotes.filter((quote) => {
-    // Exclui vendas geradas pelo PDV ou faturamento direto (devem aparecer somente em Vendas)
-    if (quote.quoteNumber.startsWith('VND-')) return false
+  const filteredQuotes = quotes
+    .filter((quote) => {
+      // Exclui vendas geradas pelo PDV ou faturamento direto (devem aparecer somente em Vendas)
+      if (quote.quoteNumber.startsWith('VND-')) return false
 
-    const matchesStatus = filterStatus === 'all' || quote.status === filterStatus
-    const matchesCustomer =
-      !normalizedCustomerName ||
-      quote.customerName.toLocaleLowerCase('pt-BR').includes(normalizedCustomerName)
-    const matchesQuoteNumber =
-      !normalizedQuoteNumber ||
-      quote.quoteNumber.toLocaleLowerCase('pt-BR').includes(normalizedQuoteNumber)
-    const matchesDate = !filterQuoteDate || getLocalDateValue(quote.createdAt) === filterQuoteDate
+      const matchesStatus = filterStatus === 'all' || quote.status === filterStatus
+      const matchesCustomer =
+        !normalizedCustomerName ||
+        quote.customerName.toLocaleLowerCase('pt-BR').includes(normalizedCustomerName)
+      const matchesQuoteNumber =
+        !normalizedQuoteNumber ||
+        quote.quoteNumber.toLocaleLowerCase('pt-BR').includes(normalizedQuoteNumber)
+      const matchesDate = !filterQuoteDate || getLocalDateValue(quote.createdAt) === filterQuoteDate
 
-    return matchesStatus && matchesCustomer && matchesQuoteNumber && matchesDate
-  })
+      return matchesStatus && matchesCustomer && matchesQuoteNumber && matchesDate
+    })
+    .sort((a, b) => {
+      const priorityA = STATUS_SORT_PRIORITY[a.status] ?? 99
+      const priorityB = STATUS_SORT_PRIORITY[b.status] ?? 99
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
 
   return (
     <div className="space-y-6">
@@ -478,7 +532,7 @@ export function QuotesListPage() {
 
       <div className="sticky top-0 z-20 -mx-4 space-y-3 border-b border-gray-200 dark:border-slate-800 bg-gray-50/95 dark:bg-[#0f172a]/95 px-4 py-3 shadow-xs backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {VALID_STATUSES.map(
+          {FILTER_TABS.map(
             (st) => {
               const label = st === 'all' ? 'Todos' : getStatusLabel(st)
               return (
@@ -673,6 +727,20 @@ export function QuotesListPage() {
                                   Cancelar
                                 </button>
                               </>
+                            ) : q.status === 'rejected' ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuoteToRestore(q)
+                                  setRestoreReason('')
+                                  setRestoreError(null)
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 px-2.5 py-1.5 text-xs font-bold shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
+                                title="Restaurar orçamento recusado para rascunho"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                                Restaurar orçamento
+                              </button>
                             ) : allowedNext.length > 0 ? (
                               <div className="w-36 text-left">
                                 <ListBox
@@ -705,17 +773,19 @@ export function QuotesListPage() {
                                 <Pencil className="w-4 h-4" />
                               </Link>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void handleOpenWhatsApp(q)
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
-                              title="Enviar cópia via WhatsApp"
-                              aria-label={`Enviar orçamento ${q.quoteNumber} via WhatsApp`}
-                            >
-                              <MessageCircle className="w-4 h-4" />
-                            </button>
+                            {q.status !== 'rejected' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleOpenWhatsApp(q)
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                                title="Enviar cópia via WhatsApp"
+                                aria-label={`Enviar orçamento ${q.quoteNumber} via WhatsApp`}
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                            )}
                             {isQuotePrintable(q.status) && (
                               <>
                                 <button
@@ -809,6 +879,93 @@ export function QuotesListPage() {
         }}
         onConfirm={handleCancelQuote}
       />
+      {quoteToRestore && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+          onClick={() => {
+            if (!isRestoring) {
+              setQuoteToRestore(null)
+              setRestoreReason('')
+              setRestoreError(null)
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                <RotateCcw className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                  Restaurar Orçamento
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  {quoteToRestore.quoteNumber} • {quoteToRestore.customerName}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-slate-300 leading-relaxed">
+              O orçamento voltará para o status <strong className="text-amber-700 dark:text-amber-400">Rascunho</strong> para que possa ser editado e reenviado. Informe abaixo o motivo da restauração:
+            </p>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="restore-reason-input"
+                className="block text-xs font-semibold text-gray-700 dark:text-slate-300"
+              >
+                Motivo para restaurar <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="restore-reason-input"
+                rows={3}
+                autoFocus
+                value={restoreReason}
+                onChange={(e) => {
+                  setRestoreReason(e.target.value)
+                  if (restoreError) setRestoreError(null)
+                }}
+                placeholder="Ex.: Cliente solicitou revisão de valores ou novos itens..."
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              />
+              {restoreError && (
+                <p className="text-xs font-medium text-red-600 dark:text-red-400">{restoreError}</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isRestoring}
+                onClick={() => {
+                  setQuoteToRestore(null)
+                  setRestoreReason('')
+                  setRestoreError(null)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                isLoading={isRestoring}
+                onClick={() => {
+                  void handleRestoreQuote()
+                }}
+                className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Confirmar Restauração
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {quoteToPrint && (
         <>
           <style>{`

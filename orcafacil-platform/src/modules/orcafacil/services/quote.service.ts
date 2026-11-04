@@ -848,6 +848,72 @@ export const quoteService = {
   },
 
   /**
+   * Restaura um orçamento recusado/expirado para Rascunho ('draft') registrando o motivo nas observações.
+   */
+  async restoreQuote(
+    organizationId: UUID,
+    quoteId: UUID,
+    reason: string,
+  ): Promise<ServiceResult<void>> {
+    try {
+      const trimmedReason = reason.trim()
+      if (!trimmedReason) {
+        return { success: false, error: 'Informe o motivo para restaurar o orçamento.' }
+      }
+
+      const { data: current, error: fetchError } = await supabase
+        .from('quotes')
+        .select('status, notes')
+        .eq('organization_id', organizationId)
+        .eq('id', quoteId)
+        .single()
+
+      if (fetchError || !current) {
+        return { success: false, error: 'Orçamento não encontrado.' }
+      }
+
+      const currentStatus = current.status as QuoteStatus
+      if (!isValidStatusTransition(currentStatus, 'draft')) {
+        return {
+          success: false,
+          error: `Transição de status inválida de "${currentStatus}" para "draft".`,
+        }
+      }
+
+      const dateStr = new Date().toLocaleDateString('pt-BR')
+      const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const reasonLine = `[Restaurado em ${dateStr} às ${timeStr}] Motivo: ${trimmedReason}`
+      const existingNotes = (current.notes as string | null)?.trim() || ''
+      const updatedNotes = existingNotes ? `${existingNotes}\n${reasonLine}` : reasonLine
+
+      const { error: updateError } = await supabase
+        .from('quotes')
+        .update({
+          status: 'draft',
+          notes: updatedNotes,
+        })
+        .eq('organization_id', organizationId)
+        .eq('id', quoteId)
+
+      if (updateError) {
+        logger.error('Erro ao restaurar orçamento', new Error(updateError.message), {
+          code: updateError.code,
+          details: updateError.details,
+        })
+        return {
+          success: false,
+          error: updateError.message || 'Não foi possível restaurar o orçamento.',
+        }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao restaurar orçamento', err)
+      return { success: false, error: 'Erro inesperado ao restaurar o orçamento.' }
+    }
+  },
+
+  /**
    * Exclui um orçamento e seus itens (via CASCADE e estorno seguro de lançamentos).
    */
   async deleteQuote(organizationId: UUID, quoteId: UUID): Promise<ServiceResult<void>> {

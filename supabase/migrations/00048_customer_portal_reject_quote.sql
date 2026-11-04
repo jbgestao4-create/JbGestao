@@ -90,3 +90,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.reject_customer_portal_quote(TEXT, UUID) TO anon, authenticated;
+
