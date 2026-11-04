@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { quoteService, type QuoteDetail, type QuoteListItem } from '../services/quote.service'
@@ -16,14 +16,18 @@ import { Button } from '@shared/components/ui/Button'
 import { ListBox } from '@shared/components/ui/ListBox'
 import {
   Ban,
+  CheckCircle2,
   FileDown,
+  FileEdit,
   FileSpreadsheet,
+  FileText,
   MessageCircle,
   Pencil,
   Plus,
   Printer,
   Receipt,
   Search,
+  Send,
   ShoppingCart,
   Trash2,
 } from 'lucide-react'
@@ -293,6 +297,24 @@ export function QuotesListPage() {
     }
   }
 
+  // Métricas do Topo
+  const metrics = useMemo(() => {
+    const commercialQuotes = quotes.filter((q) => !q.quoteNumber?.startsWith('VND-'))
+    const totalCount = commercialQuotes.length
+    const approvedCount = commercialQuotes.filter(
+      (q) => q.status === 'approved' || q.status === 'completed',
+    ).length
+    const sentCount = commercialQuotes.filter((q) => q.status === 'sent').length
+    const draftCount = commercialQuotes.filter((q) => q.status === 'draft').length
+
+    return {
+      totalCount,
+      approvedCount,
+      sentCount,
+      draftCount,
+    }
+  }, [quotes])
+
   const normalizedCustomerName = filterCustomerName.trim().toLocaleLowerCase('pt-BR')
   const normalizedQuoteNumber = filterQuoteNumber.trim().toLocaleLowerCase('pt-BR')
   const filteredQuotes = quotes.filter((quote) => {
@@ -312,17 +334,17 @@ export function QuotesListPage() {
   })
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Orçamentos</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Orçamentos</h1>
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-slate-400">
             Gerenciamento comercial, propostas e histórico de negociações
           </p>
         </div>
 
         <Link to="/orcafacil/quotes/new">
-          <Button size="sm">
+          <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs">
             <Plus className="w-4 h-4" /> Novo Orçamento
           </Button>
         </Link>
@@ -338,6 +360,93 @@ export function QuotesListPage() {
           {printError}
         </div>
       )}
+
+      {/* Cards de Métricas */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <Card
+          onClick={() => handleFilterStatusChange('all')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
+            filterStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Total de Orçamentos
+              </p>
+              <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                {metrics.totalCount} cadastrado(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
+              <FileText className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          onClick={() => handleFilterStatusChange('approved')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
+            filterStatus === 'approved' ? 'ring-2 ring-emerald-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Orçamentos Aprovados
+              </p>
+              <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                {metrics.approvedCount} aprovado(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          onClick={() => handleFilterStatusChange('sent')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
+            filterStatus === 'sent' ? 'ring-2 ring-blue-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Enviados ao Cliente
+              </p>
+              <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
+                {metrics.sentCount} enviado(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
+              <Send className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          onClick={() => handleFilterStatusChange('draft')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
+            filterStatus === 'draft' ? 'ring-2 ring-amber-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Em Rascunho
+              </p>
+              <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
+                {metrics.draftCount} rascunho(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+              <FileEdit className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="sticky top-0 z-20 -mx-4 space-y-3 border-b border-gray-200 dark:border-slate-800 bg-gray-50/95 dark:bg-[#0f172a]/95 px-4 py-3 shadow-xs backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex gap-2 overflow-x-auto pb-1">
