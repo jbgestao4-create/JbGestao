@@ -193,6 +193,24 @@ async function validateServiceMinimumPrices(
   return { success: true, data: undefined }
 }
 
+function isMissingTrackingColumnsError(
+  err: { code?: string; message?: string; details?: string; hint?: string } | null | undefined,
+): boolean {
+  if (!err) return false
+  const code = String(err.code || '')
+  const msg = String(err.message || '').toLowerCase()
+  const details = String(err.details || '').toLowerCase()
+  return (
+    code === '42703' ||
+    code === 'PGRST204' ||
+    msg.includes('approved_by') ||
+    msg.includes('approved_at') ||
+    msg.includes('approved') ||
+    msg.includes('schema cache') ||
+    details.includes('approved')
+  )
+}
+
 export const quoteService = {
   /**
    * Lista todos os orçamentos da organização (excluindo vendas VND).
@@ -234,7 +252,7 @@ export const quoteService = {
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false })
 
-      if (error && (error.code === '42703' || error.message?.includes('approved_by'))) {
+      if (error && isMissingTrackingColumnsError(error)) {
         const fallback = await supabase
           .from('quotes')
           .select(
@@ -367,7 +385,7 @@ export const quoteService = {
         .eq('id', quoteId)
         .maybeSingle()
 
-      if (quoteError && (quoteError.code === '42703' || quoteError.message?.includes('approved_by'))) {
+      if (quoteError && isMissingTrackingColumnsError(quoteError)) {
         const fallback = await supabase
           .from('quotes')
           .select(
@@ -723,28 +741,54 @@ export const quoteService = {
       }
 
       // 3. Aplica alteração (registra aprovação pelo usuário se newStatus for 'approved')
-      const updatePayload: Record<string, unknown> = { status: newStatus }
+      let updateError: { code?: string; message: string; details?: string; hint?: string } | null = null
+
       if (newStatus === 'approved') {
-        updatePayload.approved_by = 'user'
-        updatePayload.approved_at = new Date().toISOString()
-      } else {
-        updatePayload.approved_by = null
-        updatePayload.approved_at = null
-      }
+        const updatePayload: Record<string, unknown> = {
+          status: newStatus,
+          approved_by: 'user',
+          approved_at: new Date().toISOString(),
+        }
 
-      let { error: updateError } = await supabase
-        .from('quotes')
-        .update(updatePayload)
-        .eq('organization_id', organizationId)
-        .eq('id', quoteId)
-
-      if (updateError && (updateError.code === '42703' || updateError.message?.includes('approved_by'))) {
-        const fallback = await supabase
+        const res = await supabase
           .from('quotes')
-          .update({ status: newStatus })
+          .update(updatePayload)
           .eq('organization_id', organizationId)
           .eq('id', quoteId)
-        updateError = fallback.error
+
+        updateError = res.error
+
+        if (updateError && isMissingTrackingColumnsError(updateError)) {
+          const fallback = await supabase
+            .from('quotes')
+            .update({ status: newStatus })
+            .eq('organization_id', organizationId)
+            .eq('id', quoteId)
+          updateError = fallback.error
+        }
+      } else {
+        const updatePayload: Record<string, unknown> = { status: newStatus }
+        if (currentStatus === 'approved') {
+          updatePayload.approved_by = null
+          updatePayload.approved_at = null
+        }
+
+        const res = await supabase
+          .from('quotes')
+          .update(updatePayload)
+          .eq('organization_id', organizationId)
+          .eq('id', quoteId)
+
+        updateError = res.error
+
+        if (updateError && isMissingTrackingColumnsError(updateError)) {
+          const fallback = await supabase
+            .from('quotes')
+            .update({ status: newStatus })
+            .eq('organization_id', organizationId)
+            .eq('id', quoteId)
+          updateError = fallback.error
+        }
       }
 
       if (updateError) {
@@ -779,8 +823,21 @@ export const quoteService = {
               'O saldo disponível de um ou mais materiais não é suficiente para aprovar este orçamento.',
           }
         }
+        if (
+          updateError.code === 'P0001' &&
+          updateError.message.includes('QUOTE_ITEM_BELOW_MINIMUM_SALE_PRICE')
+        ) {
+          return {
+            success: false,
+            error:
+              'Não é possível aprovar ou alterar o orçamento pois há itens com preço de venda abaixo do mínimo permitido.',
+          }
+        }
 
-        return { success: false, error: 'Não foi possível atualizar o status do orçamento.' }
+        return {
+          success: false,
+          error: updateError.message || 'Não foi possível atualizar o status do orçamento.',
+        }
       }
 
       return { success: true, data: undefined }

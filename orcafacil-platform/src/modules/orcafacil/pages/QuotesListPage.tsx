@@ -182,11 +182,34 @@ export function QuotesListPage() {
 
       if (isTransitioningFromDraftToSent) {
         const found = quotes.find((q) => q.id === quoteId) ?? null
-        setQuoteForWhatsApp(found)
         const detailRes = await quoteService.getQuote(currentOrganization.id, quoteId)
         if (detailRes.success) {
           setQuoteDetailForWhatsApp(detailRes.data)
+          setQuoteForWhatsApp(
+            found
+              ? { ...found, status: 'sent' }
+              : {
+                  id: detailRes.data.id,
+                  organizationId: detailRes.data.organizationId,
+                  customerId: detailRes.data.customerId,
+                  customerName: detailRes.data.customerName,
+                  customerPhone: detailRes.data.customerPhone,
+                  quoteNumber: detailRes.data.quoteNumber,
+                  status: 'sent',
+                  subtotal: detailRes.data.subtotal,
+                  discount: detailRes.data.discount,
+                  total: detailRes.data.total,
+                  validUntil: detailRes.data.validUntil,
+                  createdAt: detailRes.data.createdAt,
+                  updatedAt: detailRes.data.updatedAt,
+                  creatorName: detailRes.data.creatorName,
+                  sellerName: detailRes.data.sellerName,
+                  saleId: detailRes.data.saleId,
+                  saleNumber: detailRes.data.saleNumber,
+                },
+          )
         } else {
+          setQuoteForWhatsApp(found ? { ...found, status: 'sent' } : null)
           setQuoteDetailForWhatsApp(null)
         }
         setWhatsAppModalOpen(true)
