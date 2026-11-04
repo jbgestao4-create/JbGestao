@@ -21,6 +21,8 @@ export interface PortalQuote {
   id: UUID
   quoteNumber: string
   status: QuoteStatus
+  approvedBy?: 'client' | 'user' | string | null
+  approvedAt?: string | null
   subtotal: string
   discount: string
   total: string
@@ -179,6 +181,47 @@ export const customerPortalService = {
     } catch (err) {
       logger.error('Exceção ao acessar orçamentos do portal', err)
       return { success: false, error: 'Erro inesperado ao consultar seus orçamentos.' }
+    }
+  },
+
+  /**
+   * Aprova um orçamento pelo cliente no portal público
+   */
+  async approveQuote(token: string, quoteId: UUID): Promise<ServiceResult<{ message?: string }>> {
+    try {
+      const { data, error } = await supabase.rpc('approve_customer_portal_quote', {
+        p_token: token,
+        p_quote_id: quoteId,
+      })
+
+      if (error) {
+        logger.error('Erro ao aprovar orçamento no portal do cliente', error)
+        if (error.code === '42883' || error.message?.includes('approve_customer_portal_quote')) {
+          return {
+            success: false,
+            error:
+              'Função de aprovação não encontrada no banco. Execute a migração 00047_quote_approval_tracking.sql no Supabase.',
+          }
+        }
+        return { success: false, error: 'Não foi possível aprovar o orçamento. Tente novamente.' }
+      }
+
+      if (!data || !data.success) {
+        return {
+          success: false,
+          error: data?.message || 'Falha ao aprovar o orçamento.',
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          message: data.message,
+        },
+      }
+    } catch (err) {
+      logger.error('Exceção ao aprovar orçamento no portal', err)
+      return { success: false, error: 'Erro inesperado ao aprovar o orçamento.' }
     }
   },
 }

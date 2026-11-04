@@ -10,6 +10,7 @@ import { formatCustomerDocument } from '@modules/customers/utils/customer-docume
 import { quoteService } from '../services/quote.service'
 import { canEditQuote } from '../domain/quote-status'
 import { getMinimumSalePriceViolations } from '../domain/minimum-sale-price'
+import type { QuoteStatus } from '@shared/types/database'
 import {
   calculateItemTotal,
   calculateSubtotal,
@@ -334,6 +335,7 @@ export function QuoteFormPage() {
 
   const [error, setError] = useState('')
   const [quoteLoadError, setQuoteLoadError] = useState('')
+  const [existingQuoteStatus, setExistingQuoteStatus] = useState<QuoteStatus | null>(null)
   const [isLoadingQuote, setIsLoadingQuote] = useState(isEditing)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -395,6 +397,7 @@ export function QuoteFormPage() {
       }
 
       const quote = quoteResult.data
+      setExistingQuoteStatus(quote.status)
       setQuoteDate(getLocalDateValue(new Date(quote.createdAt)))
       if (!canEditQuote(quote.status, userRole)) {
         setQuoteLoadError(
@@ -641,7 +644,8 @@ export function QuoteFormPage() {
       : await quoteService.createQuote(currentOrganization.id, params)
 
     if (res.success) {
-      await navigate('/orcafacil/quotes')
+      const destinationStatus = quoteId && existingQuoteStatus ? existingQuoteStatus : 'draft'
+      await navigate(`/orcafacil/quotes?status=${destinationStatus}`)
     } else {
       setError(res.error)
     }

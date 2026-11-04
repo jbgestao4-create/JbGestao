@@ -353,6 +353,8 @@ export interface Database {
           creator_name: string | null
           quote_number: string
           status: QuoteStatus
+          approved_by?: 'client' | 'user' | string | null
+          approved_at?: string | null
           subtotal: string
           discount: string
           total: string
@@ -369,6 +371,8 @@ export interface Database {
           creator_name?: string | null
           quote_number?: string
           status?: QuoteStatus
+          approved_by?: 'client' | 'user' | string | null
+          approved_at?: string | null
           subtotal?: string
           discount?: string
           total?: string
@@ -380,6 +384,8 @@ export interface Database {
         Update: {
           customer_id?: string
           status?: QuoteStatus
+          approved_by?: 'client' | 'user' | string | null
+          approved_at?: string | null
           subtotal?: string
           discount?: string
           total?: string

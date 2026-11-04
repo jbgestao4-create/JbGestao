@@ -45,14 +45,24 @@ export function isQuotePrintable(status: QuoteStatus): boolean {
 
 /**
  * Rótulo amigável em português para o status do orçamento.
+ * Suporta distinção de aprovação pelo cliente ("Aprovado pelo cliente") ou pelo usuário ("Aprovado pelo usuário").
  */
-export function getStatusLabel(status: QuoteStatus): string {
+export function getStatusLabel(
+  status: QuoteStatus,
+  approvedBy?: 'client' | 'user' | string | null,
+): string {
   switch (status) {
     case 'draft':
       return 'Rascunho'
     case 'sent':
       return 'Enviado'
     case 'approved':
+      if (approvedBy === 'client' || approvedBy === 'customer') {
+        return 'Aprovado pelo cliente'
+      }
+      if (approvedBy === 'user') {
+        return 'Aprovado pelo usuário'
+      }
       return 'Aprovado'
     case 'completed':
       return 'Concluído'

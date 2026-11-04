@@ -68,4 +68,10 @@ describe('Quote Status FSM', () => {
     expect(getStatusLabel('rejected')).toBe('Recusado')
     expect(getStatusLabel('expired')).toBe('Expirado')
   })
+
+  it('deve diferenciar aprovação pelo cliente ou pelo usuário quando especificado', () => {
+    expect(getStatusLabel('approved', 'client')).toBe('Aprovado pelo cliente')
+    expect(getStatusLabel('approved', 'customer')).toBe('Aprovado pelo cliente')
+    expect(getStatusLabel('approved', 'user')).toBe('Aprovado pelo usuário')
+  })
 })

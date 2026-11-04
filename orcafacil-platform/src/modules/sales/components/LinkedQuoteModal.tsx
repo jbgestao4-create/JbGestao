@@ -43,7 +43,10 @@ export function LinkedQuoteModal({ open, quote, organizationName, onClose }: Lin
                     quote.status,
                   )}`}
                 >
-                  {getStatusLabel(quote.status)}
+                  {getStatusLabel(
+                    quote.status,
+                    quote.approvedBy || (quote.status === 'approved' ? 'user' : undefined),
+                  )}
                 </span>
               </div>
               <p className="text-xs text-gray-500">

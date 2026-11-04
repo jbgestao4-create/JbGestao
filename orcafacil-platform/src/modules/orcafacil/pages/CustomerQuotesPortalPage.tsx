@@ -26,6 +26,7 @@ import {
 } from '../services/customer-portal.service'
 import type { QuoteDetail } from '../services/quote.service'
 import { downloadQuotePdf } from '../utils/quote-pdf'
+import type { QuoteStatus } from '@shared/types/database'
 
 const STATUS_LABELS: Record<string, { label: string; bg: string; text: string; border: string }> = {
   draft: {
@@ -60,6 +61,18 @@ const STATUS_LABELS: Record<string, { label: string; bg: string; text: string; b
   },
 }
 
+function getPortalStatusConfig(q: PortalQuote) {
+  if (q.status === 'approved') {
+    return {
+      label: q.approvedBy === 'client' ? 'Aprovado pelo cliente' : 'Aprovado pelo usuário',
+      bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+      text: 'text-emerald-700 dark:text-emerald-300',
+      border: 'border-emerald-200 dark:border-emerald-800',
+    }
+  }
+  return STATUS_LABELS[q.status] || STATUS_LABELS.draft
+}
+
 export function CustomerQuotesPortalPage() {
   const { token } = useParams<{ token: string }>()
 
@@ -77,6 +90,14 @@ export function CustomerQuotesPortalPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [expandedQuotes, setExpandedQuotes] = useState<Record<string, boolean>>({})
+
+  // Aprovação de Orçamento pelo Cliente
+  const [quoteToApprove, setQuoteToApprove] = useState<PortalQuote | null>(null)
+  const [isApproving, setIsApproving] = useState(false)
+  const [approvalFeedback, setApprovalFeedback] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
 
   // 1. Carrega informações preliminares do token público
   useEffect(() => {
@@ -212,6 +233,52 @@ export function CustomerQuotesPortalPage() {
     }
 
     window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  // 5. Confirmação direta da aprovação do orçamento pelo cliente
+  const handleConfirmApproval = async () => {
+    if (!token || !quoteToApprove) return
+    setIsApproving(true)
+    setApprovalFeedback(null)
+
+    try {
+      const res = await customerPortalService.approveQuote(token, quoteToApprove.id)
+      if (res.success) {
+        setPortalData((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            quotes: prev.quotes.map((q) =>
+              q.id === quoteToApprove.id
+                ? {
+                    ...q,
+                    status: 'approved' as QuoteStatus,
+                    approvedBy: 'client',
+                    approvedAt: new Date().toISOString(),
+                  }
+                : q,
+            ),
+          }
+        })
+        setApprovalFeedback({
+          type: 'success',
+          message: `Orçamento #${quoteToApprove.quoteNumber} aprovado com sucesso!`,
+        })
+        setQuoteToApprove(null)
+      } else {
+        setApprovalFeedback({
+          type: 'error',
+          message: res.error || 'Não foi possível aprovar o orçamento.',
+        })
+      }
+    } catch {
+      setApprovalFeedback({
+        type: 'error',
+        message: 'Erro inesperado ao aprovar o orçamento. Tente novamente.',
+      })
+    } finally {
+      setIsApproving(false)
+    }
   }
 
   // Filtragem dos orçamentos
@@ -520,6 +587,33 @@ export function CustomerQuotesPortalPage() {
           </div>
         </div>
 
+        {/* Mensagem de Feedback de Aprovação */}
+        {approvalFeedback && (
+          <div
+            className={`rounded-2xl p-4 text-xs font-medium flex items-center justify-between border ${
+              approvalFeedback.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-200'
+                : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {approvalFeedback.type === 'success' ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+              )}
+              <span>{approvalFeedback.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setApprovalFeedback(null)}
+              className="text-xs underline font-semibold cursor-pointer ml-3 hover:opacity-80"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+
         {/* Lista de Orçamentos */}
         {filteredQuotes.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-3">
@@ -536,8 +630,9 @@ export function CustomerQuotesPortalPage() {
             {filteredQuotes.map((q) => {
               const isHighlighted = portalData.highlightedQuoteId === q.id
               const isExpanded = Boolean(expandedQuotes[q.id])
-              const statusCfg = STATUS_LABELS[q.status] || STATUS_LABELS.draft
+              const statusCfg = getPortalStatusConfig(q)
               const isExpired = q.validUntil ? new Date(q.validUntil) < new Date() : false
+              const canCustomerApprove = q.status === 'sent' || q.status === 'draft'
 
               return (
                 <div
@@ -602,6 +697,18 @@ export function CustomerQuotesPortalPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {canCustomerApprove && (
+                          <button
+                            type="button"
+                            onClick={() => setQuoteToApprove(q)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:shadow-sm transition cursor-pointer"
+                            title="Aprovar este orçamento agora"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span>Aprovar Orçamento</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => handleDownloadPdf(q)}
@@ -686,8 +793,19 @@ export function CustomerQuotesPortalPage() {
                       </div>
 
                       {/* Botões de Decisão e Contato */}
-                      {portalData.organization.phone && (
-                        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                        {canCustomerApprove && (
+                          <button
+                            type="button"
+                            onClick={() => setQuoteToApprove(q)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Aprovar Orçamento
+                          </button>
+                        )}
+
+                        {portalData.organization.phone && (
                           <button
                             type="button"
                             onClick={() => handleContactCompany(q, 'doubt')}
@@ -696,19 +814,8 @@ export function CustomerQuotesPortalPage() {
                             <MessageCircle className="h-3.5 w-3.5 text-slate-500" />
                             Tirar Dúvidas no WhatsApp
                           </button>
-
-                          {q.status === 'sent' && (
-                            <button
-                              type="button"
-                              onClick={() => handleContactCompany(q, 'approve')}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white shadow-sm transition cursor-pointer"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              Aprovar Orçamento no WhatsApp
-                            </button>
-                          )}
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -724,6 +831,58 @@ export function CustomerQuotesPortalPage() {
           Portal Oficial de Orçamentos de <strong>{portalData.organization.name}</strong> • Conexão Segura
         </p>
       </footer>
+
+      {/* Modal de Confirmação de Aprovação pelo Cliente */}
+      {quoteToApprove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                  Aprovar Orçamento
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  #{quoteToApprove.quoteNumber} • {formatCurrency(quoteToApprove.total)}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              Você deseja confirmar a aprovação deste orçamento? Ao aprovar, o status será atualizado para <strong className="text-emerald-600 dark:text-emerald-400">Aprovado pelo cliente</strong> e a equipe da <strong>{portalData.organization.name}</strong> dará andamento ao seu pedido.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isApproving}
+                onClick={() => setQuoteToApprove(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer disabled:opacity-50"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={isApproving}
+                onClick={() => void handleConfirmApproval()}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              >
+                {isApproving ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Aprovando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" /> Sim, Confirmar Aprovação
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

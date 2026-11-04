@@ -15,6 +15,8 @@ export interface QuoteListItem {
   customerPhone?: string | null
   quoteNumber: string
   status: QuoteStatus
+  approvedBy?: 'client' | 'user' | string | null
+  approvedAt?: string | null
   subtotal: string
   discount: string
   total: string
@@ -197,7 +199,7 @@ export const quoteService = {
    */
   async listQuotes(organizationId: UUID): Promise<ServiceResult<QuoteListItem[]>> {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('quotes')
         .select(
           `
@@ -206,6 +208,8 @@ export const quoteService = {
           customer_id,
           quote_number,
           status,
+          approved_by,
+          approved_at,
           subtotal,
           discount,
           total,
@@ -230,6 +234,43 @@ export const quoteService = {
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false })
 
+      if (error && (error.code === '42703' || error.message?.includes('approved_by'))) {
+        const fallback = await supabase
+          .from('quotes')
+          .select(
+            `
+            id,
+            organization_id,
+            customer_id,
+            quote_number,
+            status,
+            subtotal,
+            discount,
+            total,
+            valid_until,
+            creator_name,
+            seller_name,
+            sale_id,
+            created_at,
+            updated_at,
+            sale:sale_id (
+              id,
+              quote_number,
+              seller_name,
+              creator_name
+            ),
+            customers (
+              name,
+              phone
+            )
+          `,
+          )
+          .eq('organization_id', organizationId)
+          .order('created_at', { ascending: false })
+        data = fallback.data as typeof data
+        error = fallback.error
+      }
+
       if (error) {
         logger.error('Erro ao listar orçamentos', error)
         return { success: false, error: 'Não foi possível carregar os orçamentos.' }
@@ -246,6 +287,11 @@ export const quoteService = {
             creator_name: string | null
           } | null
 
+          const rawQuote = q as unknown as {
+            approved_by?: string | null
+            approved_at?: string | null
+          }
+
           return {
             id: q.id,
             organizationId: q.organization_id,
@@ -254,6 +300,8 @@ export const quoteService = {
             customerPhone: cust?.phone ?? null,
             quoteNumber: q.quote_number,
             status: q.status as QuoteStatus,
+            approvedBy: (rawQuote.approved_by as 'client' | 'user' | null) ?? null,
+            approvedAt: rawQuote.approved_at ?? null,
             subtotal: q.subtotal,
             discount: q.discount,
             total: q.total,
@@ -279,7 +327,7 @@ export const quoteService = {
    */
   async getQuote(organizationId: UUID, quoteId: UUID): Promise<ServiceResult<QuoteDetail>> {
     try {
-      const { data: quote, error: quoteError } = await supabase
+      let { data: quote, error: quoteError } = await supabase
         .from('quotes')
         .select(
           `
@@ -288,6 +336,8 @@ export const quoteService = {
           customer_id,
           quote_number,
           status,
+          approved_by,
+          approved_at,
           subtotal,
           discount,
           total,
@@ -317,6 +367,48 @@ export const quoteService = {
         .eq('id', quoteId)
         .maybeSingle()
 
+      if (quoteError && (quoteError.code === '42703' || quoteError.message?.includes('approved_by'))) {
+        const fallback = await supabase
+          .from('quotes')
+          .select(
+            `
+            id,
+            organization_id,
+            customer_id,
+            quote_number,
+            status,
+            subtotal,
+            discount,
+            total,
+            valid_until,
+            notes,
+            creator_name,
+            seller_name,
+            sale_id,
+            created_at,
+            updated_at,
+            sale:sale_id (
+              id,
+              quote_number,
+              seller_name,
+              creator_name
+            ),
+            customers (
+              name,
+              phone,
+              email,
+              address,
+              address_number
+            )
+          `,
+          )
+          .eq('organization_id', organizationId)
+          .eq('id', quoteId)
+          .maybeSingle()
+        quote = fallback.data as typeof quote
+        quoteError = fallback.error
+      }
+
       if (quoteError || !quote) {
         return { success: false, error: 'Orçamento não encontrado.' }
       }
@@ -345,6 +437,11 @@ export const quoteService = {
         creator_name: string | null
       } | null
 
+      const rawQuote = quote as unknown as {
+        approved_by?: string | null
+        approved_at?: string | null
+      }
+
       return {
         success: true,
         data: {
@@ -354,6 +451,8 @@ export const quoteService = {
           customerName: cust?.name ?? '',
           quoteNumber: quote.quote_number,
           status: quote.status as QuoteStatus,
+          approvedBy: (rawQuote.approved_by as 'client' | 'user' | null) ?? null,
+          approvedAt: rawQuote.approved_at ?? null,
           subtotal: quote.subtotal,
           discount: quote.discount,
           total: quote.total,
@@ -623,12 +722,30 @@ export const quoteService = {
         }
       }
 
-      // 3. Aplica alteração
-      const { error: updateError } = await supabase
+      // 3. Aplica alteração (registra aprovação pelo usuário se newStatus for 'approved')
+      const updatePayload: Record<string, unknown> = { status: newStatus }
+      if (newStatus === 'approved') {
+        updatePayload.approved_by = 'user'
+        updatePayload.approved_at = new Date().toISOString()
+      } else {
+        updatePayload.approved_by = null
+        updatePayload.approved_at = null
+      }
+
+      let { error: updateError } = await supabase
         .from('quotes')
-        .update({ status: newStatus })
+        .update(updatePayload)
         .eq('organization_id', organizationId)
         .eq('id', quoteId)
+
+      if (updateError && (updateError.code === '42703' || updateError.message?.includes('approved_by'))) {
+        const fallback = await supabase
+          .from('quotes')
+          .update({ status: newStatus })
+          .eq('organization_id', organizationId)
+          .eq('id', quoteId)
+        updateError = fallback.error
+      }
 
       if (updateError) {
         logger.error('Erro ao atualizar status do orçamento', new Error(updateError.message), {

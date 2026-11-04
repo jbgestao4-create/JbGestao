@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { quoteService, type QuoteDetail, type QuoteListItem } from '../services/quote.service'
 import {
@@ -43,10 +43,30 @@ function getLocalDateValue(value: string) {
   return `${String(year)}-${month}-${day}`
 }
 
+const VALID_STATUSES: readonly ('all' | QuoteStatus)[] = [
+  'all',
+  'draft',
+  'sent',
+  'approved',
+  'completed',
+  'rejected',
+  'expired',
+]
+
+function parseStatusParam(value: string | null): ('all' | QuoteStatus) | null {
+  if (value && (VALID_STATUSES as readonly string[]).includes(value)) {
+    return value as 'all' | QuoteStatus
+  }
+  return null
+}
+
 export function QuotesListPage() {
   const { currentOrganization, userRole } = useOrganization()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [quotes, setQuotes] = useState<QuoteListItem[]>([])
-  const [filterStatus, setFilterStatus] = useState<'all' | QuoteStatus>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | QuoteStatus>(
+    () => parseStatusParam(searchParams.get('status') || searchParams.get('tab')) || 'all',
+  )
   const [filterCustomerName, setFilterCustomerName] = useState('')
   const [filterQuoteNumber, setFilterQuoteNumber] = useState('')
   const [filterQuoteDate, setFilterQuoteDate] = useState('')
@@ -107,6 +127,31 @@ export function QuotesListPage() {
     }
   }, [quoteToPrint])
 
+  useEffect(() => {
+    const statusParam = parseStatusParam(searchParams.get('status') || searchParams.get('tab'))
+    if (statusParam && statusParam !== filterStatus) {
+      setFilterStatus(statusParam)
+    }
+  }, [searchParams, filterStatus])
+
+  const handleFilterStatusChange = (st: 'all' | QuoteStatus) => {
+    setFilterStatus(st)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (st === 'all') {
+          next.delete('status')
+          next.delete('tab')
+        } else {
+          next.set('status', st)
+          next.delete('tab')
+        }
+        return next
+      },
+      { replace: true },
+    )
+  }
+
   const handleStatusChange = async (
     quoteId: string,
     currentStatus: QuoteStatus,
@@ -132,7 +177,7 @@ export function QuotesListPage() {
 
       // Acompanha o orçamento para a respectiva aba, exceto se for recusado
       if (newStatus !== 'rejected') {
-        setFilterStatus(newStatus)
+        handleFilterStatusChange(newStatus)
       }
 
       if (isTransitioningFromDraftToSent) {
@@ -273,14 +318,14 @@ export function QuotesListPage() {
 
       <div className="sticky top-0 z-20 -mx-4 space-y-3 border-b border-gray-200 dark:border-slate-800 bg-gray-50/95 dark:bg-[#0f172a]/95 px-4 py-3 shadow-xs backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {(['all', 'draft', 'sent', 'approved', 'completed', 'rejected', 'expired'] as const).map(
+          {VALID_STATUSES.map(
             (st) => {
               const label = st === 'all' ? 'Todos' : getStatusLabel(st)
               return (
                 <button
                   key={st}
                   onClick={() => {
-                    setFilterStatus(st)
+                    handleFilterStatusChange(st)
                   }}
                   className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                     filterStatus === st
@@ -360,7 +405,7 @@ export function QuotesListPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1260px] table-fixed text-left text-sm text-gray-600 dark:text-slate-300">
+              <table className="w-full min-w-[1360px] table-fixed text-left text-sm text-gray-600 dark:text-slate-300">
                 <colgroup>
                   <col className="w-[140px]" />
                   <col className="w-[160px]" />
@@ -369,8 +414,8 @@ export function QuotesListPage() {
                   <col className="w-[120px]" />
                   <col className="w-[136px]" />
                   <col className="w-[100px]" />
-                  <col className="w-24" />
-                  <col className="w-[380px]" />
+                  <col className="w-[180px]" />
+                  <col className="w-[340px]" />
                 </colgroup>
                 <thead className="bg-gray-50/75 dark:bg-slate-800/60 text-xs uppercase text-gray-400 dark:text-slate-400 font-semibold border-b border-gray-100 dark:border-slate-800">
                   <tr>
@@ -381,7 +426,7 @@ export function QuotesListPage() {
                     <th className="px-3 py-3 text-right">Total</th>
                     <th className="px-3 py-3 text-right">Data do Orçamento</th>
                     <th className="px-3 py-3 text-right">Validade</th>
-                    <th className="px-3 py-3">{filterStatus !== 'all' ? 'Status' : ''}</th>
+                    <th className="px-3 py-3">Status</th>
                     <th className="px-3 py-3 text-right" aria-label="Ações" />
                   </tr>
                 </thead>
@@ -435,11 +480,14 @@ export function QuotesListPage() {
                         </td>
                         <td className="px-3 py-2.5">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeClasses(
+                            className={`inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeClasses(
                               q.status,
                             )}`}
                           >
-                            {getStatusLabel(q.status)}
+                            {getStatusLabel(
+                              q.status,
+                              q.approvedBy || (q.status === 'approved' ? 'user' : undefined),
+                            )}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-right">
@@ -633,7 +681,11 @@ export function QuotesListPage() {
                 </div>
               </div>
               <span className="rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-sm font-semibold text-purple-800">
-                {getStatusLabel(quoteToPrint.status)}
+                {getStatusLabel(
+                  quoteToPrint.status,
+                  quoteToPrint.approvedBy ||
+                    (quoteToPrint.status === 'approved' ? 'user' : undefined),
+                )}
               </span>
             </header>
 
