@@ -1,10 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { UpcomingBillsAlertModal } from '@modules/cash/components/UpcomingBillsAlertModal'
+import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
-import { Button } from '@shared/components/ui/Button'
-import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
@@ -14,12 +13,12 @@ import {
   FileSpreadsheet,
   Users,
   Settings,
-  LogOut,
   Building2,
   FileBarChart,
   Truck,
   Package,
   ShoppingCart,
+  DollarSign,
   Wrench,
   ClipboardList,
   ChevronLeft,
@@ -30,7 +29,7 @@ import {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, profile, signOut } = useAuth()
-  const { currentOrganization, organizations, setCurrentOrganization, createOrganization } =
+  const { currentOrganization, organizations, userRole, setCurrentOrganization } =
     useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const location = useLocation()
@@ -40,46 +39,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null)
   const isMobileMenuOpen = mobileMenuPath === location.pathname
-  const [newOrgName, setNewOrgName] = useState('')
-  const [newOrgSlug, setNewOrgSlug] = useState('')
-  const [orgError, setOrgError] = useState('')
-  const [isSubmittingOrg, setIsSubmittingOrg] = useState(false)
 
-  useEffect(() => {
-    if (!isMobileMenuOpen) return
-
-    const previousOverflow = document.body.style.overflow
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMobileMenuPath(null)
-    }
-
-    document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isMobileMenuOpen])
-
-  const handleCreateOrg = async (e: React.SyntheticEvent) => {
-    e.preventDefault()
-    if (!newOrgName || !newOrgSlug) {
-      setOrgError('Preencha todos os campos.')
-      return
-    }
-
-    setIsSubmittingOrg(true)
-    setOrgError('')
-
-    const res = await createOrganization(newOrgName, newOrgSlug)
-    if (res.success) {
-      setNewOrgName('')
-      setNewOrgSlug('')
-    } else {
-      setOrgError(res.error)
-    }
-    setIsSubmittingOrg(false)
-  }
 
   const handleSignOut = async () => {
     const result = await signOut()
@@ -89,73 +49,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return result
   }
 
-  // Se o usuário ainda não tiver nenhuma organização cadastrada
-  if (organizations.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0b0f19] flex flex-col justify-center items-center p-4">
-        <div className="max-w-md w-full bg-white dark:bg-[#111827] p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800">
-          <BrandLogo size="lg" className="mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Crie sua primeira organização</h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">
-            Para começar a usar a plataforma, informe o nome do seu negócio ou trabalho autônomo.
-          </p>
-
-          <form onSubmit={(e) => void handleCreateOrg(e)} className="space-y-4">
-            {orgError && (
-              <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
-                {orgError}
-              </div>
-            )}
-            <Input
-              label="Nome da Empresa / Profissional"
-              placeholder="Ex: Alfa Reformas & Pinturas"
-              value={newOrgName}
-              onChange={(e) => {
-                setNewOrgName(e.target.value)
-                setNewOrgSlug(
-                  e.target.value
-                    .toLowerCase()
-                    .normalize('NFD')
-                    .replace(/[\u0300-\u036f]/g, '')
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, ''),
-                )
-              }}
-              required
-            />
-            <Input
-              label="Identificador Único (Slug)"
-              placeholder="ex: alfa-reformas"
-              value={newOrgSlug}
-              onChange={(e) => {
-                setNewOrgSlug(e.target.value)
-              }}
-              helperText="Usado para identificar sua organização no sistema."
-              required
-            />
-            <Button type="submit" className="w-full" isLoading={isSubmittingOrg}>
-              Criar Organização e Começar
-            </Button>
-          </form>
-
-          <div className="mt-6 pt-4 border-t border-gray-100 flex justify-center">
-            <button
-              onClick={() => void handleSignOut()}
-              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-            >
-              <LogOut className="w-3.5 h-3.5" /> Sair da conta
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const hasOrcafacil = canAccess('orcafacil')
   const canAccessSales = canAccessDashboardModule('MOD-01')
   const canAccessCustomers = canAccessDashboardModule('MOD-03')
   const canAccessInventory = canAccessDashboardModule('MOD-02')
   const canAccessQuotes = canAccessDashboardModule('MOD-04')
+  const canAccessCash = canAccessDashboardModule('MOD-05')
   const canAccessSuppliers = canAccessDashboardModule('MOD-06')
   const canAccessOrganization = canAccessDashboardModule('MOD-07')
   const canAccessReports = canAccessDashboardModule('MOD-08')
@@ -238,7 +137,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
 
             {/* Seletor de Organização */}
-            {!sidebarCollapsed && (
+            {!sidebarCollapsed && organizations.length > 0 && (
               <div className="relative">
                 <ListBox
                   searchable={organizations.length > 4}
@@ -263,7 +162,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             className={`flex-1 p-3 space-y-6 overflow-y-auto ${sidebarCollapsed ? 'px-2' : ''}`}
           >
             <div>
-              {!sidebarCollapsed && (
+              {!sidebarCollapsed && organizations.length > 0 && (
                 <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                   Geral
                 </span>
@@ -279,16 +178,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 canAccessCustomers ||
                 canAccessInventory ||
                 canAccessQuotes ||
+                canAccessCash ||
                 canAccessSuppliers ||
                 canAccessServices ||
                 canAccessServiceOrders) && (
                 <div>
-                  {!sidebarCollapsed && (
+                  {!sidebarCollapsed && organizations.length > 0 && (
                     <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                       JB Software
                     </span>
                   )}
                   <div className="mt-1 space-y-0.5">
+                    {canAccessCash &&
+                      navItem(
+                        '/cash',
+                        'Caixa & Boletos',
+                        <DollarSign className="w-4 h-4" />,
+                      )}
                     {canAccessSales &&
                       navItem(
                         '/orcafacil/sales',
@@ -335,12 +241,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             {canAccessOrganization && (
               <div>
-                {!sidebarCollapsed && (
+                {!sidebarCollapsed && organizations.length > 0 && (
                   <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                     Administração
                   </span>
                 )}
                 <div className="mt-1 space-y-0.5">
+                  {userRole === 'owner' &&
+                    navItem(
+                      '/admin/companies',
+                      'Empresas Cadastradas',
+                      <Building2 className="w-4 h-4" />,
+                    )}
                   {navItem(
                     '/settings/organization',
                     'Organização',
@@ -401,7 +313,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button>
               <Building2 className="hidden h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500 md:block" />
               <span className="truncate font-semibold text-gray-900 dark:text-white">
-                {currentOrganization?.name}
+                {currentOrganization?.name || 'JB Software'}
               </span>
             </div>
 
@@ -424,6 +336,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           }
         >
           {children}
+      <UpcomingBillsAlertModal />
         </div>
       </main>
     </div>

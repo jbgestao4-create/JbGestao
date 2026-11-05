@@ -42,6 +42,7 @@ export interface Organization {
   id: UUID
   name: string
   slug: string
+  isActive?: boolean
   createdAt: string
 }
 

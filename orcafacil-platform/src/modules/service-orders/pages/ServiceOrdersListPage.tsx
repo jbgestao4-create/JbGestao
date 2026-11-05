@@ -83,6 +83,12 @@ export function ServiceOrdersListPage() {
   const [closeReasonInput, setCloseReasonInput] = useState('')
   const [closeReasonError, setCloseReasonError] = useState<string | null>(null)
   const [isSavingClose, setIsSavingClose] = useState(false)
+
+  // Modal para confirmação/preenchimento da Solução antes de passar para Pronto
+  const [orderForSolutionModal, setOrderForSolutionModal] = useState<ServiceOrderListItem | null>(null)
+  const [solutionInput, setSolutionInput] = useState('')
+  const [solutionError, setSolutionError] = useState<string | null>(null)
+  const [isSavingSolution, setIsSavingSolution] = useState(false)
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<SaleDetail | null>(null)
   const [saleModalOpen, setSaleModalOpen] = useState(false)
 
@@ -148,6 +154,20 @@ export function ServiceOrdersListPage() {
       return
     }
 
+        // Ao tentar movimentar para Pronto: confirma se foi adicionada informação no campo solução!
+    if (newStatus === 'ready') {
+      const hasSolution = Boolean(currentOrder?.solutionApplied && currentOrder.solutionApplied.trim().length > 0)
+      if (!hasSolution) {
+        if (currentOrder) {
+          setErrorMsg('Para fechar a O.S. é necessário adicionar a solução do problema.')
+          setOrderForSolutionModal(currentOrder)
+          setSolutionInput('')
+          setSolutionError('Para fechar a O.S. é necessário adicionar a solução do problema.')
+        }
+        return
+      }
+    }
+
     // Ao clicar em Encerrar O.S., solicita o motivo do encerramento
     if (newStatus === 'closed') {
       if (currentOrder) {
@@ -170,6 +190,45 @@ export function ServiceOrdersListPage() {
       }
     } else {
       setErrorMsg(res.error)
+    }
+  }
+
+  const handleConfirmSolutionStatus = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentOrganization || !orderForSolutionModal) return
+
+    const trimmedSolution = solutionInput.trim()
+    if (!trimmedSolution) {
+      setSolutionError('Para fechar a O.S. é necessário adicionar a solução do problema.')
+      return
+    }
+
+    setIsSavingSolution(true)
+    setSolutionError(null)
+
+    const res = await serviceOrderService.updateStatus(
+      currentOrganization.id,
+      orderForSolutionModal.id,
+      'ready',
+      undefined,
+      trimmedSolution,
+    )
+
+    setIsSavingSolution(false)
+
+    if (res.success) {
+      const orderToNotify = {
+        ...orderForSolutionModal,
+        status: 'ready' as ServiceOrderStatus,
+        solutionApplied: trimmedSolution,
+      }
+      setOrderForSolutionModal(null)
+      setSolutionInput('')
+      await loadOrders()
+      handleFilterChange('ready')
+      setOrderForWhatsApp(orderToNotify)
+    } else {
+      setSolutionError(res.error)
     }
   }
 
@@ -521,11 +580,12 @@ export function ServiceOrdersListPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-left text-sm text-gray-600 dark:text-slate-300">
+              <table className="w-full min-w-[1160px] text-left text-sm text-gray-600 dark:text-slate-300">
                 <thead className="bg-gray-50/75 dark:bg-slate-800/60 text-xs uppercase text-gray-400 dark:text-slate-400 font-semibold border-b border-gray-100 dark:border-slate-800">
                   <tr>
                     <th className="px-3 py-3">Nº O.S.</th>
                     <th className="px-3 py-3">Cliente</th>
+                    <th className="px-3 py-3">Técnico</th>
                     <th className="px-3 py-3">Equipamento / Avarias</th>
                     <th className="px-3 py-3">Problema &amp; Solução</th>
                     <th className="px-3 py-3 text-right">Total</th>
@@ -566,7 +626,7 @@ export function ServiceOrdersListPage() {
                         )}
                       </td>
 
-                      {/* Cliente */}
+                                            {/* Cliente */}
                       <td className="px-3 py-3 align-top">
                         <div className="font-semibold text-gray-900 dark:text-white">
                           {o.customerName}
@@ -576,10 +636,25 @@ export function ServiceOrdersListPage() {
                             {o.customerPhone}
                           </div>
                         )}
-                        {o.technicianName && (
-                          <div className="text-[11px] text-gray-400 mt-0.5">
-                            Técnico: <span className="font-medium text-gray-600 dark:text-slate-300">{o.technicianName}</span>
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/60 px-2 py-0.5 text-[11px] font-bold text-blue-800 dark:text-blue-300">
+                            <Wrench className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span>{o.technicianName ? `Téc: ${o.technicianName}` : 'Sem técnico atribuído'}</span>
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Técnico Responsável */}
+                      <td className="px-3 py-3 align-top whitespace-nowrap">
+                        {o.technicianName ? (
+                          <div className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/60 px-2.5 py-1 text-xs font-bold text-blue-800 dark:text-blue-300 shadow-2xs">
+                            <Wrench className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span>{o.technicianName}</span>
                           </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-slate-500 italic">
+                            Não informado
+                          </span>
                         )}
                       </td>
 
@@ -691,37 +766,29 @@ export function ServiceOrdersListPage() {
                                           value: 'pending',
                                           label: `→ ${SERVICE_ORDER_STATUS_LABELS.pending}`,
                                         },
-                                        {
-                                          value: 'ready',
-                                          label: `→ ${SERVICE_ORDER_STATUS_LABELS.ready}`,
-                                        },
                                       ]
                                     : o.status === 'in_maintenance'
                                       ? [
                                           {
-                                            value: 'pending',
-                                            label: `→ ${SERVICE_ORDER_STATUS_LABELS.pending}`,
-                                          },
-                                          {
                                             value: 'ready',
                                             label: `→ ${SERVICE_ORDER_STATUS_LABELS.ready}`,
+                                          },
+                                          {
+                                            value: 'pending',
+                                            label: `→ ${SERVICE_ORDER_STATUS_LABELS.pending}`,
                                           },
                                         ]
                                       : o.status === 'pending'
                                         ? [
                                             {
-                                              value: 'ready',
-                                              label: `→ ${SERVICE_ORDER_STATUS_LABELS.ready}`,
-                                            },
-                                            {
-                                              value: 'closed',
-                                              label: '→ Encerrar O.S.',
+                                              value: 'in_maintenance',
+                                              label: '→ Voltar para Manutenção',
                                             },
                                           ]
                                         : [
                                             {
                                               value: 'in_maintenance',
-                                              label: `→ ${SERVICE_ORDER_STATUS_LABELS.in_maintenance}`,
+                                              label: '→ Voltar para Manutenção',
                                             },
                                           ]
                                 }
@@ -884,6 +951,88 @@ export function ServiceOrdersListPage() {
                   className="flex-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold"
                 >
                   {isSavingPending ? 'Encaminhando...' : 'Confirmar e Encaminhar'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {orderForSolutionModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          onClick={() => setOrderForSolutionModal(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-gray-100 dark:border-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/60 p-2 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    Solução do Problema Necessária
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    O.S. {orderForSolutionModal.orderNumber} • {orderForSolutionModal.equipmentName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderForSolutionModal(null)}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 p-3 text-xs font-semibold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <span>Para fechar a O.S. é necessário adicionar a solução do problema.</span>
+            </div>
+
+            <form onSubmit={handleConfirmSolutionStatus} className="mt-4 space-y-4">
+              {solutionError && (
+                <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+                  <span>{solutionError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+                  Solução Aplicada / Serviço Realizado <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  autoFocus
+                  required
+                  value={solutionInput}
+                  onChange={(e) => setSolutionInput(e.target.value)}
+                  placeholder="Descreva o reparo realizado, peças trocadas e a solução aplicada..."
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-xs text-gray-900 dark:text-white focus:border-emerald-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOrderForSolutionModal(null)}
+                  className="flex-1 rounded-xl text-xs font-bold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSavingSolution}
+                  className="flex-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                >
+                  {isSavingSolution ? 'Salvando...' : 'Salvar Solução e Marcar Pronto'}
                 </Button>
               </div>
             </form>

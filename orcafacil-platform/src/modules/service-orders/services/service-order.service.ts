@@ -1,3 +1,11 @@
+import type {
+  ServiceOrderDetail,
+  ServiceOrderItem,
+  ServiceOrderListItem,
+  ServiceOrderPhoto,
+  ServiceOrderPriority,
+  ServiceOrderStatus,
+} from '../domain/service-order'
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult, UUID } from '@shared/types/common'
@@ -6,7 +14,7 @@ import {
   calculateSubtotal,
   calculateTotal,
 } from '@shared/utils/monetary'
-import type {
+export type {
   ServiceOrderDetail,
   ServiceOrderItem,
   ServiceOrderListItem,
@@ -751,8 +759,24 @@ export const serviceOrderService = {
     id: UUID,
     status: ServiceOrderStatus,
     pendingReason?: string | null,
+    solutionApplied?: string | null,
   ): Promise<ServiceResult<void>> {
     try {
+      if (status === 'ready') {
+        const local = getLocalOrders(organizationId)
+        const order = local.find((o) => o.id === id)
+        const effectiveSolution =
+          (solutionApplied !== undefined && solutionApplied !== null
+            ? solutionApplied
+            : order?.solutionApplied)?.trim() || ''
+
+        if (!effectiveSolution) {
+          return {
+            success: false,
+            error: 'Para fechar a O.S. é necessário adicionar a solução do problema.',
+          }
+        }
+      }
       const nowIso = new Date().toISOString()
       const updatePayload: Record<string, unknown> = {
         status: toDbStatus(status),
@@ -761,6 +785,9 @@ export const serviceOrderService = {
       }
       if (pendingReason !== undefined) {
         updatePayload.internal_notes = pendingReason?.trim() || null
+      }
+      if (solutionApplied !== undefined && solutionApplied !== null) {
+        updatePayload.solution_applied = solutionApplied.trim() || null
       }
 
       const { error } = await supabase
@@ -780,6 +807,10 @@ export const serviceOrderService = {
                 pendingReason !== undefined
                   ? pendingReason?.trim() || null
                   : (o.pendingReason ?? o.internalNotes ?? null),
+              solutionApplied:
+                solutionApplied !== undefined && solutionApplied !== null
+                  ? solutionApplied.trim() || null
+                  : o.solutionApplied,
               closedAt: status === 'closed' ? nowIso : o.closedAt,
               updatedAt: nowIso,
             }

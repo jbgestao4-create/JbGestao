@@ -1,0 +1,584 @@
+import { useState } from 'react';
+import {
+  AlertTriangle,
+  Banknote,
+  CheckCircle2,
+  CreditCard,
+  FileText,
+  Printer,
+  QrCode,
+  X,
+} from 'lucide-react';
+import type { CashSession, FullSessionReconciliation } from '../domain/cash-session';
+import { reconcileFullSession, validateSessionClosure } from '../domain/cash-session';
+
+interface CashClosureModalProps {
+  session: CashSession;
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirmClose: (data: {
+    countedMoney: number;
+    countedPix: number;
+    countedCreditCard: number;
+    countedDebitCard: number;
+    closureReason?: string;
+  }) => Promise<void>;
+  isLoading?: boolean;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+}
+
+function parseCurrencyInput(val: string): number {
+  const cleaned = val.replace(/[^\d,.-]/g, '').replace(',', '.');
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? Math.max(0, num) : 0;
+}
+
+export function CashClosureModal({
+  session,
+  isOpen,
+  onClose,
+  onConfirmClose,
+  isLoading = false,
+}: CashClosureModalProps) {
+  const [countedMoneyStr, setCountedMoneyStr] = useState<string>('');
+  const [countedPixStr, setCountedPixStr] = useState<string>('');
+  const [countedCreditStr, setCountedCreditStr] = useState<string>('');
+  const [countedDebitStr, setCountedDebitStr] = useState<string>('');
+  const [closureReason, setClosureReason] = useState<string>('');
+  const [showPrintReport, setShowPrintReport] = useState<boolean>(false);
+  const [lastReconciliation, setLastReconciliation] = useState<FullSessionReconciliation | null>(null);
+
+  if (!isOpen) return null;
+
+  const countedMoney = parseCurrencyInput(countedMoneyStr);
+  const countedPix = parseCurrencyInput(countedPixStr);
+  const countedCredit = parseCurrencyInput(countedCreditStr);
+  const countedDebit = parseCurrencyInput(countedDebitStr);
+
+  const recon: FullSessionReconciliation = reconcileFullSession(session as any, {
+    countedMoney,
+    countedPix,
+    countedCreditCard: countedCredit,
+    countedDebitCard: countedDebit,
+  });
+
+  const validation = validateSessionClosure(session as any, {
+    countedMoney,
+    countedPix,
+    countedCreditCard: countedCredit,
+    countedDebitCard: countedDebit,
+    closureReason: closureReason.trim() ? closureReason.trim() : undefined,
+  });
+
+  const handleFillSystemValues = () => {
+    setCountedMoneyStr(recon.money.expected.toFixed(2).replace('.', ','));
+    setCountedPixStr(recon.pix.expected.toFixed(2).replace('.', ','));
+    setCountedCreditStr(recon.creditCard.expected.toFixed(2).replace('.', ','));
+    setCountedDebitStr(recon.debitCard.expected.toFixed(2).replace('.', ','));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validation.isValid) return;
+
+    setLastReconciliation(recon);
+    await onConfirmClose({
+      countedMoney,
+      countedPix,
+      countedCreditCard: countedCredit,
+      countedDebitCard: countedDebit,
+      closureReason: closureReason.trim() || undefined,
+    });
+    setShowPrintReport(true);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  if (showPrintReport && lastReconciliation) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between border-b pb-4 dark:border-zinc-800">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-emerald-100 p-2 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                  Comprovante de Fechamento de Caixa
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Sessão: {session.id.slice(0, 8)} • Terminal: {session.registerName || session.registerId}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div id="print-session-closure-report" className="mt-4 space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
+            <div className="grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+              <div>
+                <span className="text-xs text-zinc-400">Operador:</span>
+                <p className="font-semibold">{session.operatorName || session.operatorId}</p>
+              </div>
+              <div>
+                <span className="text-xs text-zinc-400">Abertura:</span>
+                <p className="font-semibold">{new Date(session.openedAt).toLocaleString('pt-BR')}</p>
+              </div>
+              <div>
+                <span className="text-xs text-zinc-400">Fechamento:</span>
+                <p className="font-semibold">{new Date().toLocaleString('pt-BR')}</p>
+              </div>
+              <div>
+                <span className="text-xs text-zinc-400">Status Geral:</span>
+                <p
+                  className={`font-semibold ${
+                    lastReconciliation.hasDiscrepancy
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  {lastReconciliation.hasDiscrepancy ? 'Fechado com Divergência' : 'Fechamento Exato'}
+                </p>
+              </div>
+            </div>
+
+            {/* Tabela de Conferência */}
+            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 font-semibold">
+                  <tr>
+                    <th className="p-2.5">Forma</th>
+                    <th className="p-2.5 text-right">Esperado (Sistema)</th>
+                    <th className="p-2.5 text-right">Contado (Declarado)</th>
+                    <th className="p-2.5 text-right">Diferença</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  <tr>
+                    <td className="p-2.5 font-medium flex items-center gap-1.5">
+                      <Banknote className="h-4 w-4 text-emerald-500" /> Dinheiro em Espécie
+                    </td>
+                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.money.expected)}</td>
+                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.money.counted)}</td>
+                    <td
+                      className={`p-2.5 text-right font-semibold ${
+                        lastReconciliation.money.difference < 0
+                          ? 'text-rose-600'
+                          : lastReconciliation.money.difference > 0
+                          ? 'text-blue-600'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      {formatCurrency(lastReconciliation.money.difference)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-2.5 font-medium flex items-center gap-1.5">
+                      <QrCode className="h-4 w-4 text-teal-500" /> PIX
+                    </td>
+                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.pix.expected)}</td>
+                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.pix.counted)}</td>
+                    <td
+                      className={`p-2.5 text-right font-semibold ${
+                        lastReconciliation.pix.difference < 0
+                          ? 'text-rose-600'
+                          : lastReconciliation.pix.difference > 0
+                          ? 'text-blue-600'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      {formatCurrency(lastReconciliation.pix.difference)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-2.5 font-medium flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4 text-purple-500" /> Cartão de Crédito
+                    </td>
+                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.creditCard.expected)}</td>
+                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.creditCard.counted)}</td>
+                    <td
+                      className={`p-2.5 text-right font-semibold ${
+                        lastReconciliation.creditCard.difference < 0
+                          ? 'text-rose-600'
+                          : lastReconciliation.creditCard.difference > 0
+                          ? 'text-blue-600'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      {formatCurrency(lastReconciliation.creditCard.difference)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-2.5 font-medium flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4 text-indigo-500" /> Cartão de Débito
+                    </td>
+                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.debitCard.expected)}</td>
+                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.debitCard.counted)}</td>
+                    <td
+                      className={`p-2.5 text-right font-semibold ${
+                        lastReconciliation.debitCard.difference < 0
+                          ? 'text-rose-600'
+                          : lastReconciliation.debitCard.difference > 0
+                          ? 'text-blue-600'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      {formatCurrency(lastReconciliation.debitCard.difference)}
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot className="bg-zinc-50 font-bold dark:bg-zinc-800/80">
+                  <tr>
+                    <td className="p-2.5">Total Geral</td>
+                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.totals.totalExpected)}</td>
+                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.totals.totalCounted)}</td>
+                    <td
+                      className={`p-2.5 text-right ${
+                        lastReconciliation.totals.totalDifference < 0
+                          ? 'text-rose-600'
+                          : lastReconciliation.totals.totalDifference > 0
+                          ? 'text-blue-600'
+                          : 'text-emerald-600'
+                      }`}
+                    >
+                      {formatCurrency(lastReconciliation.totals.totalDifference)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {closureReason && (
+              <div className="rounded-xl border border-zinc-200 p-3 bg-zinc-50 dark:bg-zinc-800/50 dark:border-zinc-700">
+                <span className="text-xs font-semibold text-zinc-500">Justificativa da Divergência:</span>
+                <p className="mt-1 text-sm italic">{closureReason}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3 border-t pt-4 dark:border-zinc-800">
+            <button
+              onClick={handlePrint}
+              type="button"
+              className="flex items-center gap-2 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <Printer className="h-4 w-4" />
+              Imprimir Relatório
+            </button>
+            <button
+              onClick={onClose}
+              type="button"
+              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Concluir
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b pb-4 dark:border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-amber-100 p-2.5 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+              <FileText className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Fechamento de Caixa & Conferência Cega
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Insira os valores reais apurados para Dinheiro, PIX e Cartões.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-5">
+          <div className="flex items-center justify-between rounded-xl bg-zinc-50 p-3.5 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+            <div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">Terminal Aberto</p>
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {session.registerName || session.registerId}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleFillSystemValues}
+              className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Preencher com valores do sistema
+            </button>
+          </div>
+
+          {/* Formas de Pagamento Inputs */}
+          <div className="space-y-3">
+            {/* Dinheiro */}
+            <div className="rounded-xl border border-zinc-200 p-3.5 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5 text-emerald-500" />
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Dinheiro em Espécie (Físico no Caixa)
+                  </span>
+                </div>
+                <span className="text-xs text-zinc-500">
+                  Esperado: {formatCurrency(recon.money.expected)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-2.5 text-xs text-zinc-400">R$</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0,00"
+                    value={countedMoneyStr}
+                    onChange={(e) => setCountedMoneyStr(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-300 py-2 pl-9 pr-3 text-sm font-medium focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+                {countedMoneyStr !== '' && (
+                  <span
+                    className={`text-xs font-semibold ${
+                      recon.money.difference === 0
+                        ? 'text-emerald-600'
+                        : recon.money.difference < 0
+                        ? 'text-rose-600'
+                        : 'text-blue-600'
+                    }`}
+                  >
+                    Dif: {formatCurrency(recon.money.difference)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* PIX */}
+            <div className="rounded-xl border border-zinc-200 p-3.5 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <QrCode className="h-5 w-5 text-teal-500" />
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    PIX (Extrato Bancário)
+                  </span>
+                </div>
+                <span className="text-xs text-zinc-500">
+                  Esperado: {formatCurrency(recon.pix.expected)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-2.5 text-xs text-zinc-400">R$</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0,00"
+                    value={countedPixStr}
+                    onChange={(e) => setCountedPixStr(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-300 py-2 pl-9 pr-3 text-sm font-medium focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+                {countedPixStr !== '' && (
+                  <span
+                    className={`text-xs font-semibold ${
+                      recon.pix.difference === 0
+                        ? 'text-emerald-600'
+                        : recon.pix.difference < 0
+                        ? 'text-rose-600'
+                        : 'text-blue-600'
+                    }`}
+                  >
+                    Dif: {formatCurrency(recon.pix.difference)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Cartão de Crédito */}
+            <div className="rounded-xl border border-zinc-200 p-3.5 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-purple-500" />
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Cartão de Crédito (Maquininhas/Comprovantes)
+                  </span>
+                </div>
+                <span className="text-xs text-zinc-500">
+                  Esperado: {formatCurrency(recon.creditCard.expected)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-2.5 text-xs text-zinc-400">R$</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0,00"
+                    value={countedCreditStr}
+                    onChange={(e) => setCountedCreditStr(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-300 py-2 pl-9 pr-3 text-sm font-medium focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+                {countedCreditStr !== '' && (
+                  <span
+                    className={`text-xs font-semibold ${
+                      recon.creditCard.difference === 0
+                        ? 'text-emerald-600'
+                        : recon.creditCard.difference < 0
+                        ? 'text-rose-600'
+                        : 'text-blue-600'
+                    }`}
+                  >
+                    Dif: {formatCurrency(recon.creditCard.difference)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Cartão de Débito */}
+            <div className="rounded-xl border border-zinc-200 p-3.5 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-indigo-500" />
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Cartão de Débito (Maquininhas/Comprovantes)
+                  </span>
+                </div>
+                <span className="text-xs text-zinc-500">
+                  Esperado: {formatCurrency(recon.debitCard.expected)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-2.5 text-xs text-zinc-400">R$</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0,00"
+                    value={countedDebitStr}
+                    onChange={(e) => setCountedDebitStr(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-300 py-2 pl-9 pr-3 text-sm font-medium focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+                {countedDebitStr !== '' && (
+                  <span
+                    className={`text-xs font-semibold ${
+                      recon.debitCard.difference === 0
+                        ? 'text-emerald-600'
+                        : recon.debitCard.difference < 0
+                        ? 'text-rose-600'
+                        : 'text-blue-600'
+                    }`}
+                  >
+                    Dif: {formatCurrency(recon.debitCard.difference)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Resumo de Diferença Geral */}
+          <div
+            className={`rounded-xl p-4 border ${
+              recon.hasDiscrepancy
+                ? 'bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-200'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-900 dark:text-emerald-200'
+            }`}
+          >
+            <div className="flex items-center justify-between font-semibold">
+              <span className="flex items-center gap-2">
+                {recon.hasDiscrepancy ? (
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                )}
+                {recon.hasDiscrepancy
+                  ? 'Divergência detectada entre valores apurados e esperados'
+                  : 'Valores 100% conferidos com o sistema'}
+              </span>
+              <span className="text-base">
+                Dif. Total: {formatCurrency(recon.totals.totalDifference)}
+              </span>
+            </div>
+            {recon.hasDiscrepancy && (
+              <p className="mt-1 text-xs opacity-90">
+                Uma justificativa é obrigatória para registrar o fechamento quando houver sobra ou falta de caixa.
+              </p>
+            )}
+          </div>
+
+          {/* Justificativa caso haja divergência */}
+          {recon.hasDiscrepancy && (
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Justificativa da Divergência <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                required
+                rows={3}
+                placeholder="Explique o motivo da divergência apurada (ex: diferença de troco, comprovante pendente, taxa não abatida)..."
+                value={closureReason}
+                onChange={(e) => setClosureReason(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-zinc-300 p-3 text-sm focus:border-amber-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+          )}
+
+          {/* Erros de validação */}
+          {!validation.isValid && (
+            <div className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+              <ul className="list-disc pl-4 space-y-1">
+                {(validation.errors || []).map((err: string, i: number) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 border-t pt-4 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isLoading}
+              className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!validation.isValid || isLoading}
+              className="rounded-xl bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+            >
+              {isLoading ? 'Fechando Caixa...' : 'Confirmar e Fechar Caixa'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+

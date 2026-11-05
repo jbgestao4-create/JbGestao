@@ -144,3 +144,15 @@ export const ServiceOrderFormPage = lazy(() =>
     default: module.ServiceOrderFormPage,
   })),
 )
+
+export const CashManagementPage = lazy(() =>
+  import('@modules/cash/pages/CashManagementPage').then((module) => ({
+    default: module.CashManagementPage,
+  })),
+)
+
+export const CompanyManagementPage = lazy(() =>
+  import('@modules/companies/pages/CompanyManagementPage').then((module) => ({
+    default: module.CompanyManagementPage,
+  })),
+)

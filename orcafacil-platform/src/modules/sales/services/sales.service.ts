@@ -57,6 +57,8 @@ export interface SaleMetadata {
   originQuoteId?: string
   originQuoteNumber?: string
   originQuoteCreatorName?: string
+  originServiceOrderId?: string
+  originServiceOrderNumber?: string
 }
 
 export interface SaleItemInput {
@@ -89,6 +91,8 @@ export interface CreateSaleParams {
   originQuoteId?: string
   originQuoteNumber?: string
   originQuoteCreatorName?: string
+  originServiceOrderId?: string
+  originServiceOrderNumber?: string
 }
 
 export interface SaleListItem {
@@ -109,9 +113,12 @@ export interface SaleListItem {
   fiscalInvoice?: FiscalInvoiceData
   creatorName?: string | null
   sellerName?: string | null
+  sessionId?: string | null
   originQuoteId?: string | null
   originQuoteNumber?: string | null
   originQuoteCreatorName?: string | null
+  originServiceOrderId?: string | null
+  originServiceOrderNumber?: string | null
 }
 
 export interface SaleItemDetail {
@@ -281,9 +288,12 @@ export const salesService = {
             fiscalInvoice: metadata.fiscalInvoice,
             creatorName: q.creator_name || null,
             sellerName: q.seller_name || metadata.sellerName || metadata.operatorName || q.creator_name || null,
+            sessionId: metadata.sessionId || null,
             originQuoteId: q.origin_quote_id || metadata.originQuoteId || origin?.id || null,
             originQuoteNumber: origin?.quote_number || metadata.originQuoteNumber || null,
             originQuoteCreatorName: origin?.creator_name || metadata.originQuoteCreatorName || null,
+            originServiceOrderId: metadata.originServiceOrderId || null,
+            originServiceOrderNumber: metadata.originServiceOrderNumber || null,
           }
         })
 
@@ -545,6 +555,18 @@ export const salesService = {
         }
       }
 
+      // Localiza sessão de caixa aberta automaticamente caso não tenha sido informada explicitamente
+      let resolvedSessionId = params.sessionId
+      if (!resolvedSessionId) {
+        const openSession = await cashSessionService.findBestOpenSession(
+          organizationId,
+          params.operatorId,
+        )
+        if (openSession) {
+          resolvedSessionId = openSession.id
+        }
+      }
+
       const metadata: SaleMetadata = {
         isSale: true,
         isPdv: params.isPdv ?? true,
@@ -552,7 +574,7 @@ export const salesService = {
         customerName: params.customerName,
         customerDocument: params.customerDocument,
         fiscalInvoice,
-        sessionId: params.sessionId,
+        sessionId: resolvedSessionId,
         amountReceived: params.amountReceived,
         changeAmount: params.changeAmount,
         operatorId: params.operatorId,
@@ -561,6 +583,8 @@ export const salesService = {
         originQuoteId: params.originQuoteId,
         originQuoteNumber: params.originQuoteNumber,
         originQuoteCreatorName: params.originQuoteCreatorName,
+        originServiceOrderId: params.originServiceOrderId,
+        originServiceOrderNumber: params.originServiceOrderNumber,
       }
 
       const fullNotes = encodeSaleNotes(metadata, params.notes)
@@ -746,9 +770,9 @@ export const salesService = {
         logger.warn('Não foi possível registrar o recebível de caixa para a venda', cashErr)
       })
 
-      // 6. Registra na Sessão de Caixa do PDV se houver
-      if (params.sessionId) {
-        await cashSessionService.recordSaleInSession(organizationId, params.sessionId, {
+      // 6. Registra automaticamente a receita na Sessão de Caixa aberta (Vendas, PDV, O.S. e Orçamentos)
+      if (resolvedSessionId) {
+        await cashSessionService.recordSaleInSession(organizationId, resolvedSessionId, {
           total,
           paymentMethod: params.paymentMethod,
           amountReceived: params.amountReceived,

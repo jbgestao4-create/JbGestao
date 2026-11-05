@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+﻿import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
   moduleAccessService,
   PLATFORM_MODULES_CATALOG,
@@ -13,6 +13,7 @@ import type { InventoryAccessLevel } from '@shared/types/common'
 import { getStoredInventoryLevels } from '@modules/organizations/services/organization.service'
 import { logger } from '@shared/lib/logger'
 import { DASHBOARD_MODULES } from '../services/module-access.service'
+import { companyManagementService } from '@modules/companies/services/company-management.service'
 
 interface ModuleAccessContextType {
   allModules: PlatformModule[]
@@ -38,6 +39,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
   const [allModules, setAllModules] = useState<PlatformModule[]>(PLATFORM_MODULES_CATALOG)
   const [grantedModules, setGrantedModules] = useState<GrantedModule[]>([])
   const [memberAllowedModules, setMemberAllowedModules] = useState<ModuleCode[]>([])
+  const [orgAllowedDashboardModules, setOrgAllowedDashboardModules] = useState<DashboardModuleCode[]>([])
   const [memberAllowedDashboardModules, setMemberAllowedDashboardModules] = useState<
     DashboardModuleCode[]
   >([])
@@ -65,6 +67,9 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
       } else {
         setGrantedModules([])
       }
+
+      const orgModules = await companyManagementService.getCompanyModules(currentOrganization.id)
+      setOrgAllowedDashboardModules(orgModules)
 
       // 3. Se for usuário com papel 'member', carrega permissões específicas de módulos atribuídas pelo administrador
       if (user && userRole === 'member') {
@@ -186,6 +191,13 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
 
   const canAccessDashboardModule = (moduleCode: DashboardModuleCode): boolean => {
     if (!currentOrganization) return false
+
+    // Apenas o Proprietario visualiza todos os modulos. Administradores e membros respeitam rigorosamente a selecao da empresa.
+    if (userRole !== 'owner') {
+      if (!orgAllowedDashboardModules.includes(moduleCode)) {
+        return false
+      }
+    }
 
     if (userRole === 'owner' || userRole === 'admin') {
       return true

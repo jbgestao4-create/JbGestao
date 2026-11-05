@@ -2,6 +2,8 @@ import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult, Supplier, UUID } from '@shared/types/common'
 
+export type { Supplier }
+
 interface SupplierRow {
   id: string
   organization_id: string

@@ -16,6 +16,9 @@ export interface CashSessionMovement {
   type: 'supply' | 'bleed' // supply = suprimento (entrada), bleed = sangria (retirada)
   amount: string
   reason: string
+  category?: string | null // ex: "Troco", "Sangria", "Pagamento de Boleto", "Pagamento Fornecedor"
+  referenceId?: string | null
+  operatorName?: string | null
   createdBy?: string | null
   createdAt: string
 }
@@ -23,7 +26,9 @@ export interface CashSessionMovement {
 export interface CashSession {
   id: string
   organizationId: string
-  registerId: string // ex: "Caixa 01"
+  registerId: string
+  registerName?: string | null
+  operatorId?: string | null // ex: "Caixa 01"
   openedBy: string
   closedBy?: string | null
   operatorName: string
@@ -41,10 +46,14 @@ export interface CashSession {
   totalAdditionalEntries: string // Suprimentos
   totalWithdrawals: string // Sangrias
   totalCancellations: string // Cancelamentos / estornos
+  totalBillPayments?: string // Baixas de boletos/fornecedores no caixa
 
   // Conferência e fechamento
   expectedMoney: string
   countedMoney?: string | null
+  countedPix?: string | null
+  countedCreditCard?: string | null
+  countedDebitCard?: string | null
   difference?: string | null
   conferenceAttempts: number
   discrepancyJustification?: string | null
@@ -59,11 +68,36 @@ export interface CashSession {
 export interface CashReconciliationResult {
   expectedMoney: number
   countedMoney: number
+  expected: number
+  counted: number
   difference: number
   discrepancyType: DiscrepancyType
   formattedDifference: string
   isBalanced: boolean
   requiresJustification: boolean
+}
+
+export interface FullSessionReconciliation {
+  money: CashReconciliationResult
+  pix: CashReconciliationResult
+  creditCard: CashReconciliationResult
+  debitCard: CashReconciliationResult
+  expectedTotal: number
+  countedTotal: number
+  totalDifference: number
+  formattedTotalDifference: string
+  isFullyBalanced: boolean
+  hasDiscrepancy: boolean
+  requiresJustification: boolean
+  totals: {
+    expected: number
+    counted: number
+    difference: number
+    totalExpected: number
+    totalCounted: number
+    totalDifference: number
+    formattedDifference: string
+  }
 }
 
 /**
@@ -137,6 +171,8 @@ export function reconcileCash(
   const isBalanced = diffCents === 0
 
   return {
+    expected: fromCents(expectedCents),
+    counted: fromCents(countedCents),
     expectedMoney: fromCents(expectedCents),
     countedMoney: fromCents(countedCents),
     difference: diffDecimal,
@@ -148,30 +184,145 @@ export function reconcileCash(
 }
 
 /**
- * Valida os dados de fechamento de caixa
+ * Realiza a conferência completa de todos os meios de pagamento (Espécie, PIX, Cartão de Crédito e Débito)
  */
-export function validateSessionClosure(params: {
-  countedMoney: string | number
-  expectedMoney: string | number
-  justification?: string | null
-  isSupervisorAuthorized?: boolean
-}): { valid: boolean; error?: string } {
-  const countedCents = toCents(params.countedMoney)
+export function reconcileFullSession(
+  param1: {
+    expectedMoney?: string | number
+    countedMoney?: string | number | null
+    expectedPix?: string | number
+    countedPix?: string | number
+    expectedCreditCard?: string | number
+    countedCreditCard?: string | number
+    expectedDebitCard?: string | number
+    countedDebitCard?: string | number
+    totalMoney?: string
+    totalPix?: string
+    totalCreditCard?: string
+    totalDebitCard?: string
+  },
+  param2?: {
+    countedMoney?: string | number | null
+    countedPix?: string | number
+    countedCreditCard?: string | number
+    countedDebitCard?: string | number
+  }
+): FullSessionReconciliation {
+  const expMoney = param2 ? (param1.expectedMoney ?? param1.totalMoney ?? 0) : (param1.expectedMoney ?? 0)
+  const expPix = param2 ? (param1.expectedPix ?? param1.totalPix ?? 0) : (param1.expectedPix ?? 0)
+  const expCredit = param2 ? (param1.expectedCreditCard ?? param1.totalCreditCard ?? 0) : (param1.expectedCreditCard ?? 0)
+  const expDebit = param2 ? (param1.expectedDebitCard ?? param1.totalDebitCard ?? 0) : (param1.expectedDebitCard ?? 0)
+
+  const cntMoney = param2 ? (param2.countedMoney ?? 0) : (param1.countedMoney ?? 0)
+  const cntPix = param2 ? param2.countedPix : param1.countedPix
+  const cntCredit = param2 ? param2.countedCreditCard : param1.countedCreditCard
+  const cntDebit = param2 ? param2.countedDebitCard : param1.countedDebitCard
+
+  const money = reconcileCash(cntMoney, expMoney)
+  const pix = reconcileCash(
+    cntPix !== undefined && cntPix !== '' ? cntPix : expPix,
+    expPix,
+  )
+  const creditCard = reconcileCash(
+    cntCredit !== undefined && cntCredit !== ''
+      ? cntCredit
+      : expCredit,
+    expCredit,
+  )
+  const debitCard = reconcileCash(
+    cntDebit !== undefined && cntDebit !== ''
+      ? cntDebit
+      : expDebit,
+    expDebit,
+  )
+
+  const expectedTotalCents =
+    toCents(expMoney) +
+    toCents(expPix) +
+    toCents(expCredit) +
+    toCents(expDebit)
+
+  const countedTotalCents =
+    toCents(money.countedMoney) +
+    toCents(pix.countedMoney) +
+    toCents(creditCard.countedMoney) +
+    toCents(debitCard.countedMoney)
+
+  const totalDiffCents = countedTotalCents - expectedTotalCents
+  const isFullyBalanced =
+    money.isBalanced && pix.isBalanced && creditCard.isBalanced && debitCard.isBalanced
+
+  const expTotal = fromCents(expectedTotalCents)
+  const cntTotal = fromCents(countedTotalCents)
+  const totDiff = fromCents(totalDiffCents)
+
+  return {
+    money,
+    pix,
+    creditCard,
+    debitCard,
+    expectedTotal: expTotal,
+    countedTotal: cntTotal,
+    totalDifference: totDiff,
+    formattedTotalDifference: toMoneyString(Math.abs(totalDiffCents)),
+    isFullyBalanced,
+    hasDiscrepancy: !isFullyBalanced,
+    requiresJustification: !isFullyBalanced,
+    totals: {
+      expected: expTotal,
+      counted: cntTotal,
+      difference: totDiff,
+      totalExpected: expTotal,
+      totalCounted: cntTotal,
+      totalDifference: totDiff,
+      formattedDifference: toMoneyString(Math.abs(totalDiffCents)),
+    },
+  }
+}
+
+/**
+ * Valida os dados de fechamento de caixa (espécie e opcionalmente cartões/PIX)
+ */
+export function validateSessionClosure(
+  param1: {
+    expectedMoney?: string | number
+    countedMoney?: string | number | null
+    expectedPix?: string | number
+    countedPix?: string | number
+    expectedCreditCard?: string | number
+    countedCreditCard?: string | number
+    expectedDebitCard?: string | number
+    countedDebitCard?: string | number
+    justification?: string | null
+    isSupervisorAuthorized?: boolean
+    totalMoney?: string
+    totalPix?: string
+    totalCreditCard?: string
+    totalDebitCard?: string
+  },
+  param2?: {
+    countedMoney?: string | number | null
+    countedPix?: string | number
+    countedCreditCard?: string | number
+    countedDebitCard?: string | number
+    closureReason?: string | null
+    justification?: string | null
+  }
+): { valid: boolean; isValid: boolean; error?: string; errors?: string[] } {
+  const cntMoney = param2 ? param2.countedMoney : param1.countedMoney
+  const countedCents = toCents(cntMoney)
   if (countedCents < 0) {
-    return { valid: false, error: 'O valor contado em dinheiro não pode ser negativo.' }
+    const err = 'O valor contado em dinheiro não pode ser negativo.'; return { valid: false, isValid: false, error: err, errors: [err] }
   }
 
-  const reconciliation = reconcileCash(params.countedMoney, params.expectedMoney)
-  if (!reconciliation.isBalanced) {
-    const justification = params.justification?.trim()
+  const fullRec = reconcileFullSession(param1, param2)
+
+  if (!fullRec.isFullyBalanced) {
+    const justification = (param2 ? (param2.closureReason || param2.justification) : param1.justification)?.trim()
     if (!justification || justification.length < 5) {
-      return {
-        valid: false,
-        error:
-          'Existe divergência no fechamento do caixa. Informe uma justificativa detalhada (mínimo de 5 caracteres).',
-      }
+      const err = 'Existe divergência nos valores declarados em relação ao sistema. Informe uma justificativa detalhada (mínimo de 5 caracteres).'; return { valid: false, isValid: false, error: err, errors: [err] }
     }
   }
 
-  return { valid: true }
+  return { valid: true, isValid: true, errors: [] }
 }

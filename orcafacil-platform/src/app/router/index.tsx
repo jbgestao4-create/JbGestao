@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RequireModule } from './RequireModule'
 import { RequireDashboardModule } from './RequireDashboardModule'
+import { RequireOwner } from './RequireOwner'
 import {
   CustomerFormPage,
   CustomersHomePage,
@@ -18,7 +19,7 @@ import {
   ProfilePage,
   QuoteFormPage,
   QuotesListPage,
-  RegisterPage,
+
   SaleFormPage,
   SalesHomePage,
   PdvTerminalPage,
@@ -33,6 +34,8 @@ import {
   ServiceOrdersListPage,
   ServiceOrderFormPage,
   CustomerQuotesPortalPage,
+  CashManagementPage,
+  CompanyManagementPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -43,7 +46,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/register',
-    element: <RegisterPage />,
+    element: <Navigate to="/login" replace />,
   },
   {
     path: '/forgot-password',
@@ -54,6 +57,22 @@ export const router = createBrowserRouter([
   {
     path: '/portal/orcamentos/:token',
     element: <CustomerQuotesPortalPage />,
+  },
+
+  // Gestão de Empresas Cadastradas (Exclusivo para Proprietário)
+  {
+    path: '/admin/companies',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <CompanyManagementPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/settings/companies',
+    element: <Navigate to="/admin/companies" replace />,
   },
 
   // Rotas autenticadas protegidas
@@ -440,6 +459,22 @@ export const router = createBrowserRouter([
         </RequireDashboardModule>
       </ProtectedRoute>
     ),
+  },
+
+  // Módulo de Gerenciamento de Caixa (MOD-05)
+  {
+    path: '/cash',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-05">
+          <CashManagementPage />
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/cash',
+    element: <Navigate to="/cash" replace />,
   },
 
   // Redirecionamento padrão para rotas não encontradas

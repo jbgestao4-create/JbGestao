@@ -312,7 +312,7 @@ export function SaleFormPage() {
         // Preenche produtos e serviços da O.S. no carrinho
         if (os.items && os.items.length > 0) {
           setCart(
-            os.items.map((it) => ({
+            os.items.map((it: any) => ({
               id: it.id || `os-item-${Date.now()}-${Math.random().toString().slice(2, 6)}`,
               itemType: it.itemType,
               inventoryItemId: it.inventoryItemId ?? undefined,
@@ -599,6 +599,8 @@ export function SaleFormPage() {
       originQuoteId: originQuote?.id,
       originQuoteNumber: originQuote?.quoteNumber,
       originQuoteCreatorName: originQuote?.creatorName || undefined,
+      originServiceOrderId: originServiceOrder?.id,
+      originServiceOrderNumber: originServiceOrder?.orderNumber,
     }
 
     const res = await salesService.createSale(currentOrganization.id, params)

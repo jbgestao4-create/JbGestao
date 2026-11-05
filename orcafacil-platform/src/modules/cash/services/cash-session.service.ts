@@ -7,7 +7,7 @@ import {
   type CashSession,
   type CashSessionMovement,
   calculateExpectedMoney,
-  reconcileCash,
+  reconcileFullSession,
   validateSessionClosure,
   toCents,
   toMoneyString,
@@ -147,8 +147,12 @@ interface CashSessionRow {
   total_additional_entries: string
   total_withdrawals: string
   total_cancellations: string
+  total_bill_payments?: string
   expected_money: string
   counted_money: string | null
+  counted_pix?: string | null
+  counted_credit_card?: string | null
+  counted_debit_card?: string | null
   difference: string | null
   conference_attempts: number
   discrepancy_justification: string | null
@@ -168,24 +172,34 @@ function mapSessionRow(row: CashSessionRow): CashSession {
     closedBy: row.closed_by,
     operatorName: row.operator_name,
     status: row.status,
-    openingBalance: row.opening_balance,
+    openingBalance: String(row.opening_balance ?? '0.00'),
     openedAt: row.opened_at,
     closedAt: row.closed_at,
-    totalSales: row.total_sales,
-    totalMoney: row.total_money,
-    totalPix: row.total_pix,
-    totalCreditCard: row.total_credit_card,
-    totalDebitCard: row.total_debit_card,
-    totalAdditionalEntries: row.total_additional_entries,
-    totalWithdrawals: row.total_withdrawals,
-    totalCancellations: row.total_cancellations,
-    expectedMoney: row.expected_money,
-    countedMoney: row.counted_money,
-    difference: row.difference,
-    conferenceAttempts: row.conference_attempts,
+    totalSales: String(row.total_sales ?? '0.00'),
+    totalMoney: String(row.total_money ?? '0.00'),
+    totalPix: String(row.total_pix ?? '0.00'),
+    totalCreditCard: String(row.total_credit_card ?? '0.00'),
+    totalDebitCard: String(row.total_debit_card ?? '0.00'),
+    totalAdditionalEntries: String(row.total_additional_entries ?? '0.00'),
+    totalWithdrawals: String(row.total_withdrawals ?? '0.00'),
+    totalCancellations: String(row.total_cancellations ?? '0.00'),
+    totalBillPayments: String(row.total_bill_payments ?? '0.00'),
+    expectedMoney: String(row.expected_money ?? '0.00'),
+    countedMoney: row.counted_money !== null && row.counted_money !== undefined ? String(row.counted_money) : null,
+    countedPix: row.counted_pix !== null && row.counted_pix !== undefined ? String(row.counted_pix) : null,
+    countedCreditCard:
+      row.counted_credit_card !== null && row.counted_credit_card !== undefined
+        ? String(row.counted_credit_card)
+        : null,
+    countedDebitCard:
+      row.counted_debit_card !== null && row.counted_debit_card !== undefined
+        ? String(row.counted_debit_card)
+        : null,
+    difference: row.difference !== null && row.difference !== undefined ? String(row.difference) : null,
+    conferenceAttempts: row.conference_attempts ?? 0,
     discrepancyJustification: row.discrepancy_justification,
     supervisorAuthorizedBy: row.supervisor_authorized_by,
-    salesCount: row.sales_count,
+    salesCount: row.sales_count ?? 0,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -194,9 +208,11 @@ function mapSessionRow(row: CashSessionRow): CashSession {
 
 export interface OpenSessionParams {
   registerId?: string
+  registerName?: string
   operatorId: string
   operatorName: string
-  openingBalance: string
+  openingBalance: string | number
+  notes?: string
 }
 
 export interface RecordSaleSessionParams {
@@ -207,16 +223,25 @@ export interface RecordSaleSessionParams {
 
 export interface RecordMovementParams {
   type: 'supply' | 'bleed'
-  amount: string
+  amount: string | number
   reason: string
+  category?: string
+  referenceId?: string
+  operatorName?: string
   userId?: string
 }
 
 export interface CloseSessionParams {
-  countedMoney: string
+  countedMoney: string | number
+  countedPix?: string | number
+  countedCreditCard?: string | number
+  countedDebitCard?: string | number
   justification?: string
+  discrepancyJustification?: string
   supervisorAuth?: string
-  closedBy: string
+  closedBy?: string
+  operatorId?: string
+  notes?: string
 }
 
 export const cashSessionService = {
@@ -315,11 +340,12 @@ export const cashSessionService = {
    */
   async createRegister(
     organizationId: UUID,
-    params: { name: string; description?: string },
+    params: string | { name: string; description?: string },
   ): Promise<ServiceResult<CashRegister>> {
     try {
-      const cleanName = params.name.trim()
-      const cleanDesc = params.description?.trim() || null
+      const payload = typeof params === 'string' ? { name: params } : params
+      const cleanName = payload.name.trim()
+      const cleanDesc = payload.description?.trim() || null
 
       if (!cleanName) {
         return { success: false, error: 'Informe o nome/identificação do Caixa PDV.' }
@@ -455,6 +481,32 @@ export const cashSessionService = {
   },
 
   /**
+   * Localiza a sessão aberta mais adequada para vincular vendas/OS automaticamente
+   */
+  async findBestOpenSession(
+    organizationId: UUID,
+    preferredOperatorId?: string,
+  ): Promise<CashSession | null> {
+    try {
+      const selectedReg = this.getSelectedRegisterName(organizationId)
+      const openListRes = await this.listOpenSessions(organizationId)
+      if (openListRes.success && openListRes.data.length > 0) {
+        if (preferredOperatorId) {
+          const byOp = openListRes.data.find((s) => s.openedBy === preferredOperatorId)
+          if (byOp) return byOp
+        }
+        const byReg = openListRes.data.find((s) => s.registerId === selectedReg)
+        if (byReg) return byReg
+        return openListRes.data[0]
+      }
+      const fallback = await this.getOpenSession(organizationId, selectedReg)
+      return fallback.success ? fallback.data : null
+    } catch {
+      return null
+    }
+  },
+
+  /**
    * Busca uma sessão de caixa específica pelo ID (independente do nome do caixa)
    */
   async getSessionById(organizationId: UUID, sessionId: string): Promise<CashSession | null> {
@@ -584,6 +636,7 @@ export const cashSessionService = {
           expected_money: initialBalanceStr,
           conference_attempts: 0,
           sales_count: 0,
+          notes: params.notes?.trim() || null,
         })
         .select('*')
         .single()
@@ -613,13 +666,18 @@ export const cashSessionService = {
           totalAdditionalEntries: '0.00',
           totalWithdrawals: '0.00',
           totalCancellations: '0.00',
+          totalBillPayments: '0.00',
           expectedMoney: initialBalanceStr,
           countedMoney: null,
+          countedPix: null,
+          countedCreditCard: null,
+          countedDebitCard: null,
           difference: null,
           conferenceAttempts: 0,
           discrepancyJustification: null,
           supervisorAuthorizedBy: null,
           salesCount: 0,
+          notes: params.notes?.trim() || null,
           createdAt: nowIso,
           updatedAt: nowIso,
         }
@@ -638,7 +696,7 @@ export const cashSessionService = {
   },
 
   /**
-   * Acumula os valores de uma venda finalizada na sessão de caixa ativa
+   * Acumula os valores de uma venda ou O.S. finalizada na sessão de caixa ativa
    */
   async recordSaleInSession(
     organizationId: UUID,
@@ -667,7 +725,7 @@ export const cashSessionService = {
         newTotalCreditCents += saleCents
       } else if (params.paymentMethod === 'debit_card') {
         newTotalDebitCents += saleCents
-      } else {
+      } else if (params.paymentMethod !== 'on_credit') {
         // other / default fallback
         newTotalMoneyCents += saleCents
       }
@@ -727,6 +785,69 @@ export const cashSessionService = {
   },
 
   /**
+   * Lista todas as movimentações manuais (suprimentos e sangrias) de uma sessão de caixa
+   */
+  async listMovements(
+    organizationId: UUID,
+    sessionId: string,
+  ): Promise<ServiceResult<CashSessionMovement[]>> {
+    try {
+      const localMovements = getLocalStorageMovements(organizationId, sessionId)
+
+      if (!sessionId.startsWith('local-')) {
+        const { data, error } = await supabase
+          .from('cash_session_movements')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: false })
+
+        if (!error && Array.isArray(data)) {
+          const remote: CashSessionMovement[] = data.map((row: Record<string, unknown>) => ({
+            id: String(row.id),
+            sessionId: String(row.session_id),
+            type: (row.type === 'supply' ? 'supply' : 'bleed') as 'supply' | 'bleed',
+            amount: String(row.amount ?? '0.00'),
+            reason: String(row.reason ?? ''),
+            createdBy: row.created_by ? String(row.created_by) : null,
+            createdAt: String(row.created_at ?? new Date().toISOString()),
+          }))
+
+          const mergedMap = new Map<string, CashSessionMovement>()
+          for (const item of [...remote, ...localMovements]) {
+            const key = `${item.type}_${item.amount}_${item.reason}_${item.createdAt.slice(0, 16)}`
+            if (!mergedMap.has(key)) {
+              mergedMap.set(key, item)
+            }
+          }
+
+          return {
+            success: true,
+            data: Array.from(mergedMap.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+            ),
+          }
+        }
+      }
+
+      return {
+        success: true,
+        data: [...localMovements].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        ),
+      }
+    } catch {
+      const localMovements = getLocalStorageMovements(organizationId, sessionId)
+      return {
+        success: true,
+        data: [...localMovements].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        ),
+      }
+    }
+  },
+
+  /**
    * Registra uma movimentação manual de suprimento ou sangria na sessão
    */
   async recordMovement(
@@ -743,6 +864,14 @@ export const cashSessionService = {
       const movementCents = toCents(params.amount)
       if (movementCents <= 0) {
         return { success: false, error: 'O valor da movimentação deve ser maior que zero.' }
+      }
+
+      const cleanReason = params.reason?.trim()
+      if (!cleanReason || cleanReason.length < 3) {
+        return {
+          success: false,
+          error: 'Informe uma justificativa válida (mínimo de 3 caracteres) para a movimentação.',
+        }
       }
 
       let newEntriesCents = toCents(session.totalAdditionalEntries)
@@ -771,11 +900,14 @@ export const cashSessionService = {
       }
 
       const movementItem: CashSessionMovement = {
-        id: `mov-${Date.now()}`,
+        id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         sessionId,
         type: params.type,
         amount: toMoneyString(movementCents),
-        reason: params.reason.trim(),
+        reason: cleanReason,
+        category: params.category || (params.type === 'supply' ? 'Suprimento' : 'Sangria'),
+        referenceId: params.referenceId || null,
+        operatorName: params.operatorName || session.operatorName,
         createdBy: params.userId || null,
         createdAt: new Date().toISOString(),
       }
@@ -821,7 +953,7 @@ export const cashSessionService = {
   },
 
   /**
-   * Realiza a conferência e o fechamento oficial do caixa (Procedimento obrigatório da Tecla F12)
+   * Realiza a conferência e o fechamento oficial do caixa (com conferência de Espécie, Cartões e PIX)
    */
   async closeSession(
     organizationId: UUID,
@@ -835,31 +967,60 @@ export const cashSessionService = {
         return { success: false, error: 'Sessão de caixa não encontrada ou já encerrada.' }
       }
 
-      // Validação de conferência
+      // Validação de conferência (Espécie, PIX, Cartão de Crédito e Cartão de Débito)
       const closureValidation = validateSessionClosure({
         countedMoney: params.countedMoney,
         expectedMoney: session.expectedMoney,
-        justification: params.justification,
+        countedPix: params.countedPix,
+        expectedPix: session.totalPix,
+        countedCreditCard: params.countedCreditCard,
+        expectedCreditCard: session.totalCreditCard,
+        countedDebitCard: params.countedDebitCard,
+        expectedDebitCard: session.totalDebitCard,
+        justification: params.justification || params.discrepancyJustification,
       })
 
       if (!closureValidation.valid) {
         return { success: false, error: closureValidation.error ?? 'Divergência não justificada.' }
       }
 
-      const reconciliation = reconcileCash(params.countedMoney, session.expectedMoney)
+      const fullReconciliation = reconcileFullSession({
+        expectedMoney: session.expectedMoney,
+        countedMoney: params.countedMoney,
+        expectedPix: session.totalPix,
+        countedPix: params.countedPix,
+        expectedCreditCard: session.totalCreditCard,
+        countedCreditCard: params.countedCreditCard,
+        expectedDebitCard: session.totalDebitCard,
+        countedDebitCard: params.countedDebitCard,
+      })
+
       const nowIso = new Date().toISOString()
       const attempts = (session.conferenceAttempts || 0) + 1
 
       const closedSession: CashSession = {
         ...session,
         status: 'closed',
-        closedBy: params.closedBy,
+        closedBy: params.closedBy || params.operatorId || 'operator',
         closedAt: nowIso,
         countedMoney: toMoneyString(toCents(params.countedMoney)),
-        difference: reconciliation.formattedDifference,
+        countedPix:
+          params.countedPix !== undefined && params.countedPix !== ''
+            ? toMoneyString(toCents(params.countedPix))
+            : session.totalPix,
+        countedCreditCard:
+          params.countedCreditCard !== undefined && params.countedCreditCard !== ''
+            ? toMoneyString(toCents(params.countedCreditCard))
+            : session.totalCreditCard,
+        countedDebitCard:
+          params.countedDebitCard !== undefined && params.countedDebitCard !== ''
+            ? toMoneyString(toCents(params.countedDebitCard))
+            : session.totalDebitCard,
+        difference: fullReconciliation.money.formattedDifference,
         conferenceAttempts: attempts,
         discrepancyJustification: params.justification?.trim() || null,
         supervisorAuthorizedBy: params.supervisorAuth?.trim() || null,
+        notes: params.notes?.trim() || session.notes || null,
         updatedAt: nowIso,
       }
 
@@ -909,11 +1070,24 @@ export const cashSessionService = {
         .eq('organization_id', organizationId)
         .order('opened_at', { ascending: false })
 
-      if (!error && data) {
-        return { success: true, data: (data as CashSessionRow[]).map(mapSessionRow) }
+      const local = getLocalStorageSessions(organizationId)
+
+      if (!error && Array.isArray(data)) {
+        const remote = (data as CashSessionRow[]).map(mapSessionRow)
+        const byId = new Map<string, CashSession>()
+        for (const s of [...remote, ...local]) {
+          if (!byId.has(s.id)) {
+            byId.set(s.id, s)
+          }
+        }
+        return {
+          success: true,
+          data: Array.from(byId.values()).sort(
+            (a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime(),
+          ),
+        }
       }
 
-      const local = getLocalStorageSessions(organizationId)
       return {
         success: true,
         data: local.sort(

@@ -549,6 +549,18 @@ export function ServiceOrderFormPage() {
       : (options?.overrideStatus ?? initialStatus)
     const effectivePendingReason = (options?.overridePendingReason ?? pendingReason).trim()
 
+    // Regra: Não permite concluir para Pronto sem Solução
+    if (nextStatus === 'ready' && !solutionApplied.trim()) {
+      setError('Para fechar a O.S. e marcar como Pronto, é necessário adicionar a solução do problema.')
+      return
+    }
+
+    // Regra: Uma O.S. pendente só pode voltar para Manutenção
+    if (isEditing && initialStatus === 'pending' && (nextStatus === 'ready' || nextStatus === 'closed')) {
+      setError('Uma Ordem de Serviço pendente deve voltar para Manutenção antes de ser concluída.')
+      return
+    }
+
     if (nextStatus === 'pending' && !effectivePendingReason) {
       handleRequestPending(Boolean(options?.overrideStatus === 'pending'))
       return
@@ -662,6 +674,59 @@ export function ServiceOrderFormPage() {
             >
               {SERVICE_ORDER_STATUS_LABELS[status]}
             </span>
+
+            {/* Ações de Mudar Status no topo da O.S. */}
+            {isEditing && (
+              <div className="flex items-center gap-2">
+                {initialStatus === 'pending' && (
+                  <Button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleSave({ overrideStatus: 'in_maintenance' })}
+                    className="gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3"
+                  >
+                    <Wrench className="h-3.5 w-3.5" />
+                    <span>Voltar para Manutenção</span>
+                  </Button>
+                )}
+
+                {initialStatus === 'in_maintenance' && (
+                  <>
+                    <Button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => void handleSave({ overrideStatus: 'ready' })}
+                      className="gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Marcar como Pronto</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => handleRequestPending(true)}
+                      variant="outline"
+                      className="gap-1.5 rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 text-xs font-bold py-1.5 px-3"
+                    >
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>Pendente</span>
+                    </Button>
+                  </>
+                )}
+
+                {initialStatus === 'queue' && (
+                  <Button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleSave({ overrideStatus: 'in_maintenance' })}
+                    className="gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3"
+                  >
+                    <Wrench className="h-3.5 w-3.5" />
+                    <span>Iniciar Manutenção</span>
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1441,17 +1506,46 @@ export function ServiceOrderFormPage() {
         </Link>
 
         <div className="flex flex-wrap items-center gap-3">
+          {isEditing && initialStatus === 'pending' && (
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void handleSave({ overrideStatus: 'in_maintenance' })}
+              className="gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold"
+            >
+              <Wrench className="h-4 w-4" />
+              <span>Salvar e Voltar para Manutenção</span>
+            </Button>
+          )}
+
+          {isEditing && initialStatus === 'in_maintenance' && (
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void handleSave({ overrideStatus: 'ready' })}
+              className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Salvar e Marcar como Pronto</span>
+            </Button>
+          )}
+
           <Button
             type="button"
             disabled={isSaving}
             onClick={() => void handleSave()}
-            className="gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
+            variant={isEditing && (initialStatus === 'pending' || initialStatus === 'ready') ? 'outline' : 'primary'}
+            className={`gap-2 rounded-xl ${
+              isEditing && (initialStatus === 'pending' || initialStatus === 'ready')
+                ? ''
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
           >
             <Save className="h-4 w-4" />
             {isSaving
               ? 'Salvando...'
               : isEditing
-                ? `Salvar Alterações (Manter em ${SERVICE_ORDER_STATUS_LABELS[initialStatus]})`
+                ? `Salvar (Manter em ${SERVICE_ORDER_STATUS_LABELS[initialStatus]})`
                 : 'Salvar Ordem de Serviço'}
           </Button>
         </div>

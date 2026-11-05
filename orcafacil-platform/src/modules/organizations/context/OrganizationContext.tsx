@@ -65,7 +65,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         await loadRole(active.id, user.id)
       } else {
         setCurrentOrganizationState(null)
-        setUserRole(null)
+        // Se ainda não há organização vinculada, define como proprietário para que possa gerenciar e criar empresas no módulo
+        setUserRole('owner')
       }
     }
 

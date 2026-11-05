@@ -9,15 +9,22 @@ import {
   MessageCircle,
   ReceiptText,
   ShoppingCart,
+  ShieldAlert,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
+import { organizationService } from '@modules/organizations/services/organization.service'
+import { useLocation } from 'react-router-dom'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { BrandLogo } from '@shared/components/BrandLogo'
 
 export function LoginPage() {
-  const { signIn } = useAuth()
+  const { signIn, signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const [isOrgDeactivated, setIsOrgDeactivated] = useState(Boolean((location.state as any)?.deactivated))
+  const [deactivatedOrgName, setDeactivatedOrgName] = useState<string>((location.state as any)?.orgName || '')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -38,6 +45,19 @@ export function LoginPage() {
     const res = await signIn({ email, password })
 
     if (res.success) {
+      // Verifica se a empresa cadastrada do usuário está ativa (Requisito 5)
+      const orgsRes = await organizationService.getUserOrganizations()
+      if (orgsRes.success && orgsRes.data.length > 0) {
+        const allInactive = orgsRes.data.every((o) => o.isActive === false)
+        if (allInactive) {
+          const firstOrg = orgsRes.data[0]
+          await signOut()
+          setIsOrgDeactivated(true)
+          setDeactivatedOrgName(firstOrg.name)
+          setIsLoading(false)
+          return
+        }
+      }
       navigate('/')
     } else {
       setError(res.error)
@@ -144,6 +164,38 @@ export function LoginPage() {
             </header>
 
             <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+              {isOrgDeactivated && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-xs"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-rose-100 p-2 text-rose-600 shrink-0 mt-0.5">
+                      <ShieldAlert className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-rose-900">
+                        Acesso da Empresa Desativado
+                      </h3>
+                      <p className="mt-1 text-xs text-rose-800 leading-relaxed">
+                        O acesso {deactivatedOrgName ? `da empresa "${deactivatedOrgName}"` : 'da sua empresa'} está temporariamente desativado. Entre em contato com a equipe de Suporte do JB Software para regularizar ou reativar seu acesso.
+                      </p>
+                      <div className="mt-3">
+                        <a
+                          href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20desativado.%20Gostaria%20de%20solicitar%20suporte."
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-xs"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          Suporte no WhatsApp (31 986848490)
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {error && (
                 <div
                   role="alert"
@@ -192,12 +244,7 @@ export function LoginPage() {
                 </Button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-slate-600">
-                Ainda não tem uma conta?{' '}
-                <Link to="/register" className="font-semibold text-[#2563EB] hover:text-blue-700">
-                  Cadastre-se gratuitamente
-                </Link>
-              </p>
+
             </div>
 
             <p className="mt-6 text-center text-xs leading-5 text-slate-500">

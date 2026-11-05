@@ -28,6 +28,8 @@ import {
 } from '@shared/utils/monetary'
 import {
   AlertTriangle,
+  ArrowDownCircle,
+  ArrowUpCircle,
   Barcode,
   CheckCircle2,
   ChevronRight,
@@ -35,6 +37,7 @@ import {
   DollarSign,
   Hash,
   Lock,
+  LogOut,
   Maximize,
   Minus,
   Plus,
@@ -44,6 +47,7 @@ import {
   Receipt,
   ShoppingCart,
   Store,
+  Tag,
   Trash2,
   User,
   Users,
@@ -547,6 +551,7 @@ export function PdvTerminalPage() {
   const matchedProducts = useMemo(() => {
     const q = barcodeQuery.trim().toLowerCase()
     if (!q || q.length < 2) return []
+    if (/^([*xX+\-]\s*\d+|\d+\s*[*xX+\-])$/.test(q)) return []
     return inventoryItems
       .filter((item) => {
         if (!item.isActive || !item.canSell || item.registrationStatus === 'awaiting_information') return false
@@ -688,15 +693,67 @@ export function PdvTerminalPage() {
     focusBarcodeInput()
   }
 
-  // Bipar / Adicionar Produto pelo Código de Barras ou SKU
+  // Bipar / Adicionar Produto pelo Código de Barras ou Nome
   const handleScanBarcode = (e: React.FormEvent) => {
     e.preventDefault()
-    const code = barcodeQuery.trim()
-    if (!code) {
+    const raw = barcodeQuery.trim()
+    if (!raw) {
       if (cart.length > 0) {
         handleOpenPayment()
       }
       return
+    }
+
+    // 1. Operações rápidas de quantidade no próprio input:
+    // Multiplicação / Adição: *6, 6*, x6, 6x, +6, 6+
+    // Subtração: -6, 6-
+    const prefixOpMatch = raw.match(/^([*xX+\-])\s*(\d+)$/)
+    const suffixOpMatch = raw.match(/^(\d+)\s*([*xX+\-])$/)
+    const opMatch = prefixOpMatch || suffixOpMatch
+
+    if (opMatch) {
+      const op = prefixOpMatch ? prefixOpMatch[1] : opMatch[2]
+      const qtyStr = prefixOpMatch ? prefixOpMatch[2] : opMatch[1]
+      const qty = parseInt(qtyStr, 10)
+
+      if (qty > 0) {
+        if (op === '-') {
+          setNextItemQuantity(qty)
+          setQuantityOperation('subtract')
+          pdvSound.playScan()
+          setScanFeedback({
+            type: 'success',
+            message: `Operação definida: Subtrair -${qty} no próximo produto.`,
+          })
+        } else {
+          setNextItemQuantity(qty)
+          setQuantityOperation('multiply')
+          pdvSound.playScan()
+          setScanFeedback({
+            type: 'success',
+            message: `Operação definida: Multiplicar/Adicionar +${qty}x no próximo produto.`,
+          })
+        }
+        setBarcodeQuery('')
+        return
+      }
+    }
+
+    // 2. Operação inline opcional com produto (ex: "*6 7891234", "+2 Coca", "-1 Heineken")
+    const inlinePrefixMatch = raw.match(/^([*xX+\-])\s*(\d+)\s+(.+)$/)
+    const inlineSuffixMatch = raw.match(/^(\d+)\s*([*xX+\-])\s+(.+)$/)
+    const inlineMatch = inlinePrefixMatch || inlineSuffixMatch
+    let code = raw
+
+    if (inlineMatch) {
+      const op = inlinePrefixMatch ? inlinePrefixMatch[1] : inlineMatch[2]
+      const qtyStr = inlinePrefixMatch ? inlinePrefixMatch[2] : inlineMatch[1]
+      const qty = parseInt(qtyStr, 10)
+      if (qty > 0) {
+        setNextItemQuantity(qty)
+        setQuantityOperation(op === '-' ? 'subtract' : 'multiply')
+        code = (inlinePrefixMatch ? inlinePrefixMatch[3] : inlineMatch[3]).trim()
+      }
     }
 
     // Busca exata por barcode, depois sku, depois nome
@@ -710,7 +767,7 @@ export function PdvTerminalPage() {
       pdvSound.playError()
       setScanFeedback({
         type: 'error',
-        message: `Código "${code}" não cadastrado ou sem estoque disponível.`,
+        message: `Produto ou código "${code}" não cadastrado ou sem estoque disponível.`,
       })
       setBarcodeQuery('')
       return
@@ -774,7 +831,7 @@ export function PdvTerminalPage() {
       amountReceived: selectedPaymentMethod === 'money' ? amountReceivedInput : grandTotal,
       changeAmount: selectedPaymentMethod === 'money' ? cashChange.change.toFixed(2) : '0.00',
       operatorId: user?.id,
-      operatorName: session.operatorName,
+      operatorName: session.operatorName ?? undefined,
       sellerName: session.operatorName || profile?.displayName || user?.email?.split('@')[0] || 'Operador',
     })
 
@@ -1005,11 +1062,15 @@ export function PdvTerminalPage() {
           return
         }
 
-        // Escape — Limpar código ou refocar leitor
+        // Escape — Limpar código ou refocar leitor / cancelar operação de quantidade pendente
         if (e.key === 'Escape') {
           e.preventDefault()
           if (barcodeQuery) {
             setBarcodeQuery('')
+          } else if (nextItemQuantity > 0) {
+            setNextItemQuantity(0)
+            setQuantityOperation('multiply')
+            pdvSound.playScan()
           } else {
             focusBarcodeInput()
           }
@@ -1278,35 +1339,46 @@ export function PdvTerminalPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-3 text-xs sm:text-sm">
           {isFullscreen ? (
             <div
               title="PDV em Modo Tela Cheia Bloqueado"
-              className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-emerald-400 border border-emerald-500/30 select-none"
+              className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-emerald-400 border border-emerald-500/30 select-none font-bold"
             >
-              <Maximize className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline font-mono text-[11px] font-semibold">Tela Cheia Fixa</span>
+              <Maximize className="h-4 w-4" />
+              <span className="hidden sm:inline font-mono text-xs">Tela Cheia Fixa</span>
             </div>
           ) : (
             <button
               type="button"
               onClick={() => { void enterFullscreen(); }}
               title="Restaurar Tela Cheia [F11]"
-              className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 px-2.5 py-1.5 text-amber-300 border border-amber-500/40 transition-colors animate-pulse"
+              className="flex items-center gap-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 px-3.5 py-2 text-amber-300 border border-amber-500/40 transition-colors animate-pulse font-bold cursor-pointer"
             >
-              <Maximize className="h-3.5 w-3.5" />
-              <span className="font-mono text-[11px] font-bold">Restaurar Tela Cheia [F11]</span>
+              <Maximize className="h-4 w-4" />
+              <span className="font-mono text-xs sm:text-sm">Restaurar Tela Cheia [F11]</span>
             </button>
           )}
-          <div className="hidden sm:flex items-center gap-2 rounded-lg bg-slate-800/80 px-3 py-1.5 text-slate-300 border border-slate-700/50">
-            <User className="h-3.5 w-3.5 text-blue-400" />
-            <span>Cliente: <b className="text-white">{customerName}</b></span>
+
+          <div className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-800 px-3.5 py-2 text-slate-200 border border-slate-700">
+            <User className="h-4 w-4 text-blue-400" />
+            <span className="text-xs sm:text-sm">Cliente: <b className="text-white">{customerName}</b></span>
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg bg-slate-800/80 px-3 py-1.5 text-slate-300 border border-slate-700/50 font-mono">
-            <Clock className="h-3.5 w-3.5 text-emerald-400" />
+          <div className="flex items-center gap-2 rounded-xl bg-slate-800 px-3.5 py-2 text-slate-200 border border-slate-700 font-mono text-xs sm:text-sm">
+            <Clock className="h-4 w-4 text-emerald-400" />
             <span>{currentTime.toLocaleTimeString('pt-BR')}</span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => { void handleExitToSales(); }}
+            title="Sair do PDV e voltar para a listagem de vendas [Esc]"
+            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-rose-950/80 hover:border-rose-500/60 border border-slate-700 px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all shadow-sm cursor-pointer ml-1"
+          >
+            <LogOut className="h-4 w-4 text-rose-400 shrink-0" />
+            <span className="font-semibold">Sair do PDV</span>
+          </button>
         </div>
       </header>
 
@@ -1321,7 +1393,7 @@ export function PdvTerminalPage() {
             <div className="flex items-center justify-between pb-1.5 px-1 text-xs text-slate-400">
               <span className="font-semibold flex items-center gap-1.5">
                 <Barcode className="h-4 w-4 text-emerald-400" />
-                Leitor de Código de Barras / SKU
+                Leitor de Código de Barras / Nome do Produto
               </span>
               {nextItemQuantity > 0 ? (
                 <span
@@ -1334,12 +1406,12 @@ export function PdvTerminalPage() {
                   {quantityOperation === 'subtract' ? (
                     <>
                       <Minus className="h-3 w-3" />
-                      <span>Subtrair F9: <b>-{nextItemQuantity}x</b> no próximo produto</span>
+                      <span>Subtrair: <b>-{nextItemQuantity}x</b> no próximo produto</span>
                     </>
                   ) : (
                     <>
                       <Plus className="h-3 w-3" />
-                      <span>Multiplicar F9: <b>+{nextItemQuantity}x</b> no próximo produto</span>
+                      <span>Quantidade: <b>+{nextItemQuantity}x</b> no próximo produto</span>
                     </>
                   )}
                   <button
@@ -1356,7 +1428,7 @@ export function PdvTerminalPage() {
                 </span>
               ) : (
                 <span className="text-[11px] text-slate-500">
-                  Pressione <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-400 font-mono font-bold">F9</kbd> para Quantidade (+ / -)
+                  Pressione <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-400 font-mono font-bold">F9</kbd> ou digite <kbd className="bg-slate-800 px-1 py-0.5 rounded text-emerald-400 font-mono font-bold">*6</kbd> / <kbd className="bg-slate-800 px-1 py-0.5 rounded text-rose-400 font-mono font-bold">-1</kbd> para Quantidade (+ / -)
                 </span>
               )}
             </div>
@@ -1370,15 +1442,16 @@ export function PdvTerminalPage() {
                   type="text"
                   value={barcodeQuery}
                   onChange={(e) => { setBarcodeQuery(e.target.value); }}
-                  placeholder="Pressione [1] ou aponte o leitor de código de barras / digite o SKU..."
+                  placeholder="Pressione [1] ou aponte o leitor de código de barras / digite o Nome do produto."
                   className="w-full rounded-xl bg-slate-950 py-3.5 pl-12 pr-28 text-base font-semibold text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 tracking-wide"
                   autoComplete="off"
                 />
                 <button
                   type="submit"
-                  className="absolute right-2.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white uppercase hover:bg-emerald-500 transition-colors"
+                  className="absolute right-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-sm font-black text-white uppercase tracking-wider shadow-md hover:shadow-emerald-600/30 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  Enter (Bipar)
+                  <Barcode className="h-4.5 w-4.5" />
+                  <span>Bipar (Enter)</span>
                 </button>
               </form>
 
@@ -1529,10 +1602,11 @@ export function PdvTerminalPage() {
               <button
                 type="button"
                 onClick={() => { setShowCustomerModal(true); }}
-                className="text-[11px] font-mono text-blue-400 hover:text-blue-300 font-semibold bg-blue-500/10 hover:bg-blue-500/20 px-2 py-0.5 rounded border border-blue-500/30 transition-colors"
+                className="text-xs font-bold text-blue-200 bg-blue-600/30 hover:bg-blue-600/50 px-3 py-1.5 rounded-lg border border-blue-400/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                 title="Pressione F2 para selecionar ou alterar o cliente"
               >
-                [F2] Alterar
+                <Users className="h-3.5 w-3.5 text-blue-300" />
+                <span>[F2] Alterar</span>
               </button>
             </div>
 
@@ -1627,9 +1701,9 @@ export function PdvTerminalPage() {
                 type="button"
                 onClick={handleOpenPayment}
                 disabled={cart.length === 0}
-                className="w-full flex items-center justify-center gap-3 rounded-xl bg-emerald-600 py-4 text-base font-black tracking-wide text-white uppercase shadow-lg shadow-emerald-900/40 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="w-full flex items-center justify-center gap-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 py-4.5 text-lg font-black tracking-wider text-white uppercase shadow-xl shadow-emerald-950/70 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all ring-2 ring-emerald-400/40 cursor-pointer"
               >
-                <CheckCircle2 className="h-6 w-6" />
+                <CheckCircle2 className="h-7 w-7 text-emerald-100" />
                 <span>[Enter] Finalizar Venda</span>
               </button>
             </div>
@@ -1640,32 +1714,36 @@ export function PdvTerminalPage() {
       {/* ============================================================== */}
       {/* 3. BARRA INFERIOR DE ATALHOS DO TECLADO                         */}
       {/* ============================================================== */}
-      <footer className="h-14 shrink-0 border-t border-slate-800 bg-slate-900 px-4 flex items-center justify-between overflow-x-auto text-xs">
-        <div className="flex items-center gap-2 font-mono">
+      <footer className="min-h-18 lg:h-20 shrink-0 border-t-2 border-slate-800 bg-slate-900/95 px-4 lg:px-6 flex items-center justify-between overflow-x-auto gap-3 text-sm shadow-2xl py-2">
+        <div className="flex items-center gap-2.5 font-sans">
           <button
             type="button"
             onClick={focusBarcodeInput}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <kbd className="rounded bg-emerald-500/20 px-1 text-emerald-400 font-bold">1</kbd>
+            <Barcode className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+            <kbd className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-emerald-400 font-mono font-black text-xs">1</kbd>
             <span>Bipar Produto</span>
           </button>
 
           <button
             type="button"
             onClick={handleOpenPayment}
-            className="flex items-center gap-1.5 rounded-lg bg-emerald-900/40 hover:bg-emerald-900/60 px-3 py-1.5 text-emerald-300 font-semibold border border-emerald-600/40 transition-colors"
+            disabled={cart.length === 0}
+            className="flex items-center gap-2 rounded-xl bg-emerald-700/80 hover:bg-emerald-600 px-4 py-2.5 text-white font-extrabold border border-emerald-500/50 shadow-md shadow-emerald-950/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer whitespace-nowrap"
           >
-            <kbd className="rounded bg-emerald-500/20 px-1 text-emerald-400 font-bold">Enter</kbd>
+            <CheckCircle2 className="h-5 w-5 text-emerald-200 shrink-0" />
+            <kbd className="rounded-lg bg-white/20 px-2.5 py-0.5 text-white font-mono font-black text-xs">Enter</kbd>
             <span>Finalizar</span>
           </button>
 
           <button
             type="button"
             onClick={() => { setShowCustomerModal(true); }}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <kbd className="rounded bg-blue-500/20 px-1 text-blue-400 font-bold">F2</kbd>
+            <Users className="h-4.5 w-4.5 text-blue-400 shrink-0" />
+            <kbd className="rounded-lg bg-blue-500/20 px-2 py-0.5 text-blue-400 font-mono font-black text-xs">F2</kbd>
             <span>Cliente</span>
           </button>
 
@@ -1675,9 +1753,10 @@ export function PdvTerminalPage() {
               setDiscountInput(discount)
               setShowDiscountModal(true)
             }}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <kbd className="rounded bg-amber-500/20 px-1 text-amber-400 font-bold">F3</kbd>
+            <Tag className="h-4.5 w-4.5 text-amber-400 shrink-0" />
+            <kbd className="rounded-lg bg-amber-500/20 px-2 py-0.5 text-amber-400 font-mono font-black text-xs">F3</kbd>
             <span>Desconto</span>
           </button>
 
@@ -1687,10 +1766,11 @@ export function PdvTerminalPage() {
               if (cart.length > 0) setShowCancelSaleModal(true)
             }}
             disabled={cart.length === 0}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-rose-950/70 hover:border-rose-600/50 px-3.5 py-2.5 text-slate-200 hover:text-rose-200 font-bold border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <kbd className="rounded bg-rose-500/20 px-1 text-rose-400 font-bold">F4</kbd>
-            <span>Cancelar Venda</span>
+            <Trash2 className="h-4.5 w-4.5 text-rose-400 shrink-0" />
+            <kbd className="rounded-lg bg-rose-500/20 px-2 py-0.5 text-rose-400 font-mono font-black text-xs">F4</kbd>
+            <span>Cancelar</span>
           </button>
 
           <button
@@ -1699,9 +1779,10 @@ export function PdvTerminalPage() {
               setMovementType('supply')
               setShowMovementModal(true)
             }}
-            className="hidden xl:flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+            className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <kbd className="rounded bg-cyan-500/20 px-1 text-cyan-400 font-bold">F7</kbd>
+            <ArrowDownCircle className="h-4.5 w-4.5 text-cyan-400 shrink-0" />
+            <kbd className="rounded-lg bg-cyan-500/20 px-2 py-0.5 text-cyan-400 font-mono font-black text-xs">F7</kbd>
             <span>Suprimento</span>
           </button>
 
@@ -1711,25 +1792,27 @@ export function PdvTerminalPage() {
               setMovementType('bleed')
               setShowMovementModal(true)
             }}
-            className="hidden xl:flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 font-semibold border border-slate-700 transition-colors"
+            className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <kbd className="rounded bg-purple-500/20 px-1 text-purple-400 font-bold">F8</kbd>
+            <ArrowUpCircle className="h-4.5 w-4.5 text-purple-400 shrink-0" />
+            <kbd className="rounded-lg bg-purple-500/20 px-2 py-0.5 text-purple-400 font-mono font-black text-xs">F8</kbd>
             <span>Sangria</span>
           </button>
 
           <button
             type="button"
             onClick={handleOpenQuantityModal}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold border transition-colors ${
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-2.5 font-bold border transition-all shadow-xs cursor-pointer whitespace-nowrap ${
               nextItemQuantity > 0
                 ? quantityOperation === 'subtract'
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-xs'
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-xs'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                  ? 'bg-rose-500/20 text-rose-200 border-rose-500 ring-2 ring-rose-500/40 animate-pulse'
+                  : 'bg-amber-500/20 text-amber-200 border-amber-500 ring-2 ring-amber-500/40 animate-pulse'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700 hover:border-slate-600'
             }`}
           >
-            <kbd className={`rounded px-1 font-bold ${
-              quantityOperation === 'subtract' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
+            <Hash className="h-4.5 w-4.5 text-amber-400 shrink-0" />
+            <kbd className={`rounded-lg px-2 py-0.5 font-mono font-black text-xs ${
+              quantityOperation === 'subtract' && nextItemQuantity > 0 ? 'bg-rose-500/30 text-rose-300' : 'bg-amber-500/20 text-amber-400'
             }`}>
               F9
             </kbd>
@@ -1742,15 +1825,15 @@ export function PdvTerminalPage() {
         </div>
 
         {/* ATALHO TECLA F12: FECHAMENTO DE CAIXA */}
-        <div className="font-mono">
+        <div>
           <button
             type="button"
             onClick={handleOpenCloseSession}
-            className="flex items-center gap-2 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 px-4 py-2 text-rose-300 font-bold border border-rose-600/50 shadow-md transition-all"
+            className="flex items-center gap-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 px-5 py-3 text-white font-black text-sm tracking-wide border border-rose-400/60 shadow-lg shadow-rose-950/60 transition-all cursor-pointer whitespace-nowrap"
           >
-            <Lock className="h-4 w-4 text-rose-400" />
-            <kbd className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-300 font-bold">F12</kbd>
-            <span>FECHAMENTO DE CAIXA</span>
+            <Lock className="h-5 w-5 text-white" />
+            <kbd className="rounded-lg bg-white/20 px-2 py-0.5 text-white font-mono font-black text-xs">F12</kbd>
+            <span>FECHAR CAIXA</span>
           </button>
         </div>
       </footer>

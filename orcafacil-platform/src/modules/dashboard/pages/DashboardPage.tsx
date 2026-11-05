@@ -52,6 +52,7 @@ const DEFAULT_MODULE_IDS = [
   'MOD-02',
   'MOD-03',
   'MOD-04',
+  'MOD-COMPANIES',
   'MOD-10',
   'MOD-05',
   'MOD-06',
@@ -62,7 +63,7 @@ const DEFAULT_MODULE_IDS = [
 
 export function DashboardPage() {
   const { user, profile, signOut } = useAuth()
-  const { currentOrganization } = useOrganization()
+  const { currentOrganization, userRole } = useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const navigate = useNavigate()
 
@@ -124,6 +125,23 @@ export function DashboardPage() {
 
   const defaultModules: DashboardModule[] = useMemo(
     () => [
+      ...(userRole === 'owner'
+        ? [
+            {
+              id: 'MOD-COMPANIES',
+              title: 'Gerenciamento de empresas cadastradas',
+              description:
+                'Gerencie o acesso de cada Identificador Único (SLUG)/Empresa cadastrado, ative ou desative o acesso e controle as páginas e módulos liberados.',
+              action: 'Gerenciar Empresas',
+              icon: Building2,
+              iconStyle: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300',
+              isAvailable: true,
+              accessModule: 'MOD-07' as DashboardModuleCode,
+              path: '/admin/companies',
+            },
+          ]
+        : []),
+
       {
         id: 'MOD-01',
         title: 'Vendas',
@@ -176,12 +194,13 @@ export function DashboardPage() {
         id: 'MOD-05',
         title: 'Gerenciamento do Caixa',
         description:
-          'Abertura e fechamento de caixa, conferência de sangrias, suprimentos e controle de saldos em espécie, cartões e PIX.',
+          'Abertura e fechamento de caixa, conferência de sangrias, suprimentos, leitor de boletos em PDF e controle de saldos em espécie, cartões e PIX.',
         action: 'Acessar Caixa',
         icon: WalletCards,
         iconStyle: 'bg-cyan-50 text-cyan-700',
-        isAvailable: false,
+        isAvailable: hasOrcafacil,
         accessModule: 'MOD-05',
+        path: '/cash',
       },
       {
         id: 'MOD-06',
@@ -244,7 +263,7 @@ export function DashboardPage() {
         path: '/service-orders',
       },
     ],
-    [hasOrcafacil],
+    [hasOrcafacil, userRole],
   )
 
   const sortedModules = useMemo(() => {
@@ -259,8 +278,8 @@ export function DashboardPage() {
   }, [defaultModules, orderedModuleIds])
 
   const visibleModules = useMemo(
-    () => sortedModules.filter((module) => canAccessDashboardModule(module.accessModule)),
-    [sortedModules, canAccessDashboardModule],
+    () => sortedModules.filter((module) => module.id === 'MOD-COMPANIES' ? userRole === 'owner' : canAccessDashboardModule(module.accessModule)),
+    [sortedModules, canAccessDashboardModule, userRole],
   )
 
   const isCustomOrder = useMemo(() => {

@@ -55,24 +55,38 @@ export const organizationService = {
    */
   async getUserOrganizations(): Promise<ServiceResult<Organization[]>> {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('organizations')
-        .select('id, name, slug, created_at')
+        .select('id, name, slug, is_active, created_at')
         .order('created_at', { ascending: true })
 
       if (error) {
-        logger.error('Erro ao listar organizações do usuário', error)
-        return { success: false, error: 'Não foi possível carregar suas organizações.' }
+        // Fallback resiliente se a coluna is_active ainda não existir no banco
+        const fallback = await supabase
+          .from('organizations')
+          .select('id, name, slug, created_at')
+          .order('created_at', { ascending: true })
+
+        if (fallback.error) {
+          logger.error('Erro ao listar organizações do usuário', fallback.error)
+          return { success: false, error: 'Não foi possível carregar suas organizações.' }
+        }
+        data = fallback.data as any
       }
 
       return {
         success: true,
-        data: (data ?? []).map((org) => ({
-          id: org.id,
-          name: org.name,
-          slug: org.slug,
-          createdAt: org.created_at,
-        })),
+        data: (data ?? []).map((org: any) => {
+          const localStatus = localStorage.getItem(`jb_company_status_${org.id}`)
+          const isActive = localStatus !== null ? localStatus === 'true' : (org.is_active !== false)
+          return {
+            id: org.id,
+            name: org.name,
+            slug: org.slug,
+            isActive,
+            createdAt: org.created_at,
+          }
+        }),
       }
     } catch (err) {
       logger.error('Exceção ao listar organizações', err)
