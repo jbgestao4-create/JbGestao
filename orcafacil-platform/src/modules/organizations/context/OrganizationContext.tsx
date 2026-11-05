@@ -46,7 +46,9 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    setIsLoading(true)
+    if (organizations.length === 0) {
+      setIsLoading(true)
+    }
     const result = await organizationService.getUserOrganizations()
 
     if (result.success) {
@@ -57,7 +59,9 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         const savedId = localStorage.getItem(ACTIVE_ORG_STORAGE_KEY)
         const matched = orgs.find((o) => o.id === savedId)
         const active = matched ?? orgs[0]
-        setCurrentOrganizationState(active)
+        setCurrentOrganizationState((prev) =>
+          prev && prev.id === active.id && prev.name === active.name ? prev : active,
+        )
         await loadRole(active.id, user.id)
       } else {
         setCurrentOrganizationState(null)
@@ -70,7 +74,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void loadOrganizations()
-  }, [user])
+  }, [user?.id])
 
   const handleCreateOrganization = async (
     name: string,

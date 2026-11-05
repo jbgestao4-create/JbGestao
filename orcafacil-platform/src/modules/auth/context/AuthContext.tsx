@@ -67,16 +67,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     })
 
-    // 2. Escuta mudanças na autenticação
+    // 2. Escuta mudanças na autenticação (evita recarregar perfil ou recriar referência de user em refresh de aba)
     const {
       data: { subscription },
-    } = authService.onAuthStateChange(async (_event, newSession) => {
+    } = authService.onAuthStateChange(async (event, newSession) => {
       setSession(newSession)
-      setUser(newSession?.user ?? null)
-      if (newSession?.user) {
-        await loadProfile(newSession.user)
-      } else {
+      const nextUser = newSession?.user ?? null
+      setUser((prevUser) => {
+        if (prevUser?.id && nextUser?.id && prevUser.id === nextUser.id) {
+          return prevUser
+        }
+        return nextUser
+      })
+      if (!nextUser) {
         setProfile(null)
+      } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        await loadProfile(nextUser)
       }
       setIsLoading(false)
     })

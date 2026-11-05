@@ -2,7 +2,7 @@ import type { InventoryItemParams } from '../services/inventory.service'
 
 const DRAFT_VERSION = 1
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
-const MAX_DRAFT_SIZE = 64 * 1024
+const MAX_DRAFT_SIZE = 2 * 1024 * 1024
 
 const stringFields = [
   'supplierId',

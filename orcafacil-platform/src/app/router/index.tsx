@@ -30,6 +30,8 @@ import {
   SuppliersListPage,
   ServicesListPage,
   ServiceFormPage,
+  ServiceOrdersListPage,
+  ServiceOrderFormPage,
   CustomerQuotesPortalPage,
 } from './lazy-pages'
 
@@ -399,6 +401,42 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <RequireDashboardModule moduleCode="MOD-09">
           <ServiceFormPage />
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Módulo de Ordem de Serviço (MOD-10)
+  {
+    path: '/service-orders',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-10">
+          <ServiceOrdersListPage />
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/orcafacil/service-orders',
+    element: <Navigate to="/service-orders" replace />,
+  },
+  {
+    path: '/service-orders/new',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-10">
+          <ServiceOrderFormPage />
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/service-orders/:id/edit',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-10">
+          <ServiceOrderFormPage />
         </RequireDashboardModule>
       </ProtectedRoute>
     ),

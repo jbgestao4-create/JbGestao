@@ -30,8 +30,6 @@ export function SalesHomePage() {
   const [registers, setRegisters] = useState<CashRegister[]>([])
   const [selectedRegister, setSelectedRegister] = useState<string>('Caixa 01')
   const [openSessions, setOpenSessions] = useState<CashSession[]>([])
-  const [activeSession, setActiveSession] = useState<CashSession | null>(null)
-  const [isLoadingSession, setIsLoadingSession] = useState(true)
 
   // Modal de Abertura de Caixa
   const [showOpenModal, setShowOpenModal] = useState(false)
@@ -50,7 +48,6 @@ export function SalesHomePage() {
   const loadRegistersAndSession = useCallback(
     async (overrideRegisterName?: string) => {
       if (!currentOrganization) return
-      setIsLoadingSession(true)
 
       const savedRegName =
         overrideRegisterName || cashSessionService.getSelectedRegisterName(currentOrganization.id)
@@ -74,15 +71,6 @@ export function SalesHomePage() {
       if (openListRes.success) {
         setOpenSessions(openListRes.data)
       }
-
-      const sessionRes = await cashSessionService.getOpenSession(
-        currentOrganization.id,
-        validRegName,
-      )
-      if (sessionRes.success) {
-        setActiveSession(sessionRes.data)
-      }
-      setIsLoadingSession(false)
     },
     [currentOrganization],
   )
@@ -219,24 +207,6 @@ export function SalesHomePage() {
             Terminal de frente de caixa PDV, pedidos faturados e notas fiscais (NF-e / NFC-e).
           </p>
         </div>
-        {!isLoadingSession && (
-          <div
-            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 ${
-              activeSession
-                ? 'bg-emerald-50 text-emerald-700 ring-emerald-500/30'
-                : 'bg-amber-50 text-amber-700 ring-amber-500/30'
-            }`}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                activeSession ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-              }`}
-            />
-            {activeSession
-              ? `Caixa Aberto (${activeSession.registerId} • ${activeSession.operatorName})`
-              : `Caixa Fechado (${selectedRegister})`}
-          </div>
-        )}
       </div>
 
       {/* ============================================================== */}
@@ -453,23 +423,9 @@ export function SalesHomePage() {
                     )}
 
                     <div>
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-semibold text-gray-700">
-                          Terminal / Caixa PDV
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowOpenModal(false)
-                            setRegisterModalError(null)
-                            setRegisterModalSuccess(null)
-                            setShowRegistersModal(true)
-                          }}
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                        >
-                          + Cadastrar novo caixa
-                        </button>
-                      </div>
+                      <label className="block text-xs font-semibold text-gray-700">
+                        Terminal / Caixa PDV
+                      </label>
                       <select
                         value={selectedRegister}
                         onChange={(e) => {

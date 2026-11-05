@@ -43,9 +43,13 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
   >([])
   const [inventoryAccessLevel, setInventoryAccessLevel] = useState<InventoryAccessLevel>(3)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadedOrgKey, setLoadedOrgKey] = useState<string | null>(null)
 
   const loadAccess = async () => {
-    setIsLoading(true)
+    const targetKey = `${currentOrganization?.id ?? 'none'}:${user?.id ?? 'none'}:${userRole ?? 'none'}`
+    if (loadedOrgKey !== targetKey) {
+      setIsLoading(true)
+    }
 
     // 1. Carrega catálogo geral de módulos
     const catResult = await moduleAccessService.getAllModules()
@@ -144,12 +148,13 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
       setInventoryAccessLevel(3)
     }
 
+    setLoadedOrgKey(targetKey)
     setIsLoading(false)
   }
 
   useEffect(() => {
     void loadAccess()
-  }, [currentOrganization, userRole, user])
+  }, [currentOrganization?.id, userRole, user?.id])
 
   /**
    * Avalia se a organização atual e o usuário específico têm acesso ativo a determinado módulo.

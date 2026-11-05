@@ -39,6 +39,11 @@ export const DASHBOARD_MODULES: {
   { code: 'MOD-07', name: 'Organização', description: 'Dados da organização e equipe.' },
   { code: 'MOD-08', name: 'Relatórios', description: 'Histórico de resumos e fechamentos de caixa.' },
   { code: 'MOD-09', name: 'Serviços', description: 'Cadastro de serviços, precificação, materiais e NFS-e.' },
+  {
+    code: 'MOD-10',
+    name: 'Ordem de Serviço',
+    description: 'Abertura de O.S., fotos do equipamento, avarias, peças, serviços e fechamento de venda.',
+  },
 ]
 
 /** Catálogo estático e documentado dos módulos da plataforma */

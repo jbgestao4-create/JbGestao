@@ -6,6 +6,12 @@ import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
 import {
+  clearFormDraft,
+  getFormDraftKey,
+  readFormDraft,
+  writeFormDraft,
+} from '@shared/utils/form-draft'
+import {
   ArrowLeft,
   CheckCircle2,
   Clock,
@@ -100,6 +106,157 @@ export function ServiceFormPage() {
   const [ibsRateInput, setIbsRateInput] = useState('0,00')
   const [cbsRateInput, setCbsRateInput] = useState('0,00')
   const [taxRulesNotes, setTaxRulesNotes] = useState('')
+  const [draftRestoredKey, setDraftRestoredKey] = useState<string | null>(null)
+  const draftKey = currentOrganization
+    ? getFormDraftKey('service', currentOrganization.id, id)
+    : null
+
+  useEffect(() => {
+    if (!draftKey || isEditing || draftRestoredKey === draftKey) return
+    const saved = readFormDraft<{
+      activeTab?: 'general' | 'pricing' | 'materials' | 'fiscal'
+      name?: string
+      description?: string
+      categoryId?: string
+      billingUnit?: string
+      estimatedTime?: string
+      isActive?: boolean
+      internalNotes?: string
+      operationalCostInput?: string
+      laborCostInput?: string
+      salePriceInput?: string
+      profitMarginInput?: string
+      minimumSalePriceInput?: string
+      allowDiscount?: boolean
+      commissionRateInput?: string
+      materials?: (ServiceMaterialInput & { id: string; productName: string; availableStock?: number })[]
+      lc116Item?: string
+      nfsNationalCode?: string
+      nfsMunicipalCode?: string
+      cnaeCode?: string
+      nbsCode?: string
+      fiscalDescription?: string
+      issRateInput?: string
+      issTaxType?: string
+      issWithheld?: boolean
+      deductionsAllowed?: boolean
+      issRequirement?: string
+      cstIbsCbs?: string
+      cClassTrib?: string
+      ibsRateInput?: string
+      cbsRateInput?: string
+      taxRulesNotes?: string
+    }>(draftKey)
+    if (saved) {
+      if (saved.activeTab) setActiveTab(saved.activeTab)
+      if (saved.name !== undefined) setName(saved.name)
+      if (saved.description !== undefined) setDescription(saved.description)
+      if (saved.categoryId !== undefined) setCategoryId(saved.categoryId)
+      if (saved.billingUnit !== undefined) setBillingUnit(saved.billingUnit)
+      if (saved.estimatedTime !== undefined) setEstimatedTime(saved.estimatedTime)
+      if (saved.isActive !== undefined) setIsActive(saved.isActive)
+      if (saved.internalNotes !== undefined) setInternalNotes(saved.internalNotes)
+      if (saved.operationalCostInput !== undefined) setOperationalCostInput(saved.operationalCostInput)
+      if (saved.laborCostInput !== undefined) setLaborCostInput(saved.laborCostInput)
+      if (saved.salePriceInput !== undefined) setSalePriceInput(saved.salePriceInput)
+      if (saved.profitMarginInput !== undefined) setProfitMarginInput(saved.profitMarginInput)
+      if (saved.minimumSalePriceInput !== undefined) setMinimumSalePriceInput(saved.minimumSalePriceInput)
+      if (saved.allowDiscount !== undefined) setAllowDiscount(saved.allowDiscount)
+      if (saved.commissionRateInput !== undefined) setCommissionRateInput(saved.commissionRateInput)
+      if (saved.materials) setMaterials(saved.materials)
+      if (saved.lc116Item !== undefined) setLc116Item(saved.lc116Item)
+      if (saved.nfsNationalCode !== undefined) setNfsNationalCode(saved.nfsNationalCode)
+      if (saved.nfsMunicipalCode !== undefined) setNfsMunicipalCode(saved.nfsMunicipalCode)
+      if (saved.cnaeCode !== undefined) setCnaeCode(saved.cnaeCode)
+      if (saved.nbsCode !== undefined) setNbsCode(saved.nbsCode)
+      if (saved.fiscalDescription !== undefined) setFiscalDescription(saved.fiscalDescription)
+      if (saved.issRateInput !== undefined) setIssRateInput(saved.issRateInput)
+      if (saved.issTaxType !== undefined) setIssTaxType(saved.issTaxType)
+      if (saved.issWithheld !== undefined) setIssWithheld(saved.issWithheld)
+      if (saved.deductionsAllowed !== undefined) setDeductionsAllowed(saved.deductionsAllowed)
+      if (saved.issRequirement !== undefined) setIssRequirement(saved.issRequirement)
+      if (saved.cstIbsCbs !== undefined) setCstIbsCbs(saved.cstIbsCbs)
+      if (saved.cClassTrib !== undefined) setCClassTrib(saved.cClassTrib)
+      if (saved.ibsRateInput !== undefined) setIbsRateInput(saved.ibsRateInput)
+      if (saved.cbsRateInput !== undefined) setCbsRateInput(saved.cbsRateInput)
+      if (saved.taxRulesNotes !== undefined) setTaxRulesNotes(saved.taxRulesNotes)
+    }
+    setDraftRestoredKey(draftKey)
+  }, [draftKey, isEditing, draftRestoredKey])
+
+  useEffect(() => {
+    if (!draftKey || isEditing || draftRestoredKey !== draftKey) return
+    writeFormDraft(draftKey, {
+      activeTab,
+      name,
+      description,
+      categoryId,
+      billingUnit,
+      estimatedTime,
+      isActive,
+      internalNotes,
+      operationalCostInput,
+      laborCostInput,
+      salePriceInput,
+      profitMarginInput,
+      minimumSalePriceInput,
+      allowDiscount,
+      commissionRateInput,
+      materials,
+      lc116Item,
+      nfsNationalCode,
+      nfsMunicipalCode,
+      cnaeCode,
+      nbsCode,
+      fiscalDescription,
+      issRateInput,
+      issTaxType,
+      issWithheld,
+      deductionsAllowed,
+      issRequirement,
+      cstIbsCbs,
+      cClassTrib,
+      ibsRateInput,
+      cbsRateInput,
+      taxRulesNotes,
+    })
+  }, [
+    draftKey,
+    isEditing,
+    draftRestoredKey,
+    activeTab,
+    name,
+    description,
+    categoryId,
+    billingUnit,
+    estimatedTime,
+    isActive,
+    internalNotes,
+    operationalCostInput,
+    laborCostInput,
+    salePriceInput,
+    profitMarginInput,
+    minimumSalePriceInput,
+    allowDiscount,
+    commissionRateInput,
+    materials,
+    lc116Item,
+    nfsNationalCode,
+    nfsMunicipalCode,
+    cnaeCode,
+    nbsCode,
+    fiscalDescription,
+    issRateInput,
+    issTaxType,
+    issWithheld,
+    deductionsAllowed,
+    issRequirement,
+    cstIbsCbs,
+    cClassTrib,
+    ibsRateInput,
+    cbsRateInput,
+    taxRulesNotes,
+  ])
 
   // Helpers de parsing de moeda pt-BR
   const parseCurrencyInput = (val: string): number => {
@@ -357,6 +514,7 @@ export function ServiceFormPage() {
     setIsSubmitting(false)
 
     if (res.success) {
+      if (draftKey) clearFormDraft(draftKey)
       void navigate('/services')
     } else {
       setErrorMessage(res.error)

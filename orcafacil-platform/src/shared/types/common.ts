@@ -26,6 +26,7 @@ export type DashboardModuleCode =
   | 'MOD-07'
   | 'MOD-08'
   | 'MOD-09'
+  | 'MOD-10'
 
 /** Perfil do usuário autenticado */
 export interface UserProfile {

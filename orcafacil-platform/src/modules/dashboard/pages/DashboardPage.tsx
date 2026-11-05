@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
+  ClipboardList,
   Database,
   FileBarChart,
   FileSpreadsheet,
@@ -46,7 +47,18 @@ type DashboardModule = {
 }
 
 const MODULES_ORDER_STORAGE_KEY = 'jb_dashboard_modules_order'
-const DEFAULT_MODULE_IDS = ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-04', 'MOD-05', 'MOD-06', 'MOD-07', 'MOD-08', 'MOD-09']
+const DEFAULT_MODULE_IDS = [
+  'MOD-01',
+  'MOD-02',
+  'MOD-03',
+  'MOD-04',
+  'MOD-10',
+  'MOD-05',
+  'MOD-06',
+  'MOD-07',
+  'MOD-08',
+  'MOD-09',
+]
 
 export function DashboardPage() {
   const { user, profile, signOut } = useAuth()
@@ -65,7 +77,11 @@ export function DashboardPage() {
       if (saved) {
         const parsed = JSON.parse(saved)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed as string[]
+          const merged = [...(parsed as string[])]
+          for (const id of DEFAULT_MODULE_IDS) {
+            if (!merged.includes(id)) merged.push(id)
+          }
+          return merged
         }
       }
     } catch {
@@ -214,6 +230,18 @@ export function DashboardPage() {
         isAvailable: hasOrcafacil,
         accessModule: 'MOD-09',
         path: '/services',
+      },
+      {
+        id: 'MOD-10',
+        title: 'Ordem de Serviço (O.S.)',
+        description:
+          'Abertura de O.S., fotos do equipamento, vistoria de avarias, problema/solução, adição de peças e serviços e envio para fechamento de venda.',
+        action: 'Acessar Ordens de Serviço',
+        icon: ClipboardList,
+        iconStyle: 'bg-sky-50 text-sky-700',
+        isAvailable: hasOrcafacil,
+        accessModule: 'MOD-10',
+        path: '/service-orders',
       },
     ],
     [hasOrcafacil],

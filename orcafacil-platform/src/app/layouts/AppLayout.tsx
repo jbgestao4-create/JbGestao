@@ -21,6 +21,7 @@ import {
   Package,
   ShoppingCart,
   Wrench,
+  ClipboardList,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -159,6 +160,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const canAccessOrganization = canAccessDashboardModule('MOD-07')
   const canAccessReports = canAccessDashboardModule('MOD-08')
   const canAccessServices = canAccessDashboardModule('MOD-09')
+  const canAccessServiceOrders = canAccessDashboardModule('MOD-10')
 
   const navItem = (to: string, label: string, icon: ReactNode) => {
     const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
@@ -277,7 +279,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 canAccessCustomers ||
                 canAccessInventory ||
                 canAccessQuotes ||
-                canAccessSuppliers) && (
+                canAccessSuppliers ||
+                canAccessServices ||
+                canAccessServiceOrders) && (
                 <div>
                   {!sidebarCollapsed && (
                     <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
@@ -290,6 +294,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                         '/orcafacil/sales',
                         'Vendas',
                         <ShoppingCart className="w-4 h-4" />,
+                      )}
+                    {canAccessServiceOrders &&
+                      navItem(
+                        '/service-orders',
+                        'Ordens de Serviço',
+                        <ClipboardList className="w-4 h-4" />,
                       )}
                     {canAccessQuotes &&
                       navItem(

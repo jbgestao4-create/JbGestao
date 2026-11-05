@@ -134,3 +134,13 @@ export const ServiceFormPage = lazy(() =>
     default: module.ServiceFormPage,
   })),
 )
+export const ServiceOrdersListPage = lazy(() =>
+  import('@modules/service-orders/pages/ServiceOrdersListPage').then((module) => ({
+    default: module.ServiceOrdersListPage,
+  })),
+)
+export const ServiceOrderFormPage = lazy(() =>
+  import('@modules/service-orders/pages/ServiceOrderFormPage').then((module) => ({
+    default: module.ServiceOrderFormPage,
+  })),
+)

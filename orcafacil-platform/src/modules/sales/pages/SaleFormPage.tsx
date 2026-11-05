@@ -17,8 +17,15 @@ import {
   formatCurrency,
 } from '@shared/utils/monetary'
 import {
+  clearFormDraft,
+  getFormDraftKey,
+  readFormDraft,
+  writeFormDraft,
+} from '@shared/utils/form-draft'
+import {
   ArrowLeft,
   CheckCircle2,
+  ClipboardList,
   CreditCard,
   FileSpreadsheet,
   Package,
@@ -40,6 +47,8 @@ import {
 } from '../services/sales.service'
 import { SaleReceiptModal } from '../components/SaleReceiptModal'
 import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
+import { serviceOrderService } from '@modules/service-orders/services/service-order.service'
+import type { ServiceOrderDetail } from '@modules/service-orders/domain/service-order'
 
 interface CartItem {
   id: string
@@ -61,11 +70,15 @@ export function SaleFormPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const quoteId = searchParams.get('quoteId')
+  const serviceOrderId = searchParams.get('serviceOrderId')
 
   const sellerName = profile?.displayName || user?.email?.split('@')[0] || 'Vendedor'
 
   const [originQuote, setOriginQuote] = useState<QuoteDetail | null>(null)
   const [isLoadingQuote, setIsLoadingQuote] = useState(false)
+
+  const [originServiceOrder, setOriginServiceOrder] = useState<ServiceOrderDetail | null>(null)
+  const [isLoadingServiceOrder, setIsLoadingServiceOrder] = useState(false)
 
   const [customers, setCustomers] = useState<Customer[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
@@ -101,6 +114,66 @@ export function SaleFormPage() {
   const [error, setError] = useState<string | null>(null)
   const [completedSale, setCompletedSale] = useState<SaleDetail | null>(null)
   const [showReceipt, setShowReceipt] = useState(false)
+  const [draftRestoredKey, setDraftRestoredKey] = useState<string | null>(null)
+  const draftKey = currentOrganization
+    ? getFormDraftKey('sale', currentOrganization.id, quoteId || serviceOrderId || 'new')
+    : null
+
+  useEffect(() => {
+    if (!draftKey || quoteId || serviceOrderId || draftRestoredKey === draftKey) return
+    const saved = readFormDraft<{
+      isConsumidorFinal?: boolean
+      selectedCustomerId?: string
+      customerName?: string
+      customerDocument?: string
+      cart?: CartItem[]
+      discount?: string
+      paymentMethod?: PaymentMethod
+      emitFiscalNow?: boolean
+      notes?: string
+    }>(draftKey)
+    if (saved) {
+      if (saved.isConsumidorFinal !== undefined) setIsConsumidorFinal(saved.isConsumidorFinal)
+      if (saved.selectedCustomerId !== undefined) setSelectedCustomerId(saved.selectedCustomerId)
+      if (saved.customerName !== undefined) setCustomerName(saved.customerName)
+      if (saved.customerDocument !== undefined) setCustomerDocument(saved.customerDocument)
+      if (saved.cart) setCart(saved.cart)
+      if (saved.discount !== undefined) setDiscount(saved.discount)
+      if (saved.paymentMethod) setPaymentMethod(saved.paymentMethod)
+      if (saved.emitFiscalNow !== undefined) setEmitFiscalNow(saved.emitFiscalNow)
+      if (saved.notes !== undefined) setNotes(saved.notes)
+    }
+    setDraftRestoredKey(draftKey)
+  }, [draftKey, quoteId, serviceOrderId, draftRestoredKey])
+
+  useEffect(() => {
+    if (!draftKey || quoteId || serviceOrderId || draftRestoredKey !== draftKey) return
+    writeFormDraft(draftKey, {
+      isConsumidorFinal,
+      selectedCustomerId,
+      customerName,
+      customerDocument,
+      cart,
+      discount,
+      paymentMethod,
+      emitFiscalNow,
+      notes,
+    })
+  }, [
+    draftKey,
+    quoteId,
+    serviceOrderId,
+    draftRestoredKey,
+    isConsumidorFinal,
+    selectedCustomerId,
+    customerName,
+    customerDocument,
+    cart,
+    discount,
+    paymentMethod,
+    emitFiscalNow,
+    notes,
+  ])
 
   useEffect(() => {
     if (!currentOrganization) return
@@ -197,6 +270,70 @@ export function SaleFormPage() {
       isCurrent = false
     }
   }, [currentOrganization, quoteId])
+
+  // Carrega os dados da Ordem de Serviço quando iniciado a partir de "Enviar para Fechamento de Venda"
+  useEffect(() => {
+    if (!currentOrganization || !serviceOrderId) return
+
+    let isCurrent = true
+    setIsLoadingServiceOrder(true)
+
+    void serviceOrderService.getById(currentOrganization.id, serviceOrderId).then((res) => {
+      if (!isCurrent) return
+      setIsLoadingServiceOrder(false)
+
+      if (res.success) {
+        const os = res.data
+        setOriginServiceOrder(os)
+
+        // Preenche cliente da O.S.
+        if (os.customerId) {
+          setIsConsumidorFinal(false)
+          setSelectedCustomerId(os.customerId)
+          setCustomerName(os.customerName || 'Cliente')
+          setCustomerDocument(os.customerDocument || '')
+        } else if (os.customerName && os.customerName !== 'Consumidor Final') {
+          setIsConsumidorFinal(false)
+          setSelectedCustomerId('')
+          setCustomerName(os.customerName)
+          setCustomerDocument(os.customerDocument || '')
+        } else {
+          setIsConsumidorFinal(true)
+          setCustomerName('Consumidor Final')
+        }
+
+        // Preenche desconto e observações
+        if (os.discount && Number(os.discount) > 0) {
+          setDiscount(String(os.discount))
+        }
+        const osNotePrefix = `Referente à Ordem de Serviço ${os.orderNumber} (${os.equipmentName}${os.equipmentBrand ? ` - ${os.equipmentBrand}` : ''}${os.equipmentModel ? ` ${os.equipmentModel}` : ''})`
+        setNotes(os.solutionApplied ? `${osNotePrefix} • Solução: ${os.solutionApplied}` : osNotePrefix)
+
+        // Preenche produtos e serviços da O.S. no carrinho
+        if (os.items && os.items.length > 0) {
+          setCart(
+            os.items.map((it) => ({
+              id: it.id || `os-item-${Date.now()}-${Math.random().toString().slice(2, 6)}`,
+              itemType: it.itemType,
+              inventoryItemId: it.inventoryItemId ?? undefined,
+              serviceId: it.serviceId ?? undefined,
+              description: it.description,
+              unit: it.unit || 'UN',
+              quantity: String(it.quantity),
+              unitPrice: String(it.unitPrice),
+              total: String(it.total),
+            })),
+          )
+        }
+      } else {
+        setError(`Não foi possível carregar os dados da Ordem de Serviço: ${res.error}`)
+      }
+    })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [currentOrganization, serviceOrderId])
 
   // Produtos filtrados pelo campo de busca (apenas produtos com estoque positivo)
   const filteredProducts = useMemo(() => {
@@ -468,12 +605,22 @@ export function SaleFormPage() {
     setIsSubmitting(false)
 
     if (res.success) {
+      if (draftKey) clearFormDraft(draftKey)
       if (originQuote?.id) {
         // Atualiza status do orçamento de 'approved' para 'completed' (concluído)
         void quoteService.updateStatus(currentOrganization.id, originQuote.id, 'completed')
       }
       // Carrega os detalhes para o recibo
       const detailRes = await salesService.getSaleById(currentOrganization.id, res.data.saleId)
+      if (originServiceOrder?.id) {
+        // Marca a Ordem de Serviço como 'closed' (O.S. Encerrada) vinculada à venda
+        void serviceOrderService.markClosedWithSale(
+          currentOrganization.id,
+          originServiceOrder.id,
+          res.data.saleId,
+          detailRes.success ? detailRes.data.saleNumber : undefined,
+        )
+      }
       if (detailRes.success) {
         setCompletedSale(detailRes.data)
         setShowReceipt(true)
@@ -523,6 +670,40 @@ export function SaleFormPage() {
       {isLoadingQuote && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-4 text-xs font-medium text-blue-700 dark:text-blue-300 animate-pulse">
           Carregando informações do orçamento selecionado...
+        </div>
+      )}
+
+      {isLoadingServiceOrder && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 dark:bg-sky-950/30 p-4 text-xs font-medium text-sky-700 dark:text-sky-300 animate-pulse">
+          Carregando informações da Ordem de Serviço selecionada...
+        </div>
+      )}
+
+      {originServiceOrder && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 p-4 text-sky-900 dark:text-sky-200 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-xs">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold">
+                Fechamento de Venda da Ordem de Serviço:{' '}
+                <span className="font-mono text-sky-700 dark:text-sky-300">
+                  {originServiceOrder.orderNumber}
+                </span>
+              </p>
+              <p className="text-xs text-sky-700 dark:text-sky-400">
+                Cliente: {originServiceOrder.customerName || 'Consumidor Final'} • Equipamento:{' '}
+                <strong>{originServiceOrder.equipmentName}</strong> • Peças, serviços e valores preenchidos automaticamente.
+              </p>
+            </div>
+          </div>
+          <Link
+            to={`/service-orders/${originServiceOrder.id}/edit`}
+            className="rounded-md border border-sky-300 dark:border-sky-700 bg-white/80 dark:bg-sky-900/60 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:text-sky-300 hover:bg-white transition"
+          >
+            Ver O.S. → Ao finalizar, a O.S. será Encerrada
+          </Link>
         </div>
       )}
 
