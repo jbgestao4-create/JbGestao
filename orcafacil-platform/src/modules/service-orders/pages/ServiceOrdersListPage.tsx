@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { ListBox } from '@shared/components/ui/ListBox'
@@ -58,6 +59,8 @@ const STATUS_SORT_ORDER: Record<ServiceOrderStatus, number> = {
 
 export function ServiceOrdersListPage() {
   const { currentOrganization } = useOrganization()
+  const { canAccessSubFeature } = useModuleAccess()
+  const canCreateOrder = canAccessSubFeature('MOD-10_CREATE')
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [orders, setOrders] = useState<ServiceOrderListItem[]>([])
@@ -378,14 +381,16 @@ export function ServiceOrdersListPage() {
           </p>
         </div>
 
-        <Link to="/service-orders/new">
-          <Button
-            size="sm"
-            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs"
-          >
-            <Plus className="w-4 h-4" /> Nova Ordem de Serviço
-          </Button>
-        </Link>
+        {canCreateOrder && (
+          <Link to="/service-orders/new">
+            <Button
+              size="sm"
+              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs"
+            >
+              <Plus className="w-4 h-4" /> Nova Ordem de Serviço
+            </Button>
+          </Link>
+        )}
       </div>
 
       {errorMsg && (
@@ -571,12 +576,14 @@ export function ServiceOrdersListPage() {
             <div className="text-center py-12 text-sm text-gray-500 dark:text-slate-400">
               <Wrench className="w-8 h-8 mx-auto text-gray-300 dark:text-slate-600 mb-2" />
               Nenhuma Ordem de Serviço encontrada com o filtro selecionado.{' '}
-              <Link
-                to="/service-orders/new"
-                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
-              >
-                Abrir nova O.S.
-              </Link>
+              {canCreateOrder && (
+                <Link
+                  to="/service-orders/new"
+                  className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+                >
+                  Abrir nova O.S.
+                </Link>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

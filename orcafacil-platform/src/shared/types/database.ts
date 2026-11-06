@@ -15,7 +15,7 @@ export type OrganizationRole = 'owner' | 'admin' | 'member'
 /** Códigos de módulos disponíveis na plataforma */
 export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 
-/** Códigos dos módulos exibidos na página inicial */
+/** Códigos dos módulos e sub-recursos exibidos na plataforma */
 export type DashboardModuleCode =
   | 'MOD-01'
   | 'MOD-02'
@@ -27,6 +27,7 @@ export type DashboardModuleCode =
   | 'MOD-08'
   | 'MOD-09'
   | 'MOD-10'
+  | (string & {})
 
 /** Estado de uma concessão de módulo a uma organização */
 export type ModuleGrantStatus = 'active' | 'inactive' | 'suspended'

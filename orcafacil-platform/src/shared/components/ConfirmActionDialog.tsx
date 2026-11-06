@@ -42,25 +42,25 @@ export function ConfirmActionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs">
       <section
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-action-title"
         aria-describedby="confirm-action-description"
-        className="max-h-[calc(100vh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
       >
-        <h2 id="confirm-action-title" className="mb-2 text-lg font-bold text-gray-900">
+        <h2 id="confirm-action-title" className="mb-2 text-lg font-bold text-gray-900 dark:text-white">
           {title}
         </h2>
-        <p id="confirm-action-description" className="mb-5 text-sm text-gray-500">
+        <p id="confirm-action-description" className="mb-5 text-sm text-gray-500 dark:text-slate-400">
           {description}
         </p>
 
         {error && (
           <div
             role="alert"
-            className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
           >
             {error}
           </div>

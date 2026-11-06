@@ -5,6 +5,7 @@ import {
   ChartNoAxesCombined,
   Check,
   CircleDollarSign,
+  Clock,
   FileText,
   MessageCircle,
   ReceiptText,
@@ -17,6 +18,8 @@ import { useLocation } from 'react-router-dom'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { BrandLogo } from '@shared/components/BrandLogo'
+import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
+import { isSystemOwner } from '@shared/utils/system-owner'
 
 export function LoginPage() {
   const { signIn, signOut } = useAuth()
@@ -25,6 +28,8 @@ export function LoginPage() {
 
   const [isOrgDeactivated, setIsOrgDeactivated] = useState(Boolean((location.state as any)?.deactivated))
   const [deactivatedOrgName, setDeactivatedOrgName] = useState<string>((location.state as any)?.orgName || '')
+  const [isTrialExpired, setIsTrialExpired] = useState(Boolean((location.state as any)?.trialExpired))
+  const [expiredOrgName, setExpiredOrgName] = useState<string>((location.state as any)?.orgName || '')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -45,17 +50,35 @@ export function LoginPage() {
     const res = await signIn({ email, password })
 
     if (res.success) {
-      // Verifica se a empresa cadastrada do usuário está ativa (Requisito 5)
-      const orgsRes = await organizationService.getUserOrganizations()
-      if (orgsRes.success && orgsRes.data.length > 0) {
-        const allInactive = orgsRes.data.every((o) => o.isActive === false)
-        if (allInactive) {
-          const firstOrg = orgsRes.data[0]
-          await signOut()
-          setIsOrgDeactivated(true)
-          setDeactivatedOrgName(firstOrg.name)
-          setIsLoading(false)
-          return
+      const isOwner = isSystemOwner({ email })
+
+      // Se não for o Proprietário do Sistema, valida se a empresa está desativada ou com teste expirado
+      if (!isOwner) {
+        const orgsRes = await organizationService.getUserOrganizations()
+        if (orgsRes.success && orgsRes.data.length > 0) {
+          const allInactive = orgsRes.data.every((o) => o.isActive === false)
+          if (allInactive) {
+            const firstOrg = orgsRes.data[0]
+            await signOut()
+            setIsOrgDeactivated(true)
+            setDeactivatedOrgName(firstOrg.name)
+            setIsLoading(false)
+            return
+          }
+
+          const allExpired = orgsRes.data.every((o) => {
+            if (!o.trialEndsAt) return false
+            return new Date(o.trialEndsAt).getTime() < Date.now()
+          })
+
+          if (allExpired) {
+            const firstOrg = orgsRes.data[0]
+            await signOut()
+            setIsTrialExpired(true)
+            setExpiredOrgName(firstOrg.name)
+            setIsLoading(false)
+            return
+          }
         }
       }
       navigate('/')
@@ -185,10 +208,47 @@ export function LoginPage() {
                           href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20desativado.%20Gostaria%20de%20solicitar%20suporte."
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-xs"
+                          title="Suporte no WhatsApp"
+                          aria-label="Suporte no WhatsApp"
+                          className="inline-flex items-center justify-center rounded-xl bg-emerald-600 p-2.5 text-white hover:bg-emerald-700 transition-colors shadow-xs hover:scale-105 active:scale-95"
                         >
-                          <MessageCircle className="h-4 w-4" />
-                          Suporte no WhatsApp (31 986848490)
+                          <WhatsAppIcon className="h-5 w-5" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isTrialExpired && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-xs"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-amber-100 p-2 text-amber-700 shrink-0 mt-0.5">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-amber-950">
+                        Tempo de teste expirado
+                      </h3>
+                      <p className="mt-1 text-xs font-semibold text-amber-900 leading-relaxed">
+                        Tempo de teste expirado, entre em contato com a JB Software
+                      </p>
+                      <p className="mt-0.5 text-xs text-amber-800 leading-relaxed">
+                        O período de teste {expiredOrgName ? `da empresa "${expiredOrgName}"` : 'da sua empresa'} encerrou. Entre em contato com nossa equipe para regularizar e continuar utilizando todos os recursos.
+                      </p>
+                      <div className="mt-3">
+                        <a
+                          href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20tempo%20de%20teste%20da%20minha%20empresa%20expirou.%20Gostaria%20de%20renovar%20o%20acesso%20com%20a%20JB%20Software."
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Falar com a JB Software no WhatsApp"
+                          aria-label="Falar com a JB Software no WhatsApp"
+                          className="inline-flex items-center justify-center rounded-xl bg-emerald-600 p-2.5 text-white hover:bg-emerald-700 transition-colors shadow-xs hover:scale-105 active:scale-95"
+                        >
+                          <WhatsAppIcon className="h-5 w-5" />
                         </a>
                       </div>
                     </div>

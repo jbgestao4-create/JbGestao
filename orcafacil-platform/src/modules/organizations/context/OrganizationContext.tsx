@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { organizationService } from '../services/organization.service'
 import { useAuth } from '@modules/auth/context/AuthContext'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import type { Organization, OrganizationRole, ServiceResult, UUID } from '@shared/types/common'
 
 interface OrganizationContextType {
@@ -26,7 +27,11 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   const loadRole = async (orgId: UUID, userId: UUID) => {
     const role = await organizationService.getUserRole(orgId, userId)
-    setUserRole(role)
+    if (role) {
+      setUserRole(role)
+    } else {
+      setUserRole(isSystemOwner(user) ? 'owner' : 'admin')
+    }
   }
 
   const setCurrentOrganization = (org: Organization) => {
@@ -57,16 +62,26 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
       if (orgs.length > 0) {
         const savedId = localStorage.getItem(ACTIVE_ORG_STORAGE_KEY)
-        const matched = orgs.find((o) => o.id === savedId)
-        const active = matched ?? orgs[0]
+        let active = orgs.find((o) => o.id === savedId)
+
+        // Se o ID salvo não existir na lista ou não houver nada salvo:
+        if (!active) {
+          // Se for o Proprietário do Sistema, prioriza a organização principal 'Bryan adm'
+          const bryanOrg = orgs.find((o) => o.name.toLowerCase().includes('bryan'))
+          active = bryanOrg ?? orgs[0]
+        }
+
         setCurrentOrganizationState((prev) =>
           prev && prev.id === active.id && prev.name === active.name ? prev : active,
         )
+        if (active) {
+          localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, active.id)
+        }
         await loadRole(active.id, user.id)
       } else {
         setCurrentOrganizationState(null)
-        // Se ainda não há organização vinculada, define como proprietário para que possa gerenciar e criar empresas no módulo
-        setUserRole('owner')
+        // Apenas o Proprietário do Sistema pode ter papel owner quando não há organização vinculada
+        setUserRole(isSystemOwner(user) ? 'owner' : null)
       }
     }
 

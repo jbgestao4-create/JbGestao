@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
-  ALL_PLATFORM_DASHBOARD_MODULES,
   companyManagementService,
+  normalizeCompanyModules,
   type ManagedCompany,
 } from '../services/company-management.service'
+import { CompanyModulesSelector } from './CompanyModulesSelector'
 import type { DashboardModuleCode } from '@shared/types/common'
 import { Button } from '@shared/components/ui/Button'
 import { Layers, ShieldCheck, X } from 'lucide-react'
@@ -27,26 +28,12 @@ export function ManageCompanyModulesModal({
 
   useEffect(() => {
     if (company) {
-      setSelectedModules(company.modules && company.modules.length > 0 ? company.modules : [])
+      setSelectedModules(normalizeCompanyModules(company.modules ?? []))
       setError(null)
     }
   }, [company])
 
   if (!isOpen || !company) return null
-
-  const toggleModule = (code: DashboardModuleCode) => {
-    setSelectedModules((prev) =>
-      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
-    )
-  }
-
-  const handleSelectAll = () => {
-    setSelectedModules(ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code))
-  }
-
-  const handleDeselectAll = () => {
-    setSelectedModules([])
-  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -78,7 +65,10 @@ export function ManageCompanyModulesModal({
                 Gerenciar Acesso às Páginas
               </h2>
               <p className="text-xs text-gray-500 dark:text-slate-400">
-                Empresa: <strong className="text-gray-800 dark:text-slate-200">{company.name}</strong> • SLUG: <span className="font-mono bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px] text-blue-600 dark:text-blue-400">{company.slug}</span>
+                Empresa: <strong className="text-gray-800 dark:text-slate-200">{company.name}</strong> • SLUG:{' '}
+                <span className="font-mono bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px] text-blue-600 dark:text-blue-400">
+                  {company.slug}
+                </span>
               </p>
             </div>
           </div>
@@ -99,7 +89,7 @@ export function ManageCompanyModulesModal({
               <span>Controle por Identificador Único (SLUG)</span>
             </div>
             <p className="mt-1 leading-relaxed">
-              Marque as páginas e módulos aos quais os usuários desta empresa terão acesso. Módulos desmarcados não ficarão visíveis nem acessíveis no painel e rotas desta organização.
+              Marque as páginas e opções específicas aos quais os usuários desta empresa terão acesso. Opções desmarcadas não ficarão visíveis nem acessíveis no painel e rotas desta organização.
             </p>
           </div>
 
@@ -109,75 +99,23 @@ export function ManageCompanyModulesModal({
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-              Páginas da Plataforma ({selectedModules.length} de {ALL_PLATFORM_DASHBOARD_MODULES.length} ativas)
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                className="text-xs text-blue-600 hover:underline dark:text-blue-400 font-semibold"
-              >
-                Liberar Todas
-              </button>
-              <span className="text-gray-300 dark:text-slate-700">|</span>
-              <button
-                type="button"
-                onClick={handleDeselectAll}
-                className="text-xs text-gray-500 hover:underline dark:text-slate-400"
-              >
-                Bloquear Todas
-              </button>
-            </div>
-          </div>
+          <CompanyModulesSelector
+            selectedCodes={selectedModules}
+            onChange={setSelectedModules}
+            disabled={isLoading}
+          />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {ALL_PLATFORM_DASHBOARD_MODULES.map((m) => {
-              const isSelected = selectedModules.includes(m.code)
-              return (
-                <label
-                  key={m.code}
-                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
-                    isSelected
-                      ? 'border-blue-500 bg-blue-50/60 dark:border-blue-700 dark:bg-blue-950/40 shadow-xs'
-                      : 'border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-800/40 opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleModule(m.code)}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-gray-900 dark:text-white">
-                        {m.name}
-                      </span>
-                      <span className="text-[10px] font-mono text-gray-400 dark:text-slate-500">
-                        {m.code}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
-                      {m.description}
-                    </p>
-                    <span className="mt-1 inline-block text-[10px] font-mono text-blue-600 dark:text-blue-400">
-                      Rota: {m.path}
-                    </span>
-                  </div>
-                </label>
-              )
-            })}
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+          {/* Footer Actions */}
+          <div className="flex justify-end gap-3 border-t border-gray-100 pt-5 dark:border-slate-800">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button type="submit" isLoading={isLoading} className="bg-blue-600 hover:bg-blue-700">
-              Salvar Permissões de Acesso
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+            >
+              {isLoading ? 'Salvando...' : 'Salvar Permissões'}
             </Button>
           </div>
         </form>
@@ -185,4 +123,3 @@ export function ManageCompanyModulesModal({
     </div>
   )
 }
-

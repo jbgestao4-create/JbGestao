@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { quoteService, type QuoteDetail, type QuoteListItem } from '../services/quote.service'
 import {
   getStatusBadgeClasses,
@@ -84,6 +85,8 @@ function parseStatusParam(value: string | null): ('all' | QuoteStatus) | null {
 
 export function QuotesListPage() {
   const { currentOrganization, userRole } = useOrganization()
+  const { canAccessSubFeature } = useModuleAccess()
+  const canCreateQuote = canAccessSubFeature('MOD-04_CREATE')
   const [searchParams, setSearchParams] = useSearchParams()
   const [quotes, setQuotes] = useState<QuoteListItem[]>([])
   const [filterStatus, setFilterStatus] = useState<'all' | QuoteStatus>(
@@ -399,11 +402,13 @@ export function QuotesListPage() {
           </p>
         </div>
 
-        <Link to="/orcafacil/quotes/new">
-          <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs">
-            <Plus className="w-4 h-4" /> Novo Orçamento
-          </Button>
-        </Link>
+        {canCreateQuote && (
+          <Link to="/orcafacil/quotes/new">
+            <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs">
+              <Plus className="w-4 h-4" /> Novo Orçamento
+            </Button>
+          </Link>
+        )}
       </div>
 
       {statusError && (
@@ -610,12 +615,14 @@ export function QuotesListPage() {
             <div className="text-center py-12 text-sm text-gray-500 dark:text-slate-400">
               <FileSpreadsheet className="w-8 h-8 mx-auto text-gray-300 dark:text-slate-600 mb-2" />
               Nenhum orçamento encontrado com o filtro selecionado.{' '}
-              <Link
-                to="/orcafacil/quotes/new"
-                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
-              >
-                Criar novo orçamento
-              </Link>
+              {canCreateQuote && (
+                <Link
+                  to="/orcafacil/quotes/new"
+                  className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+                >
+                  Criar novo orçamento
+                </Link>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

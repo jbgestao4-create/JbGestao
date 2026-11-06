@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
   moduleAccessService,
   PLATFORM_MODULES_CATALOG,
@@ -10,15 +10,17 @@ import { useAuth } from '@modules/auth/context/AuthContext'
 import { supabase } from '@app/config/supabase'
 import type { DashboardModuleCode, ModuleCode } from '@shared/types/database'
 import type { InventoryAccessLevel } from '@shared/types/common'
-import { getStoredInventoryLevels } from '@modules/organizations/services/organization.service'
+import { getStoredInventoryLevels, getLocalMembers } from '@modules/organizations/services/organization.service'
 import { logger } from '@shared/lib/logger'
 import { DASHBOARD_MODULES } from '../services/module-access.service'
 import { companyManagementService } from '@modules/companies/services/company-management.service'
+import { isSystemOwner } from '@shared/utils/system-owner'
 
 interface ModuleAccessContextType {
   allModules: PlatformModule[]
   grantedModules: GrantedModule[]
   memberAllowedModules: ModuleCode[]
+  orgAllowedDashboardModules: DashboardModuleCode[]
   memberAllowedDashboardModules: DashboardModuleCode[]
   inventoryAccessLevel: InventoryAccessLevel
   canCreateInventoryProduct: boolean
@@ -28,6 +30,7 @@ interface ModuleAccessContextType {
   isLoading: boolean
   canAccess: (moduleCode: ModuleCode) => boolean
   canAccessDashboardModule: (moduleCode: DashboardModuleCode) => boolean
+  canAccessSubFeature: (subFeatureCode: string) => boolean
   refreshAccess: () => Promise<void>
 }
 
@@ -92,15 +95,27 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
           .eq('organization_id', currentOrganization.id)
           .eq('user_id', user.id)
 
-        if (dashboardModulesError) {
-          logger.warn(
-            'Permissões dos cartões não estão disponíveis; usando acesso padrão até aplicar a migração.',
-            {
-              code: dashboardModulesError.code,
-              message: dashboardModulesError.message,
-            },
+        if (dashboardModulesError || !dashboardPerms || dashboardPerms.length === 0) {
+          const localMembers = getLocalMembers(currentOrganization.id)
+          const found = localMembers.find(
+            (m) =>
+              m.userId === user.id ||
+              (user.email && m.email.toLowerCase() === user.email.toLowerCase()),
           )
-          setMemberAllowedDashboardModules(DASHBOARD_MODULES.map((module) => module.code))
+          if (found && found.dashboardModules && found.dashboardModules.length > 0) {
+            setMemberAllowedDashboardModules(found.dashboardModules)
+          } else if (dashboardModulesError) {
+            logger.warn(
+              'Permissões dos cartões não estão disponíveis; usando acesso padrão até aplicar a migração.',
+              {
+                code: dashboardModulesError.code,
+                message: dashboardModulesError.message,
+              },
+            )
+            setMemberAllowedDashboardModules(DASHBOARD_MODULES.map((module) => module.code))
+          } else {
+            setMemberAllowedDashboardModules([])
+          }
         } else {
           setMemberAllowedDashboardModules(
             dashboardPerms.map((p) => p.module_code as DashboardModuleCode),
@@ -168,7 +183,10 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
     if (!currentOrganization) return false
 
     // O proprietário mantém acesso total, independentemente das concessões da organização.
-    if (userRole === 'owner') return true
+    if (userRole === 'owner' || isSystemOwner(user)) return true
+
+    // Administradores da empresa têm acesso ao módulo principal orcafacil
+    if (userRole === 'admin' && moduleCode === 'orcafacil') return true
 
     // 1. Verifica se a organização possui o módulo ativo
     const orgHasModule = grantedModules.some(
@@ -178,32 +196,92 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
         (!m.expiresAt || new Date(m.expiresAt) > new Date()),
     )
 
-    if (!orgHasModule) return false
+    if (orgHasModule) {
+      if (userRole === 'admin') {
+        return true
+      }
+      return memberAllowedModules.includes(moduleCode)
+    }
 
-    // 2. Administradores têm acesso direto às concessões ativas da organização.
-    if (userRole === 'admin') {
+    // Se for o módulo orcafacil e a organização estiver ativa, concede acesso padrão
+    if (moduleCode === 'orcafacil' && currentOrganization.isActive) {
       return true
     }
 
-    // 3. Se for membro operacional, verifica se o administrador concedeu o módulo especificamente
-    return memberAllowedModules.includes(moduleCode)
+    return false
   }
 
   const canAccessDashboardModule = (moduleCode: DashboardModuleCode): boolean => {
     if (!currentOrganization) return false
 
-    // Apenas o Proprietario visualiza todos os modulos. Administradores e membros respeitam rigorosamente a selecao da empresa.
-    if (userRole !== 'owner') {
-      if (!orgAllowedDashboardModules.includes(moduleCode)) {
+    // Apenas o Proprietário do Sistema visualiza todos os módulos incondicionalmente.
+    // Administradores e funcionários respeitam rigorosamente os módulos liberados para a empresa pelo Proprietário.
+    if (!isSystemOwner(user)) {
+      if (orgAllowedDashboardModules.length > 0 && !orgAllowedDashboardModules.includes(moduleCode)) {
         return false
       }
     }
 
-    if (userRole === 'owner' || userRole === 'admin') {
+    if (userRole === 'owner' || userRole === 'admin' || !userRole) {
       return true
     }
 
     return userRole === 'member' && memberAllowedDashboardModules.includes(moduleCode)
+  }
+
+  const canAccessSubFeature = (subFeatureCode: string): boolean => {
+    if (!currentOrganization) return false
+
+    // O proprietário do sistema tem acesso total incondicional
+    if (isSystemOwner(user)) return true
+
+    // Extrai o módulo pai a partir do prefixo (ex: "MOD-01" de "MOD-01_QUICK_SALE")
+    const parentModule = (
+      subFeatureCode.includes('_') ? subFeatureCode.split('_')[0] : subFeatureCode
+    ) as DashboardModuleCode
+
+    // Se a empresa/usuário não puder acessar o módulo pai, o sub-recurso está bloqueado
+    if (!canAccessDashboardModule(parentModule)) {
+      return false
+    }
+
+    // Se o código for o próprio módulo pai, o acesso já foi verificado e liberado
+    if (!subFeatureCode.includes('_')) {
+      return true
+    }
+
+    // Avalia se a organização possui regras granulares salvas para este módulo
+    const orgHasGranularForModule = orgAllowedDashboardModules.some(
+      (code) => typeof code === 'string' && code.startsWith(`${parentModule}_`),
+    )
+
+    if (userRole === 'owner' || userRole === 'admin' || !userRole) {
+      if (!orgHasGranularForModule) {
+        // Legado ou sem restrição granular específica: libera todos os sub-itens por padrão
+        return true
+      }
+      return orgAllowedDashboardModules.includes(subFeatureCode as DashboardModuleCode)
+    }
+
+    // Se for funcionário (member):
+    // 1. Deve ser permitido para a organização
+    if (
+      orgHasGranularForModule &&
+      !orgAllowedDashboardModules.includes(subFeatureCode as DashboardModuleCode)
+    ) {
+      return false
+    }
+
+    // 2. Avalia as permissões atribuídas ao funcionário
+    const memberHasGranular = memberAllowedDashboardModules.some(
+      (code) => typeof code === 'string' && code.startsWith(`${parentModule}_`),
+    )
+
+    if (!memberHasGranular) {
+      return memberAllowedDashboardModules.includes(parentModule)
+    }
+
+    return memberAllowedDashboardModules.includes(subFeatureCode as DashboardModuleCode)
   }
 
   const effectiveInventoryLevel: InventoryAccessLevel =
@@ -227,6 +305,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
         allModules,
         grantedModules,
         memberAllowedModules,
+        orgAllowedDashboardModules,
         memberAllowedDashboardModules,
         inventoryAccessLevel: effectiveInventoryLevel,
         canCreateInventoryProduct,
@@ -236,6 +315,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
         isLoading,
         canAccess,
         canAccessDashboardModule,
+        canAccessSubFeature,
         refreshAccess: loadAccess,
       }}
     >

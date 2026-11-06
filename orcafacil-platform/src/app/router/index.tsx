@@ -116,7 +116,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/sales/pdv',
     element: (
       <ProtectedRoute hideLayout>
-        <RequireDashboardModule moduleCode="MOD-01">
+        <RequireDashboardModule moduleCode="MOD-01" subFeatureCode="MOD-01_PDV">
           <RequireModule moduleCode="orcafacil">
             <PdvTerminalPage />
           </RequireModule>
@@ -140,7 +140,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/sales/new',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-01">
+        <RequireDashboardModule moduleCode="MOD-01" subFeatureCode="MOD-01_QUICK_SALE">
           <RequireModule moduleCode="orcafacil">
             <SaleFormPage />
           </RequireModule>
@@ -152,7 +152,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/sales/search',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-01">
+        <RequireDashboardModule moduleCode="MOD-01" subFeatureCode="MOD-01_SEARCH">
           <RequireModule moduleCode="orcafacil">
             <SalesListPage />
           </RequireModule>
@@ -164,7 +164,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/sales/invoices',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-01">
+        <RequireDashboardModule moduleCode="MOD-01" subFeatureCode="MOD-01_INVOICES">
           <RequireModule moduleCode="orcafacil">
             <SalesInvoicesPage />
           </RequireModule>
@@ -200,7 +200,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/suppliers/search',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-06">
+        <RequireDashboardModule moduleCode="MOD-06" subFeatureCode="MOD-06_SEARCH">
           <RequireModule moduleCode="orcafacil">
             <SuppliersListPage />
           </RequireModule>
@@ -212,7 +212,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/suppliers/new',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-06">
+        <RequireDashboardModule moduleCode="MOD-06" subFeatureCode="MOD-06_CREATE">
           <RequireModule moduleCode="orcafacil">
             <SupplierFormPage />
           </RequireModule>
@@ -248,7 +248,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/inventory/search',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-02">
+        <RequireDashboardModule moduleCode="MOD-02" subFeatureCode="MOD-02_SEARCH">
           <RequireModule moduleCode="orcafacil">
             <InventoryListPage />
           </RequireModule>
@@ -260,7 +260,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/inventory/new',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-02">
+        <RequireDashboardModule moduleCode="MOD-02" subFeatureCode="MOD-02_CREATE">
           <RequireModule moduleCode="orcafacil">
             <InventoryFormPage />
           </RequireModule>
@@ -284,7 +284,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/inventory/movements',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-02">
+        <RequireDashboardModule moduleCode="MOD-02" subFeatureCode="MOD-02_MOVEMENTS">
           <RequireModule moduleCode="orcafacil">
             <InventoryMovementsPage />
           </RequireModule>
@@ -296,7 +296,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/inventory/:inventoryItemId/movements',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-02">
+        <RequireDashboardModule moduleCode="MOD-02" subFeatureCode="MOD-02_MOVEMENTS">
           <RequireModule moduleCode="orcafacil">
             <InventoryMovementsPage />
           </RequireModule>
@@ -320,7 +320,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/quotes/new',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-04">
+        <RequireDashboardModule moduleCode="MOD-04" subFeatureCode="MOD-04_CREATE">
           <RequireModule moduleCode="orcafacil">
             <QuoteFormPage />
           </RequireModule>
@@ -356,7 +356,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/customers/search',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-03">
+        <RequireDashboardModule moduleCode="MOD-03" subFeatureCode="MOD-03_SEARCH">
           <RequireModule moduleCode="orcafacil">
             <CustomersListPage />
           </RequireModule>
@@ -368,7 +368,7 @@ export const router = createBrowserRouter([
     path: '/orcafacil/customers/new',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-03">
+        <RequireDashboardModule moduleCode="MOD-03" subFeatureCode="MOD-03_CREATE">
           <RequireModule moduleCode="orcafacil">
             <CustomerFormPage />
           </RequireModule>
@@ -408,7 +408,7 @@ export const router = createBrowserRouter([
     path: '/services/new',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-09">
+        <RequireDashboardModule moduleCode="MOD-09" subFeatureCode="MOD-09_CREATE">
           <ServiceFormPage />
         </RequireDashboardModule>
       </ProtectedRoute>
@@ -444,7 +444,7 @@ export const router = createBrowserRouter([
     path: '/service-orders/new',
     element: (
       <ProtectedRoute>
-        <RequireDashboardModule moduleCode="MOD-10">
+        <RequireDashboardModule moduleCode="MOD-10" subFeatureCode="MOD-10_CREATE">
           <ServiceOrderFormPage />
         </RequireDashboardModule>
       </ProtectedRoute>

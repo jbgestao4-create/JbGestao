@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
@@ -34,6 +35,8 @@ import type { ServiceResult } from '@shared/types/common'
 
 export function ServicesListPage() {
   const { currentOrganization } = useOrganization()
+  const { canAccessSubFeature } = useModuleAccess()
+  const canCreateService = canAccessSubFeature('MOD-09_CREATE')
   const navigate = useNavigate()
 
   const [services, setServices] = useState<ServiceListItem[]>([])
@@ -146,12 +149,14 @@ export function ServicesListPage() {
           </div>
         </div>
 
-        <Link to="/services/new">
-          <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs">
-            <Plus className="h-4 w-4" />
-            Novo Serviço
-          </Button>
-        </Link>
+        {canCreateService && (
+          <Link to="/services/new">
+            <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs">
+              <Plus className="h-4 w-4" />
+              Novo Serviço
+            </Button>
+          </Link>
+        )}
       </div>
 
       {deleteErrorMessage && (
@@ -321,11 +326,13 @@ export function ServicesListPage() {
             <div className="py-16 text-center text-sm text-gray-500 dark:text-slate-400 space-y-3">
               <Wrench className="h-10 w-10 mx-auto text-gray-300 dark:text-slate-600" />
               <p>Nenhum serviço localizado com os filtros selecionados.</p>
-              <Link to="/services/new">
-                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                  <Plus className="h-4 w-4 mr-1" /> Cadastrar Primeiro Serviço
-                </Button>
-              </Link>
+              {canCreateService && (
+                <Link to="/services/new">
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    <Plus className="h-4 w-4 mr-1" /> Cadastrar Primeiro Serviço
+                  </Button>
+                </Link>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

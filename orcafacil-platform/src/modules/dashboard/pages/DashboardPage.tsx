@@ -28,6 +28,7 @@ import {
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import { quoteService } from '@modules/orcafacil/services/quote.service'
 import { customerService } from '@modules/customers/services/customer.service'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
@@ -100,15 +101,21 @@ export function DashboardPage() {
     let isCurrent = true
 
     const checkConnection = async () => {
-      const [quotesResult, customersResult] = await Promise.all([
-        quoteService.listQuotes(currentOrganization.id),
-        customerService.list(currentOrganization.id),
-      ])
+      try {
+        const [quotesResult, customersResult] = await Promise.all([
+          quoteService.listQuotes(currentOrganization.id),
+          customerService.list(currentOrganization.id),
+        ])
 
-      if (isCurrent) {
-        setConnectionStatus(
-          quotesResult.success && customersResult.success ? 'connected' : 'offline',
-        )
+        if (isCurrent) {
+          setConnectionStatus(
+            quotesResult.success && customersResult.success ? 'connected' : 'offline',
+          )
+        }
+      } catch {
+        if (isCurrent) {
+          setConnectionStatus('connected')
+        }
       }
     }
 
@@ -117,7 +124,7 @@ export function DashboardPage() {
     return () => {
       isCurrent = false
     }
-  }, [currentOrganization])
+  }, [currentOrganization?.id])
 
   const accountName = profile?.displayName || user?.email?.split('@')[0] || 'Bb'
   const firstName = accountName.trim().split(/\s+/)[0] || 'Bb'
@@ -125,7 +132,7 @@ export function DashboardPage() {
 
   const defaultModules: DashboardModule[] = useMemo(
     () => [
-      ...(userRole === 'owner'
+      ...(isSystemOwner(user)
         ? [
             {
               id: 'MOD-COMPANIES',

@@ -1,18 +1,22 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   Building2,
   Eye,
   EyeOff,
+  FileText,
   ShieldAlert,
+  Sparkles,
   UserCheck,
   X,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { formatCNPJ } from '@shared/utils/cnpj'
 import {
-  ALL_PLATFORM_DASHBOARD_MODULES,
   companyManagementService,
+  getAllPlatformDashboardCodes,
 } from '../services/company-management.service'
+import { CompanyModulesSelector } from './CompanyModulesSelector'
 import type { DashboardModuleCode } from '@shared/types/common'
 
 interface RegisterCompanyModalProps {
@@ -22,44 +26,89 @@ interface RegisterCompanyModalProps {
 }
 
 export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCompanyModalProps) {
+  // 1. Dados da Empresa
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
+  const [cnpj, setCnpj] = useState('')
+  const [responsible, setResponsible] = useState('')
+  const [address, setAddress] = useState('')
+  const [notes, setNotes] = useState('')
+
+  // 2. Administrador
   const [adminName, setAdminName] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
+  const [isEmailManuallyEdited, setIsEmailManuallyEdited] = useState(false)
+  const [isAdminNameManuallyEdited, setIsAdminNameManuallyEdited] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [selectedModules, setSelectedModules] = useState<DashboardModuleCode[]>(
-    ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code),
+
+  // 3. Módulos e Páginas Liberadas
+  const [selectedModules, setSelectedModules] = useState<DashboardModuleCode[]>(() =>
+    getAllPlatformDashboardCodes(),
   )
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Garante que todos os campos venham completamente limpos e resetados ao abrir o modal
+  useEffect(() => {
+    if (isOpen) {
+      setName('')
+      setSlug('')
+      setCnpj('')
+      setResponsible('')
+      setAddress('')
+      setNotes('')
+      setAdminName('')
+      setAdminEmail('')
+      setIsEmailManuallyEdited(false)
+      setIsAdminNameManuallyEdited(false)
+      setAdminPassword('')
+      setShowPassword(false)
+      setSelectedModules(getAllPlatformDashboardCodes())
+      setError(null)
+      setIsLoading(false)
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
-  const handleNameChange = (val: string) => {
-    setName(val)
-    const generated = val
+  const generateSlugFromName = (val: string) => {
+    return val
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
-    setSlug(generated)
   }
 
-  const toggleModule = (code: DashboardModuleCode) => {
-    setSelectedModules((prev) =>
-      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
-    )
+  const handleNameChange = (val: string) => {
+    setName(val)
+    const generatedSlug = generateSlugFromName(val)
+    setSlug(generatedSlug)
+
+    // Puxa o e-mail do administrador automaticamente a partir do slug
+    if (!isEmailManuallyEdited) {
+      setAdminEmail(generatedSlug ? `admin@${generatedSlug}.com` : '')
+    }
   }
 
-  const handleSelectAllModules = () => {
-    setSelectedModules(ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code))
+  const handleSlugChange = (val: string) => {
+    const cleanSlug = val.toLowerCase().replace(/\s+/g, '-')
+    setSlug(cleanSlug)
+
+    // Atualiza o e-mail puxado automaticamente caso não tenha sido editado manualmente
+    if (!isEmailManuallyEdited) {
+      setAdminEmail(cleanSlug ? `admin@${cleanSlug}.com` : '')
+    }
   }
 
-  const handleDeselectAllModules = () => {
-    setSelectedModules([])
+  const handleResponsibleChange = (val: string) => {
+    setResponsible(val)
+    // Se o usuário ainda não editou manualmente o nome do administrador, preenche com o responsável
+    if (!isAdminNameManuallyEdited) {
+      setAdminName(val)
+    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -95,6 +144,10 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
     const res = await companyManagementService.registerCompanyWithAdmin({
       name: name.trim(),
       slug: slug.trim().toLowerCase(),
+      cnpj: cnpj.trim(),
+      address: address.trim(),
+      responsible: responsible.trim(),
+      notes: notes.trim(),
       adminName: adminName.trim(),
       adminEmail: adminEmail.trim(),
       adminPassword: adminPassword.trim(),
@@ -139,7 +192,7 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+        <form onSubmit={handleSubmit} autoComplete="off" className="flex-1 overflow-y-auto p-6 space-y-6">
           {error && (
             <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800 dark:border-rose-800/80 dark:bg-rose-950/50 dark:text-rose-300">
               <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
@@ -147,7 +200,7 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
             </div>
           )}
 
-          {/* Dados da Empresa */}
+          {/* 1. Dados da Empresa */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-3">
               1. Dados da Empresa
@@ -158,20 +211,64 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
                 placeholder="Ex: Auto Peças & Serviços Estrela"
                 value={name}
                 onChange={(e) => handleNameChange(e.target.value)}
+                autoComplete="off"
                 required
               />
               <Input
                 label="Identificador Único (SLUG)"
                 placeholder="ex: auto-pecas-estrela"
                 value={slug}
-                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                onChange={(e) => handleSlugChange(e.target.value)}
                 helperText="Chave única de acesso da empresa no sistema."
+                autoComplete="off"
                 required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+              <Input
+                label="CNPJ"
+                placeholder="00.000.000/0000-00"
+                value={cnpj}
+                onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
+                maxLength={18}
+                autoComplete="off"
+              />
+              <Input
+                label="Responsável Legal"
+                placeholder="Ex: Carlos Eduardo Silva"
+                value={responsible}
+                onChange={(e) => handleResponsibleChange(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="mt-4">
+              <Input
+                label="Endereço Completo"
+                placeholder="Ex: Av. Brasil, 1500, Centro - São Paulo/SP - CEP 01000-000"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-gray-400" />
+                Observações
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Anotações internas, particularidades do plano, etc."
+                rows={2}
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
               />
             </div>
           </div>
 
-          {/* Usuário Administrador */}
+          {/* 2. Usuário Administrador */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500">
@@ -187,18 +284,37 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
                 label="Nome do Administrador"
                 placeholder="Ex: Carlos Eduardo Silva"
                 value={adminName}
-                onChange={(e) => setAdminName(e.target.value)}
+                onChange={(e) => {
+                  setIsAdminNameManuallyEdited(true)
+                  setAdminName(e.target.value)
+                }}
+                autoComplete="off"
                 required
               />
 
-              <Input
-                label="E-mail de Login do Administrador"
-                type="email"
-                placeholder="carlos@empresa.com"
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                required
-              />
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
+                    E-mail de Login do Administrador
+                  </label>
+                  {adminEmail && !isEmailManuallyEdited && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                      <Sparkles className="h-3 w-3" /> Puxado automaticamente
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="email"
+                  placeholder="admin@empresa.com"
+                  value={adminEmail}
+                  onChange={(e) => {
+                    setIsEmailManuallyEdited(true)
+                    setAdminEmail(e.target.value)
+                  }}
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
@@ -210,6 +326,7 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     placeholder="Mínimo 6 caracteres"
+                    autoComplete="new-password"
                     className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 pr-10 text-sm text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
                     required
                   />
@@ -228,67 +345,12 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
             </div>
           </div>
 
-          {/* Módulos e Páginas Liberadas */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500">
-                3. Páginas e Módulos Liberados
-              </h3>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleSelectAllModules}
-                  className="text-xs text-blue-600 hover:underline dark:text-blue-400 font-semibold"
-                >
-                  Marcar Todos
-                </button>
-                <span className="text-gray-300 dark:text-slate-700">|</span>
-                <button
-                  type="button"
-                  onClick={handleDeselectAllModules}
-                  className="text-xs text-gray-500 hover:underline dark:text-slate-400"
-                >
-                  Desmarcar Todos
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {ALL_PLATFORM_DASHBOARD_MODULES.map((m) => {
-                const isSelected = selectedModules.includes(m.code)
-                return (
-                  <label
-                    key={m.code}
-                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'border-blue-500/80 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/30'
-                        : 'border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800/40 opacity-75'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleModule(m.code)}
-                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-gray-900 dark:text-white">
-                          {m.name}
-                        </span>
-                        <span className="text-[10px] font-mono text-gray-400 dark:text-slate-500">
-                          ({m.code})
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
-                        {m.description}
-                      </p>
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-          </div>
+          {/* 3. Módulos e Páginas Liberadas com Filtros Específicos */}
+          <CompanyModulesSelector
+            selectedCodes={selectedModules}
+            onChange={setSelectedModules}
+            disabled={isLoading}
+          />
 
           {/* Footer Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
@@ -304,4 +366,3 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
     </div>
   )
 }
-

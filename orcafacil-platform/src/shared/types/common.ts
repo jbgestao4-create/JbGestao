@@ -15,7 +15,7 @@ export type CustomerType = 'individual' | 'company'
 /** Código único e estável de um módulo da plataforma */
 export type ModuleCode = 'orcafacil' | 'agendapro' | 'estoqueleve'
 
-/** Cartões da página inicial que podem ser liberados individualmente para operadores */
+/** Cartões e sub-recursos da plataforma que podem ser liberados individualmente */
 export type DashboardModuleCode =
   | 'MOD-01'
   | 'MOD-02'
@@ -27,6 +27,7 @@ export type DashboardModuleCode =
   | 'MOD-08'
   | 'MOD-09'
   | 'MOD-10'
+  | (string & {})
 
 /** Perfil do usuário autenticado */
 export interface UserProfile {
@@ -43,6 +44,7 @@ export interface Organization {
   name: string
   slug: string
   isActive?: boolean
+  trialEndsAt?: string | null
   createdAt: string
 }
 

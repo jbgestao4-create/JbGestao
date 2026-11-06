@@ -6,11 +6,16 @@ import { Loader2 } from 'lucide-react'
 
 interface RequireDashboardModuleProps {
   moduleCode: DashboardModuleCode
+  subFeatureCode?: string
   children: ReactNode
 }
 
-export function RequireDashboardModule({ moduleCode, children }: RequireDashboardModuleProps) {
-  const { canAccessDashboardModule, isLoading } = useModuleAccess()
+export function RequireDashboardModule({
+  moduleCode,
+  subFeatureCode,
+  children,
+}: RequireDashboardModuleProps) {
+  const { canAccessDashboardModule, canAccessSubFeature, isLoading } = useModuleAccess()
 
   if (isLoading) {
     return (
@@ -21,6 +26,26 @@ export function RequireDashboardModule({ moduleCode, children }: RequireDashboar
     )
   }
   if (!canAccessDashboardModule(moduleCode)) return <Navigate to="/" replace />
+
+  if (subFeatureCode && !canAccessSubFeature(subFeatureCode)) {
+    const fallbackPath =
+      moduleCode === 'MOD-01'
+        ? '/orcafacil/sales'
+        : moduleCode === 'MOD-02'
+          ? '/orcafacil/inventory'
+          : moduleCode === 'MOD-03'
+            ? '/orcafacil/customers'
+            : moduleCode === 'MOD-04'
+              ? '/orcafacil/quotes'
+              : moduleCode === 'MOD-06'
+                ? '/orcafacil/suppliers'
+                : moduleCode === 'MOD-09'
+                  ? '/services'
+                  : moduleCode === 'MOD-10'
+                    ? '/service-orders'
+                    : '/'
+    return <Navigate to={fallbackPath} replace />
+  }
 
   return <>{children}</>
 }

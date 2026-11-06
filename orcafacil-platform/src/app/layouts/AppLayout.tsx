@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
@@ -29,7 +30,7 @@ import {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, profile, signOut } = useAuth()
-  const { currentOrganization, organizations, userRole, setCurrentOrganization } =
+  const { currentOrganization, organizations, setCurrentOrganization } =
     useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const location = useLocation()
@@ -247,7 +248,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   </span>
                 )}
                 <div className="mt-1 space-y-0.5">
-                  {userRole === 'owner' &&
+                  {isSystemOwner(user) &&
                     navItem(
                       '/admin/companies',
                       'Empresas Cadastradas',

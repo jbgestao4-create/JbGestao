@@ -1,9 +1,11 @@
-import { useEffect, useState, type SyntheticEvent } from 'react'
+import { useEffect, useMemo, useState, type SyntheticEvent } from 'react'
 import { useOrganization } from '../context/OrganizationContext'
 import { organizationService } from '../services/organization.service'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { DASHBOARD_MODULES } from '@modules/access-control/services/module-access.service'
+import { companyManagementService } from '@modules/companies/services/company-management.service'
 import { useAuth } from '@modules/auth/context/AuthContext'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Badge } from '@shared/components/ui/Badge'
 import { Button } from '@shared/components/ui/Button'
@@ -17,6 +19,8 @@ import {
   Trash2,
   Sliders,
   Pencil,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -25,6 +29,7 @@ import type {
   Organization,
   OrganizationRole,
   ServiceResult,
+  UUID,
 } from '@shared/types/common'
 
 function InventoryLevelSelector({
@@ -130,15 +135,52 @@ function InventoryLevelSelector({
 export function OrganizationSettingsPage() {
   const { currentOrganization, userRole, organizations, setCurrentOrganization } = useOrganization()
   const { user } = useAuth()
-  const { refreshAccess } = useModuleAccess()
+  const { refreshAccess, orgAllowedDashboardModules, canAccessDashboardModule } = useModuleAccess()
   const [members, setMembers] = useState<OrganizationMemberDetail[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [manageableOrganizations, setManageableOrganizations] = useState<Organization[]>([])
   const [isLoadingManageableOrganizations, setIsLoadingManageableOrganizations] = useState(true)
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
+
+  // Módulos liberados para a empresa ativa ou selecionada
+  const [selectedOrgModules, setSelectedOrgModules] = useState<DashboardModuleCode[]>([])
+
+  useEffect(() => {
+    const orgId = selectedOrganizationId || currentOrganization?.id
+    if (!orgId) return
+    let isCurrent = true
+    void companyManagementService.getCompanyModules(orgId).then((modules) => {
+      if (isCurrent) {
+        setSelectedOrgModules(modules)
+      }
+    })
+    return () => {
+      isCurrent = false
+    }
+  }, [selectedOrganizationId, currentOrganization?.id])
+
+  // Lista dos módulos liberados estritamente para a empresa pelo Proprietário
+  const companyModules = useMemo(() => {
+    const allowed =
+      selectedOrgModules.length > 0
+        ? selectedOrgModules
+        : orgAllowedDashboardModules.length > 0
+          ? orgAllowedDashboardModules
+          : []
+
+    if (allowed.length > 0) {
+      return DASHBOARD_MODULES.filter((mod) => allowed.includes(mod.code))
+    }
+
+    if (!isSystemOwner(user)) {
+      return DASHBOARD_MODULES.filter((mod) => canAccessDashboardModule(mod.code))
+    }
+
+    return DASHBOARD_MODULES
+  }, [selectedOrgModules, orgAllowedDashboardModules, user, canAccessDashboardModule])
 
   // Modal de cadastro de novo funcionário
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
   const [name, setName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [email, setEmail] = useState('')
@@ -163,7 +205,15 @@ export function OrganizationSettingsPage() {
   const [isSavingMember, setIsSavingMember] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState<OrganizationMemberDetail | null>(null)
 
-  const canManageMembers = userRole === 'owner' || userRole === 'admin'
+  const canManageMembers = userRole === 'owner' || userRole === 'admin' || isSystemOwner(user)
+
+  const effectiveManageableOrgs = useMemo(() => {
+    if (manageableOrganizations.length > 0) return manageableOrganizations
+    if (currentOrganization && canManageMembers) return [currentOrganization]
+    if (organizations.length > 0 && canManageMembers) return organizations
+    return []
+  }, [manageableOrganizations, currentOrganization, organizations, canManageMembers])
+
   useEffect(() => {
     let cancelled = false
     const userId = user?.id
@@ -199,8 +249,8 @@ export function OrganizationSettingsPage() {
     }
   }, [organizations, user?.id])
 
-  const canEditModulePermissions = userRole === 'owner' || userRole === 'admin'
-  const canEditOperationalMemberModules = userRole === 'owner' || userRole === 'admin'
+  const canEditModulePermissions = userRole === 'owner' || userRole === 'admin' || isSystemOwner(user)
+  const canEditOperationalMemberModules = userRole === 'owner' || userRole === 'admin' || isSystemOwner(user)
 
   const loadMembers = async () => {
     if (!currentOrganization) return
@@ -216,6 +266,44 @@ export function OrganizationSettingsPage() {
     void loadMembers()
   }, [currentOrganization])
 
+  // Oculta o Proprietário e exibe exclusivamente o administrador logado e os funcionários cadastrados
+  const visibleMembers = useMemo(() => {
+    return members.filter((member) => {
+      // 1. Oculta sempre o Proprietário do sistema
+      if (member.role === 'owner' || isSystemOwner(member.email)) {
+        return false
+      }
+
+      // 2. Sempre exibe os funcionários cadastrados (membros operacionais)
+      if (member.role === 'member') {
+        return true
+      }
+
+      // 3. Exibe o administrador logado
+      if (member.role === 'admin') {
+        const isCurrentAdmin =
+          member.userId === user?.id ||
+          (!!user?.email && member.email?.toLowerCase() === user?.email?.toLowerCase())
+
+        if (isCurrentAdmin) {
+          return true
+        }
+
+        // Se o usuário logado não for este admin (ex: Proprietário mestre visualizando a tela da empresa), exibe o admin da empresa
+        const hasCurrentAdminInList = members.some(
+          (m) =>
+            m.role === 'admin' &&
+            (m.userId === user?.id ||
+              (!!user?.email && m.email?.toLowerCase() === user?.email?.toLowerCase())),
+        )
+
+        return !hasCurrentAdminInList
+      }
+
+      return false
+    })
+  }, [members, user?.id, user?.email])
+
   const handleToggleDashboardModule = (modCode: DashboardModuleCode) => {
     setSelectedDashboardModules((prev) =>
       prev.includes(modCode) ? prev.filter((code) => code !== modCode) : [...prev, modCode],
@@ -228,12 +316,38 @@ export function OrganizationSettingsPage() {
     )
   }
 
+  const isAllAddModulesSelected =
+    companyModules.length > 0 &&
+    companyModules.every((mod) => selectedDashboardModules.includes(mod.code))
+
+  const handleToggleSelectAllAddModules = () => {
+    if (isAllAddModulesSelected) {
+      setSelectedDashboardModules([])
+    } else {
+      setSelectedDashboardModules(companyModules.map((m) => m.code))
+    }
+  }
+
+  const isAllEditModulesSelected =
+    companyModules.length > 0 &&
+    companyModules.every((mod) => editDashboardModules.includes(mod.code))
+
+  const handleToggleSelectAllEditModules = () => {
+    if (isAllEditModulesSelected) {
+      setEditDashboardModules([])
+    } else {
+      setEditDashboardModules(companyModules.map((m) => m.code))
+    }
+  }
+
   const handleOpenAddModal = () => {
-    if (manageableOrganizations.length === 0) return
+    const orgs = effectiveManageableOrgs
+    if (orgs.length === 0) return
 
     const initialOrganizationId =
-      manageableOrganizations.find((organization) => organization.id === currentOrganization?.id)
-        ?.id ?? manageableOrganizations[0].id
+      orgs.find((organization) => organization.id === currentOrganization?.id)?.id ?? orgs[0].id
+
+    void companyManagementService.getCompanyModules(initialOrganizationId).then(setSelectedOrgModules)
 
     setName('')
     setJobTitle('')
@@ -249,9 +363,9 @@ export function OrganizationSettingsPage() {
 
   const handleAddMember = async (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const targetOrganization = manageableOrganizations.find(
-      (organization) => organization.id === selectedOrganizationId,
-    )
+    const targetOrganization =
+      effectiveManageableOrgs.find((organization) => organization.id === selectedOrganizationId) ||
+      (currentOrganization?.id === selectedOrganizationId ? currentOrganization : null)
     if (!targetOrganization) {
       setFormError('Selecione uma organização que você administra.')
       return
@@ -293,6 +407,27 @@ export function OrganizationSettingsPage() {
 
     if (res.success) {
       setIsAddModalOpen(false)
+
+      // Atualização otimista imediata na interface
+      const newMember: OrganizationMemberDetail = {
+        userId: ((res.data as any)?.userId || `member-${Date.now()}`) as UUID,
+        organizationId: targetOrganization.id,
+        role: 'member',
+        displayName: name.trim(),
+        email: email.trim().toLowerCase(),
+        jobTitle: jobTitle.trim() || null,
+        modules: [],
+        dashboardModules: selectedDashboardModules,
+        inventoryAccessLevel: selectedDashboardModules.includes('MOD-02') ? addInventoryLevel : 3,
+        createdAt: new Date().toISOString(),
+      }
+      setMembers((prev) => {
+        const filtered = prev.filter(
+          (m) => m.email.toLowerCase() !== newMember.email.toLowerCase(),
+        )
+        return [...filtered, newMember]
+      })
+
       if (targetOrganization.id !== currentOrganization?.id) {
         setCurrentOrganization(targetOrganization)
       } else {
@@ -307,6 +442,9 @@ export function OrganizationSettingsPage() {
 
   const handleOpenEditModal = (member: OrganizationMemberDetail) => {
     if (!canEditOperationalMemberModules || member.role !== 'member') return
+    if (currentOrganization?.id) {
+      void companyManagementService.getCompanyModules(currentOrganization.id).then(setSelectedOrgModules)
+    }
     setEditingMember(member)
     setEditDashboardModules(member.dashboardModules ?? [])
     setEditInventoryLevel(member.inventoryAccessLevel ?? 3)
@@ -458,7 +596,7 @@ export function OrganizationSettingsPage() {
             <Button
               size="sm"
               onClick={handleOpenAddModal}
-              disabled={isLoadingManageableOrganizations || manageableOrganizations.length === 0}
+              disabled={effectiveManageableOrgs.length === 0}
               className="shrink-0 gap-1.5"
             >
               <UserPlus className="w-4 h-4" /> Cadastrar Funcionário
@@ -469,16 +607,19 @@ export function OrganizationSettingsPage() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-sm text-gray-500">Carregando membros...</div>
-          ) : members.length === 0 ? (
+          ) : visibleMembers.length === 0 ? (
             <div className="text-center py-12 text-sm text-gray-500">
               <User className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-              Nenhum membro cadastrado.
+              Nenhum membro ou funcionário cadastrado.
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {members.map((member) => {
+              {visibleMembers.map((member) => {
                 const isOwner = member.role === 'owner'
                 const isAdmin = member.role === 'admin'
+                const isCurrentUser =
+                  member.userId === user?.id ||
+                  (!!user?.email && member.email?.toLowerCase() === user?.email?.toLowerCase())
 
                 return (
                   <div
@@ -502,6 +643,11 @@ export function OrganizationSettingsPage() {
                                 ? 'Administrador'
                                 : 'Membro Operacional'}
                           </Badge>
+                          {isCurrentUser && (
+                            <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                              Você
+                            </span>
+                          )}
                         </div>
                         <span className="text-xs text-gray-500 block truncate">{member.email}</span>
                         {member.jobTitle && (
@@ -546,7 +692,7 @@ export function OrganizationSettingsPage() {
                     </div>
 
                     {/* AÇÕES DE GESTÃO */}
-                    {canManageMembers && !isOwner && (
+                    {canManageMembers && !isOwner && !isCurrentUser && (
                       <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                         {canEditOperationalMemberModules && member.role === 'member' && (
                           <Button
@@ -621,24 +767,24 @@ export function OrganizationSettingsPage() {
                   id="employee-organization"
                   label="Organização"
                   placeholder={
-                    isLoadingManageableOrganizations
+                    isLoadingManageableOrganizations && effectiveManageableOrgs.length === 0
                       ? 'Carregando...'
-                      : manageableOrganizations.length === 0
+                      : effectiveManageableOrgs.length === 0
                         ? 'Nenhuma organização disponível'
                         : 'Selecione uma organização...'
                   }
                   searchPlaceholder="Buscar organização..."
                   value={selectedOrganizationId}
                   onChange={(val) => {
-                    setSelectedOrganizationId(val as string)
+                    const nextOrgId = val as string
+                    setSelectedOrganizationId(nextOrgId)
+                    void companyManagementService.getCompanyModules(nextOrgId).then(setSelectedOrgModules)
                     setSelectedDashboardModules([])
                     setAddInventoryLevel(3)
                     setFormError('')
                   }}
-                  disabled={
-                    isLoadingManageableOrganizations || manageableOrganizations.length === 0
-                  }
-                  options={manageableOrganizations.map((o) => ({
+                  disabled={effectiveManageableOrgs.length <= 1}
+                  options={effectiveManageableOrgs.map((o) => ({
                     value: o.id,
                     label: o.name,
                   }))}
@@ -689,124 +835,101 @@ export function OrganizationSettingsPage() {
                 required
               />
 
-              {/* SELEÇÃO DO PAPEL */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-                  Papel na Organização
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label
-                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                      role === 'member'
-                        ? 'border-blue-600 bg-blue-50/50 ring-1 ring-blue-600'
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="role"
-                      value="member"
-                      checked={role === 'member'}
-                      onChange={() => setRole('member')}
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-gray-900">
-                        Membro Operacional
-                      </span>
-                      <span className="text-[11px] text-gray-500 leading-tight block">
-                        Acesso estrito apenas aos módulos liberados abaixo.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                      role === 'admin'
-                        ? 'border-blue-600 bg-blue-50/50 ring-1 ring-blue-600'
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="role"
-                      value="admin"
-                      checked={role === 'admin'}
-                      onChange={() => setRole('admin')}
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-gray-900">Administrador</span>
-                      <span className="text-[11px] text-gray-500 leading-tight block">
-                        Acesso total aos módulos e gestão da equipe.
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {role === 'member' && canEditModulePermissions ? (
+              {canEditModulePermissions ? (
                 <div className="pt-2">
                   <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-                    Permissões de Módulos
+                    Permissões de Módulos do Funcionário
                   </label>
                   <p className="text-[11px] text-gray-500 mb-3">
                     Marque os módulos que este funcionário poderá visualizar e operar:
                   </p>
 
                   <div className="space-y-2.5">
-                    {DASHBOARD_MODULES.map((mod) => {
-                      const isSelected = selectedDashboardModules.includes(mod.code)
+                    {companyModules.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-300 p-4 text-center text-xs text-gray-500">
+                        Nenhum módulo ativo foi liberado para esta empresa pelo Proprietário.
+                      </div>
+                    ) : (
+                      companyModules.map((mod) => {
+                        const isSelected = selectedDashboardModules.includes(mod.code)
 
-                      return (
-                        <div
-                          key={mod.code}
-                          className={`rounded-xl border transition-all ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-50/40 shadow-xs'
-                              : 'border-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                          <label className="flex items-center justify-between p-3 cursor-pointer">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
-                                {mod.code}
+                        return (
+                          <div
+                            key={mod.code}
+                            className={`rounded-xl border transition-all ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-50/40 shadow-xs'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <label className="flex items-center justify-between p-3 cursor-pointer">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
+                                  {mod.code}
+                                </div>
+                                <div>
+                                  <span className="text-xs font-bold text-gray-900 block">
+                                    {mod.name}
+                                  </span>
+                                  <span className="text-[11px] text-gray-500 block leading-tight">
+                                    {mod.description}
+                                  </span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-xs font-bold text-gray-900 block">
-                                  {mod.name}
-                                </span>
-                                <span className="text-[11px] text-gray-500 block leading-tight">
-                                  {mod.description}
-                                </span>
-                              </div>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleDashboardModule(mod.code)}
-                              aria-label={`Acesso ao módulo ${mod.name}`}
-                              className="h-5 w-5 shrink-0 accent-blue-600"
-                            />
-                          </label>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleDashboardModule(mod.code)}
+                                aria-label={`Acesso ao módulo ${mod.name}`}
+                                className="h-5 w-5 shrink-0 accent-blue-600"
+                              />
+                            </label>
 
-                          {mod.code === 'MOD-02' && isSelected && (
-                            <InventoryLevelSelector
-                              value={addInventoryLevel}
-                              onChange={setAddInventoryLevel}
-                              namePrefix="add-employee"
-                            />
-                          )}
-                        </div>
-                      )
-                    })}
+                            {mod.code === 'MOD-02' && isSelected && (
+                              <InventoryLevelSelector
+                                value={addInventoryLevel}
+                                onChange={setAddInventoryLevel}
+                                namePrefix="add-employee"
+                              />
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
+
+                  {companyModules.length > 0 && (
+                    <div className="flex items-center justify-between pt-2.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleToggleSelectAllAddModules}
+                        className="text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                      >
+                        {isAllAddModulesSelected ? (
+                          <>
+                            <Square className="w-3.5 h-3.5 text-gray-500" />
+                            Desmarcar Todos os Módulos
+                          </>
+                        ) : (
+                          <>
+                            <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                            Marcar Todos os Módulos
+                          </>
+                        )}
+                      </Button>
+                      <span className="text-[11px] text-gray-500">
+                        {selectedDashboardModules.length} de {companyModules.length} selecionados
+                      </span>
+                    </div>
+                  )}
                 </div>
-              ) : role === 'member' ? (
+              ) : (
                 <p className="text-xs text-gray-500">
                   Não é possível definir permissões de módulos para este funcionário.
                 </p>
-              ) : null}
+              )}
 
               <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
                 <Button
@@ -822,7 +945,7 @@ export function OrganizationSettingsPage() {
                   isLoading={isSubmitting}
                   disabled={
                     isSubmitting ||
-                    isLoadingManageableOrganizations ||
+                    !selectedOrganizationId ||
                     (role === 'member' &&
                       canEditModulePermissions &&
                       selectedDashboardModules.length === 0)
@@ -922,50 +1045,83 @@ export function OrganizationSettingsPage() {
             </p>
 
             <div className="space-y-2.5 mb-6">
-              {DASHBOARD_MODULES.map((mod) => {
-                const isSelected = editDashboardModules.includes(mod.code)
+              {companyModules.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 p-4 text-center text-xs text-gray-500">
+                  Nenhum módulo ativo foi liberado para esta empresa pelo Proprietário.
+                </div>
+              ) : (
+                companyModules.map((mod) => {
+                  const isSelected = editDashboardModules.includes(mod.code)
 
-                return (
-                  <div
-                    key={mod.code}
-                    className={`rounded-xl border transition-all ${
-                      isSelected
-                        ? 'border-blue-500 bg-blue-50/40 shadow-xs'
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <label className="flex items-center justify-between p-3 cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
-                          {mod.code}
+                  return (
+                    <div
+                      key={mod.code}
+                      className={`rounded-xl border transition-all ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50/40 shadow-xs'
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <label className="flex items-center justify-between p-3 cursor-pointer">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 text-[10px] font-bold shadow-xs">
+                            {mod.code}
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-gray-900 block">{mod.name}</span>
+                            <span className="text-[11px] text-gray-500 block leading-tight">
+                              {mod.description}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-xs font-bold text-gray-900 block">{mod.name}</span>
-                          <span className="text-[11px] text-gray-500 block leading-tight">
-                            {mod.description}
-                          </span>
-                        </div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleEditModule(mod.code)}
-                        aria-label={`Acesso ao módulo ${mod.name}`}
-                        className="h-5 w-5 shrink-0 accent-blue-600"
-                      />
-                    </label>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleEditModule(mod.code)}
+                          aria-label={`Acesso ao módulo ${mod.name}`}
+                          className="h-5 w-5 shrink-0 accent-blue-600"
+                        />
+                      </label>
 
-                    {mod.code === 'MOD-02' && isSelected && (
-                      <InventoryLevelSelector
-                        value={editInventoryLevel}
-                        onChange={setEditInventoryLevel}
-                        namePrefix="edit-employee"
-                      />
-                    )}
-                  </div>
-                )
-              })}
+                      {mod.code === 'MOD-02' && isSelected && (
+                        <InventoryLevelSelector
+                          value={editInventoryLevel}
+                          onChange={setEditInventoryLevel}
+                          namePrefix="edit-employee"
+                        />
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </div>
+
+            {companyModules.length > 0 && (
+              <div className="flex items-center justify-between pt-1 mb-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleSelectAllEditModules}
+                  className="text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                >
+                  {isAllEditModulesSelected ? (
+                    <>
+                      <Square className="w-3.5 h-3.5 text-gray-500" />
+                      Desmarcar Todos os Módulos
+                    </>
+                  ) : (
+                    <>
+                      <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                      Marcar Todos os Módulos
+                    </>
+                  )}
+                </Button>
+                <span className="text-[11px] text-gray-500">
+                  {editDashboardModules.length} de {companyModules.length} selecionados
+                </span>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
               <Button
