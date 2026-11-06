@@ -26,11 +26,16 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   const loadRole = async (orgId: UUID, userId: UUID) => {
+    if (isSystemOwner(user)) {
+      setUserRole('owner')
+      return
+    }
+
     const role = await organizationService.getUserRole(orgId, userId)
     if (role) {
       setUserRole(role)
     } else {
-      setUserRole(isSystemOwner(user) ? 'owner' : 'admin')
+      setUserRole('admin')
     }
   }
 
