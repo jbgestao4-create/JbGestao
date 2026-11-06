@@ -71,7 +71,7 @@ function EditCompanyForm({
   const [notes, setNotes] = useState(company.notes || '')
   const [isActive, setIsActive] = useState<boolean>(company.isActive)
 
-  // Período de teste
+  // Período de acesso
   const [isUnlimitedTrial, setIsUnlimitedTrial] = useState<boolean>(!company.trialEndsAt)
   const [trialDateStr, setTrialDateStr] = useState<string>(() => {
     if (company.trialEndsAt) {
@@ -377,18 +377,18 @@ function EditCompanyForm({
             </div>
           </div>
 
-          {/* Período de Teste */}
+          {/* Gestão de acesso */}
           <div className="rounded-xl border border-amber-200/80 bg-amber-50/30 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
-                <Clock className="h-4 w-4" /> Período de Teste
+                <Clock className="h-4 w-4" /> Gestão de acesso
               </h3>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleExpireNow}
                   className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline"
-                  title="Configura para ontem para suspender o teste imediatamente"
+                  title="Configura para ontem para suspender o acesso imediatamente"
                 >
                   Suspender agora
                 </button>
@@ -408,7 +408,7 @@ function EditCompanyForm({
                     className="text-amber-600 focus:ring-amber-500"
                   />
                   <label htmlFor="edit_trial_limited" className="text-xs font-bold text-gray-800 dark:text-slate-200 cursor-pointer">
-                    Data de Expiração do Teste
+                    Data de expiração do acesso
                   </label>
                 </div>
                 {!isUnlimitedTrial && (
@@ -442,26 +442,39 @@ function EditCompanyForm({
               </div>
             </div>
 
-            {/* Botões rápidos de adição */}
-            {!isUnlimitedTrial && (
-              <div>
-                <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400 block mb-1.5">
-                  Atalhos rápidos para adicionar dias:
-                </span>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {[7, 15, 30, 60, 90].map((days) => (
-                    <button
-                      key={days}
-                      type="button"
-                      onClick={() => handleAddDays(days)}
-                      className="rounded-lg border border-amber-200 bg-amber-50/60 py-1 text-center text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
-                    >
-                      +{days}d
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Plano mensal e atalhos de duração */}
+            <div>
+              <button
+                type="button"
+                onClick={() => handleAddDays(30)}
+                disabled={isLoading}
+                className="mb-2 w-full rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-left text-xs font-bold text-amber-900 hover:bg-amber-200 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200 dark:hover:bg-amber-900/60"
+              >
+                Plano mensal — liberar por 30 dias
+              </button>
+              <p className="mb-3 text-[11px] text-gray-500 dark:text-slate-400">
+                O acesso vence na data definida. A renovação e a cobrança não são automáticas.
+              </p>
+              {!isUnlimitedTrial && (
+                <>
+                  <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400 block mb-1.5">
+                    Outros períodos de acesso:
+                  </span>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[7, 15, 30, 60, 90].map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => handleAddDays(days)}
+                        className="rounded-lg border border-amber-200 bg-amber-50/60 py-1 text-center text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
+                      >
+                        +{days}d
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* 2. Plano de Acesso */}

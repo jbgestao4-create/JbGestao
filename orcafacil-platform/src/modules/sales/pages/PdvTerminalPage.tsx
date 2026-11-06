@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import { customerService, type Customer } from '@modules/customers/services/customer.service'
 import { inventoryService } from '@modules/inventory/services/inventory.service'
 import { cashSessionService } from '@modules/cash/services/cash-session.service'
@@ -81,6 +82,7 @@ interface CartItem {
 export function PdvTerminalPage() {
   const { user, profile } = useAuth()
   const { currentOrganization } = useOrganization()
+  const canManagePdvRegisters = isSystemOwner(user)
   const navigate = useNavigate()
 
   // Sessão de Caixa e Seleção de Terminal PDV
@@ -400,6 +402,7 @@ export function PdvTerminalPage() {
   }
 
   const handleCreateInlineRegister = async () => {
+    if (!canManagePdvRegisters) return
     if (!currentOrganization) return
     const trimmed = inlineNewRegisterName.trim()
     if (!trimmed) {
@@ -1867,19 +1870,21 @@ export function PdvTerminalPage() {
                   <label className="block text-xs font-medium text-slate-400">
                     Terminal / Caixa PDV
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowInlineNewRegister((prev) => !prev)
-                      setOpenSessionError(null)
-                    }}
-                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer"
-                  >
-                    {showInlineNewRegister ? 'Cancelar novo caixa' : '+ Cadastrar novo caixa'}
-                  </button>
+                  {canManagePdvRegisters && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInlineNewRegister((prev) => !prev)
+                        setOpenSessionError(null)
+                      }}
+                      className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer"
+                    >
+                      {showInlineNewRegister ? 'Cancelar novo caixa' : '+ Cadastrar novo caixa'}
+                    </button>
+                  )}
                 </div>
 
-                {showInlineNewRegister ? (
+                {showInlineNewRegister && canManagePdvRegisters ? (
                   <div className="mt-1.5 flex gap-2">
                     <input
                       type="text"

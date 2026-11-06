@@ -8,6 +8,7 @@ import { useModuleAccess } from '@modules/access-control/context/ModuleAccessCon
 import { cashSessionService } from '@modules/cash/services/cash-session.service'
 import type { CashRegister, CashSession } from '@modules/cash/domain/cash-session'
 import { formatCurrencyInput, parseCurrencyInput } from '@shared/utils/monetary'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import {
   AlertTriangle,
   Barcode,
@@ -28,6 +29,7 @@ export function SalesHomePage() {
   const { user, profile } = useAuth()
   const { currentOrganization } = useOrganization()
   const { canAccessSubFeature } = useModuleAccess()
+  const canManagePdvRegisters = isSystemOwner(user)
 
   const canAccessQuickSale = canAccessSubFeature('MOD-01_QUICK_SALE')
   const canAccessPdv = canAccessSubFeature('MOD-01_PDV')
@@ -96,6 +98,7 @@ export function SalesHomePage() {
 
   const handleCreateRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canManagePdvRegisters) return
     if (!currentOrganization) return
 
     setRegisterModalError(null)
@@ -282,22 +285,24 @@ export function SalesHomePage() {
                         </span>
                         <ChevronRight className="h-4 w-4" aria-hidden="true" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setRegisterModalError(null)
-                          setRegisterModalSuccess(null)
-                          setShowRegistersModal(true)
-                        }}
-                        className="w-full justify-between rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Store className="h-4 w-4 text-emerald-600" aria-hidden="true" />
-                          Cadastrar Caixa PDV
-                        </span>
-                        <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                      </Button>
+                      {canManagePdvRegisters && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setRegisterModalError(null)
+                            setRegisterModalSuccess(null)
+                            setShowRegistersModal(true)
+                          }}
+                          className="w-full justify-between rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <Store className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                            Cadastrar Caixa PDV
+                          </span>
+                          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -543,7 +548,7 @@ export function SalesHomePage() {
       {/* ============================================================== */}
       {/* MODAL DE CADASTRO E GERENCIAMENTO DE CAIXAS PDV                */}
       {/* ============================================================== */}
-      {showRegistersModal && (
+      {showRegistersModal && canManagePdvRegisters && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-gray-100 dark:border-slate-800 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-3">
