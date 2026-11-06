@@ -839,6 +839,25 @@ export const organizationService = {
     }
   },
 
+  async resetMemberPassword(orgId: UUID, userId: UUID): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.rpc('reset_organization_member_password', {
+        p_org_id: orgId,
+        p_user_id: userId,
+      })
+
+      if (error) {
+        logger.error('Erro ao redefinir senha do membro da organização', error)
+        return { success: false, error: error.message || 'Não foi possível redefinir a senha.' }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao redefinir senha do membro da organização', err)
+      return { success: false, error: 'Erro inesperado ao redefinir a senha.' }
+    }
+  },
+
   /**
    * Atualiza as permissões de módulos de um membro.
    */

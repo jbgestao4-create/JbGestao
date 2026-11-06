@@ -50,6 +50,12 @@ export function LoginPage() {
     const res = await signIn({ email, password })
 
     if (res.success) {
+      if (res.data.user.app_metadata.must_change_password === true) {
+        navigate('/profile', { replace: true })
+        setIsLoading(false)
+        return
+      }
+
       const isOwner = isSystemOwner({ email })
 
       // Se não for o Proprietário do Sistema, valida se a empresa está desativada ou com teste expirado

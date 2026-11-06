@@ -67,6 +67,22 @@ export const authService = {
     }
   },
 
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const { data, error } = await supabase.auth.getUser()
+      if (error) {
+        logger.warn('Não foi possível atualizar os dados do usuário autenticado', {
+          message: error.message,
+        })
+        return null
+      }
+      return data.user
+    } catch (err) {
+      logger.error('Erro ao atualizar os dados do usuário autenticado', err)
+      return null
+    }
+  },
+
   /**
    * Realiza login com e-mail e senha.
    * Mensagens genéricas para evitar enumeração de contas.
@@ -97,6 +113,43 @@ export const authService = {
         return { success: false, error: AUTH_CONNECTION_ERROR }
       }
       return { success: false, error: 'Ocorreu um erro inesperado ao realizar login.' }
+    }
+  },
+
+  async completeForcedPasswordChange(newPassword: string): Promise<ServiceResult<void>> {
+    if (newPassword.length < 8) {
+      return { success: false, error: 'A senha deve ter pelo menos 8 caracteres.' }
+    }
+    if (newPassword === '12345678') {
+      return {
+        success: false,
+        error: 'A nova senha não pode ser igual à senha temporária 12345678.',
+      }
+    }
+
+    try {
+      const { error } = await supabase.rpc('complete_forced_password_change', {
+        p_new_password: newPassword,
+      })
+
+      if (error) {
+        logger.error('Erro ao concluir a troca obrigatória de senha', error)
+        return { success: false, error: 'Não foi possível atualizar a senha.' }
+      }
+
+      const { error: refreshError } = await supabase.auth.refreshSession()
+      if (refreshError) {
+        logger.error('Senha alterada, mas não foi possível atualizar a sessão', refreshError)
+        return {
+          success: false,
+          error: 'A senha foi alterada, mas não foi possível atualizar a sessão. Entre novamente.',
+        }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Erro ao concluir a troca obrigatória de senha', err)
+      return { success: false, error: 'Erro interno ao atualizar a senha.' }
     }
   },
 

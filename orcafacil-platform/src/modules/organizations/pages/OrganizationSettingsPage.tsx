@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   User,
   UserPlus,
+  KeyRound,
   Trash2,
   Sliders,
   Pencil,
@@ -204,8 +205,12 @@ export function OrganizationSettingsPage() {
   const [editMemberError, setEditMemberError] = useState('')
   const [isSavingMember, setIsSavingMember] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState<OrganizationMemberDetail | null>(null)
+  const [memberToResetPassword, setMemberToResetPassword] =
+    useState<OrganizationMemberDetail | null>(null)
+  const [memberPasswordResetMessage, setMemberPasswordResetMessage] = useState('')
 
   const canManageMembers = userRole === 'owner' || userRole === 'admin' || isSystemOwner(user)
+  const canResetMemberPassword = userRole === 'admin'
 
   const effectiveManageableOrgs = useMemo(() => {
     if (manageableOrganizations.length > 0) return manageableOrganizations
@@ -536,6 +541,26 @@ export function OrganizationSettingsPage() {
     return res
   }
 
+  const handleResetMemberPassword = async (): Promise<ServiceResult<void>> => {
+    if (!currentOrganization || !memberToResetPassword) {
+      return { success: false, error: 'Não foi possível identificar o membro.' }
+    }
+
+    const res = await organizationService.resetMemberPassword(
+      currentOrganization.id,
+      memberToResetPassword.userId,
+    )
+
+    if (res.success) {
+      setMemberPasswordResetMessage(
+        `Senha de ${memberToResetPassword.displayName || memberToResetPassword.email} redefinida para 12345678. No próximo acesso, será obrigatório criar uma nova senha.`,
+      )
+      setMemberToResetPassword(null)
+    }
+
+    return res
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
@@ -605,6 +630,21 @@ export function OrganizationSettingsPage() {
         </CardHeader>
 
         <CardContent className="p-0">
+          {memberPasswordResetMessage && (
+            <div
+              role="status"
+              className="m-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+            >
+              {memberPasswordResetMessage}
+              <button
+                type="button"
+                onClick={() => setMemberPasswordResetMessage('')}
+                className="ml-2 font-semibold underline"
+              >
+                Dispensar
+              </button>
+            </div>
+          )}
           {isLoading ? (
             <div className="p-8 text-center text-sm text-gray-500">Carregando membros...</div>
           ) : visibleMembers.length === 0 ? (
@@ -694,6 +734,18 @@ export function OrganizationSettingsPage() {
                     {/* AÇÕES DE GESTÃO */}
                     {canManageMembers && !isOwner && !isCurrentUser && (
                       <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                        {canResetMemberPassword && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setMemberToResetPassword(member)}
+                            className="h-8 text-xs gap-1.5 whitespace-nowrap text-amber-700 hover:text-amber-800 hover:border-amber-300"
+                            title={`Redefinir senha de ${member.displayName || member.email}`}
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            Redefinir senha
+                          </Button>
+                        )}
                         {canEditOperationalMemberModules && member.role === 'member' && (
                           <Button
                             variant="outline"
@@ -1146,6 +1198,14 @@ export function OrganizationSettingsPage() {
         confirmLabel="Sim, remover"
         onCancel={() => setMemberToRemove(null)}
         onConfirm={handleRemoveMember}
+      />
+      <ConfirmActionDialog
+        open={memberToResetPassword !== null}
+        title="Redefinir senha do membro"
+        description={`Deseja redefinir a senha de ${memberToResetPassword?.displayName || memberToResetPassword?.email || 'este membro'} para 12345678? No próximo login, será obrigatório criar uma nova senha antes de acessar o sistema.`}
+        confirmLabel="Sim, redefinir senha"
+        onCancel={() => setMemberToResetPassword(null)}
+        onConfirm={handleResetMemberPassword}
       />
     </div>
   )

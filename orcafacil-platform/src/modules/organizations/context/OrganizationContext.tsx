@@ -1,7 +1,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { organizationService } from '../services/organization.service'
 import { useAuth } from '@modules/auth/context/AuthContext'
-import { isSystemOwner } from '@shared/utils/system-owner'
+import {
+  isSystemOwner,
+  SYSTEM_OWNER_TEST_ORGANIZATION_SLUG,
+} from '@shared/utils/system-owner'
 import type { Organization, OrganizationRole, ServiceResult, UUID } from '@shared/types/common'
 
 interface OrganizationContextType {
@@ -67,13 +70,19 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
       if (orgs.length > 0) {
         const savedId = localStorage.getItem(ACTIVE_ORG_STORAGE_KEY)
-        let active = orgs.find((o) => o.id === savedId)
+        const savedOrganization = orgs.find((o) => o.id === savedId)
+        const ownerTestOrganization = isSystemOwner(user)
+          ? orgs.find((o) => o.slug === SYSTEM_OWNER_TEST_ORGANIZATION_SLUG)
+          : undefined
+        let active =
+          ownerTestOrganization && savedOrganization?.slug !== ownerTestOrganization.slug
+            ? ownerTestOrganization
+            : savedOrganization
 
-        // Se o ID salvo não existir na lista ou não houver nada salvo:
+        // Proprietários iniciam no ambiente de testes; demais usuários mantêm a organização salva.
         if (!active) {
-          // Se for o Proprietário do Sistema, prioriza a organização principal 'Bryan adm'
           const bryanOrg = orgs.find((o) => o.name.toLowerCase().includes('bryan'))
-          active = bryanOrg ?? orgs[0]
+          active = ownerTestOrganization ?? bryanOrg ?? orgs[0]
         }
 
         setCurrentOrganizationState((prev) =>

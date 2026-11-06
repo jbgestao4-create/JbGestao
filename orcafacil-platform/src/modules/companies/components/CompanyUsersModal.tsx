@@ -46,10 +46,6 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
 
   // Redefinição de senha
   const [selectedUserForPassword, setSelectedUserForPassword] = useState<CompanyUserItem | null>(null)
-  const [newPassword, setNewPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isSavingPassword, setIsSavingPassword] = useState(false)
-  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
   // Cadastro de novo usuário nesta organização
@@ -81,8 +77,6 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
       setSearchTerm('')
       setSelectedUserForPassword(null)
       setConfirmDeleteUser(null)
-      setNewPassword('')
-      setPasswordError(null)
       setSuccessMsg(null)
       setIsAddUserOpen(false)
       setNewUserName('')
@@ -202,45 +196,33 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
 
   const handleStartPasswordReset = (user: CompanyUserItem) => {
     setSelectedUserForPassword(user)
-    setNewPassword('')
-    setShowPassword(false)
-    setPasswordError(null)
   }
 
   const handleCancelPasswordReset = () => {
     setSelectedUserForPassword(null)
-    setNewPassword('')
-    setPasswordError(null)
   }
 
-  const handleSavePassword = async () => {
-    if (!selectedUserForPassword) return
-    const cleanPw = newPassword.trim()
-    if (cleanPw.length < 6) {
-      setPasswordError('A nova senha deve ter no mínimo 6 caracteres.')
-      return
+  const handleConfirmPasswordReset = async (): Promise<ServiceResult<void>> => {
+    if (!selectedUserForPassword || !company) {
+      return { success: false, error: 'Selecione um usuário para redefinir a senha.' }
     }
-
-    setIsSavingPassword(true)
-    setPasswordError(null)
 
     const res = await companyManagementService.resetCompanyUserPassword(
       company.id,
       selectedUserForPassword.userId,
-      cleanPw,
+      '12345678',
       selectedUserForPassword.email,
     )
 
-    setIsSavingPassword(false)
-
     if (res.success) {
-      setSuccessMsg(`Senha do usuário "${selectedUserForPassword.displayName}" redefinida com sucesso!`)
+      setSuccessMsg(
+        `Senha redefinida para 12345678. Informe a senha temporária ao usuário; ele deverá criar uma nova no próximo acesso.`,
+      )
       setSelectedUserForPassword(null)
-      setNewPassword('')
       setTimeout(() => setSuccessMsg(null), 4000)
-    } else {
-      setPasswordError(res.error)
     }
+
+    return res
   }
 
   const getRoleBadge = (role: string) => {
@@ -321,78 +303,6 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
             <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-semibold text-rose-800 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
               <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
               <span>{error}</span>
-            </div>
-          )}
-
-          {/* Painel de Redefinição de Senha do Usuário Selecionado */}
-          {selectedUserForPassword && (
-            <div className="rounded-2xl border-2 border-blue-400 bg-blue-50/50 p-4 dark:border-blue-700 dark:bg-blue-950/30 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <KeyRound className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300">
-                    Redefinir Senha do Usuário
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCancelPasswordReset}
-                  className="text-xs text-gray-500 hover:text-gray-700 dark:text-slate-400"
-                >
-                  Cancelar
-                </button>
-              </div>
-
-              <div className="text-xs text-gray-600 dark:text-slate-300">
-                Usuário: <strong className="text-gray-900 dark:text-white">{selectedUserForPassword.displayName}</strong> ({selectedUserForPassword.email})
-              </div>
-
-              {passwordError && (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs font-medium text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-300">
-                  {passwordError}
-                </div>
-              )}
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Digite a nova senha (mínimo 6 caracteres)"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    autoComplete="new-password"
-                    className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 pr-10 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
-                    title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => void handleSavePassword()}
-                    disabled={isSavingPassword || newPassword.trim().length < 6}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
-                  >
-                    {isSavingPassword ? 'Salvando...' : 'Salvar Nova Senha'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCancelPasswordReset}
-                    disabled={isSavingPassword}
-                    className="text-xs"
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
             </div>
           )}
 
@@ -601,14 +511,10 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                     {filteredUsers.map((u) => {
-                      const isTargetReset = selectedUserForPassword?.userId === u.userId
-
                       return (
                         <tr
                           key={u.userId}
-                          className={`transition-colors hover:bg-gray-50/60 dark:hover:bg-slate-800/40 ${
-                            isTargetReset ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''
-                          }`}
+                          className="transition-colors hover:bg-gray-50/60 dark:hover:bg-slate-800/40"
                         >
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5">
@@ -652,7 +558,7 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
                                 title={`Redefinir senha de ${u.displayName}`}
                               >
                                 <KeyRound className="h-3.5 w-3.5" />
-                                Editar Senha
+                                Redefinir senha
                               </Button>
                               <Button
                                 size="sm"
@@ -695,7 +601,14 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
         onCancel={() => setConfirmDeleteUser(null)}
         onConfirm={handleConfirmDeleteUser}
       />
+      <ConfirmActionDialog
+        open={Boolean(selectedUserForPassword)}
+        title="Redefinir senha do usuário"
+        description={`Deseja realmente redefinir a senha de "${selectedUserForPassword?.displayName || ''}" (${selectedUserForPassword?.email || ''}) para 12345678? No próximo acesso, o usuário deverá criar uma nova senha.`}
+        confirmLabel="Sim, redefinir senha"
+        onCancel={handleCancelPasswordReset}
+        onConfirm={handleConfirmPasswordReset}
+      />
     </div>
   )
 }
-

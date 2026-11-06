@@ -317,7 +317,7 @@ BEGIN
   IF p_modules IS NOT NULL AND cardinality(p_modules) > 0 THEN
     FOREACH mod_code IN ARRAY p_modules LOOP
       INSERT INTO public.organization_dashboard_modules (organization_id, module_code)
-      VALUES (new_org_id, mod_code::dashboard_module_code)
+      VALUES (new_org_id, mod_code)
       ON CONFLICT DO NOTHING;
     END LOOP;
   END IF;

@@ -13,7 +13,15 @@ const FONT_SIZE_OPTIONS: { value: FontSizePreference; label: string; sample: str
 ]
 
 export function ProfilePage() {
-  const { user, profile, fontSizePreference, setFontSizePreference, refreshProfile } = useAuth()
+  const {
+    user,
+    profile,
+    mustChangePassword,
+    fontSizePreference,
+    setFontSizePreference,
+    refreshProfile,
+    refreshUser,
+  } = useAuth()
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarMessage, setAvatarMessage] = useState('')
   const [avatarError, setAvatarError] = useState('')
@@ -53,15 +61,25 @@ export function ProfilePage() {
       return
     }
 
+    if (mustChangePassword && newPassword === '12345678') {
+      setError('A nova senha não pode ser igual à senha temporária 12345678.')
+      return
+    }
+
     if (newPassword !== confirmPassword) {
       setError('As senhas não coincidem.')
       return
     }
 
     setIsLoading(true)
-    const res = await authService.updatePassword(newPassword)
+    const res = mustChangePassword
+      ? await authService.completeForcedPasswordChange(newPassword)
+      : await authService.updatePassword(newPassword)
 
     if (res.success) {
+      if (mustChangePassword) {
+        await refreshUser()
+      }
       setMessage('Senha atualizada com sucesso!')
       setNewPassword('')
       setConfirmPassword('')
@@ -70,6 +88,59 @@ export function ProfilePage() {
     }
 
     setIsLoading(false)
+  }
+
+  if (mustChangePassword) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-lg items-center">
+        <Card className="w-full border-amber-300">
+          <CardHeader>
+            <div className="min-w-0 flex-1 space-y-2">
+              <h1 className="text-xl font-bold text-gray-900">Crie uma nova senha</h1>
+              <p className="text-sm text-gray-600">
+                Sua senha foi redefinida. Para continuar usando o sistema, substitua a senha
+                temporária por uma senha pessoal com pelo menos 8 caracteres.
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {error && (
+              <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-xs text-red-700">
+                {error}
+              </div>
+            )}
+            <form
+              onSubmit={(event) => {
+                void handleUpdatePassword(event)
+              }}
+              className="space-y-4"
+            >
+              <Input
+                label="Nova senha"
+                type="password"
+                placeholder="Mínimo de 8 caracteres"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.currentTarget.value)}
+                required
+              />
+              <Input
+                label="Confirmar nova senha"
+                type="password"
+                placeholder="Digite novamente a nova senha"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.currentTarget.value)}
+                required
+              />
+              <Button type="submit" isLoading={isLoading} className="w-full">
+                Salvar nova senha e continuar
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

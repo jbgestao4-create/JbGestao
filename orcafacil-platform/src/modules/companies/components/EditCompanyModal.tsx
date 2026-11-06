@@ -14,6 +14,7 @@ import {
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { formatCNPJ } from '@shared/utils/cnpj'
+import { SYSTEM_OWNER_TEST_ORGANIZATION_SLUG } from '@shared/utils/system-owner'
 import {
   companyManagementService,
   normalizeCompanyModules,
@@ -47,7 +48,7 @@ export function EditCompanyModal({
       company={company}
       onClose={onClose}
       onSuccess={onSuccess}
-      onDelete={onDelete}
+      onDelete={company.slug === SYSTEM_OWNER_TEST_ORGANIZATION_SLUG ? undefined : onDelete}
     />
   )
 }

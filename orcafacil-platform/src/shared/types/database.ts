@@ -486,6 +486,19 @@ export interface Database {
         }
         Returns: boolean
       }
+      complete_forced_password_change: {
+        Args: {
+          p_new_password: string
+        }
+        Returns: Json
+      }
+      reset_organization_member_password: {
+        Args: {
+          p_org_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       update_quote_with_items: {
         Args: {
           p_organization_id: string

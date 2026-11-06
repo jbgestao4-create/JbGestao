@@ -18,6 +18,7 @@ function isFontSizePreference(value: string | null): value is FontSizePreference
 
 interface AuthContextType {
   user: User | null
+  mustChangePassword: boolean
   profile: UserProfile | null
   session: Session | null
   isLoading: boolean
@@ -29,6 +30,7 @@ interface AuthContextType {
   ) => Promise<ServiceResult<{ user: User | null; session: Session | null }>>
   signOut: () => Promise<ServiceResult<void>>
   refreshProfile: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -59,10 +61,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // 1. Carrega sessão inicial
     void authService.getSession().then(async (initialSession) => {
-      setSession(initialSession)
-      setUser(initialSession?.user ?? null)
-      if (initialSession?.user) {
-        await loadProfile(initialSession.user)
+      if (initialSession) {
+        const currentUser = await authService.getCurrentUser()
+        if (currentUser) {
+          setSession({ ...initialSession, user: currentUser })
+          setUser(currentUser)
+          await loadProfile(currentUser)
+        } else {
+          setSession(null)
+          setUser(null)
+        }
+      } else {
+        setSession(null)
+        setUser(null)
       }
       setIsLoading(false)
     })
@@ -74,7 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession)
       const nextUser = newSession?.user ?? null
       setUser((prevUser) => {
-        if (prevUser?.id && nextUser?.id && prevUser.id === nextUser.id) {
+        if (
+          prevUser?.id &&
+          nextUser?.id &&
+          prevUser.id === nextUser.id &&
+          event !== 'TOKEN_REFRESHED' &&
+          event !== 'USER_UPDATED'
+        ) {
           return prevUser
         }
         return nextUser
@@ -120,6 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const refreshUser = async () => {
+    const currentUser = await authService.getCurrentUser()
+    if (currentUser) {
+      setUser(currentUser)
+    }
+  }
+
   const handleSignIn = async (params: SignInParams) => {
     const res = await authService.signIn(params)
     if (res.success) {
@@ -148,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        mustChangePassword: user?.app_metadata?.must_change_password === true,
         profile,
         session,
         isLoading,
@@ -157,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp: handleSignUp,
         signOut: handleSignOut,
         refreshProfile,
+        refreshUser,
       }}
     >
       {children}

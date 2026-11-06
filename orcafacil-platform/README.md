@@ -73,13 +73,26 @@ VITE_SUPABASE_ANON_KEY=sua-chave-anon-publica
 
 ### 3. Aplicar Migrações no Banco de Dados
 
-Com a Supabase CLI conectada ao projeto:
+Conecte a Supabase CLI ao projeto hospedado uma vez:
 
 ```bash
-npx supabase db push
+npx supabase login
+npx supabase link --project-ref seu-project-ref
 ```
 
-_(Ou execute o script `supabase/migrations/00001_initial_schema.sql` no SQL Editor do Supabase)._
+Para conferir quais migrações serão aplicadas no Supabase hospedado:
+
+```bash
+npm run db:push:dry-run
+```
+
+Para aplicar as migrações locais ao Supabase hospedado:
+
+```bash
+npm run db:push
+```
+
+O comando do projeto sempre usa `--remote`. O `npx supabase db push` sem essa opção tem como destino padrão o banco local.
 
 ### 4. Iniciar Servidor de Desenvolvimento
 

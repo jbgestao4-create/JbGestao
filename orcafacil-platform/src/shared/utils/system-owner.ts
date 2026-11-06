@@ -19,6 +19,8 @@ export const SYSTEM_OWNER_EMAILS = [
   'bryanmendes968@gmail.com',
 ]
 
+export const SYSTEM_OWNER_TEST_ORGANIZATION_SLUG = 'ambiente-testes-proprietario'
+
 export function isSystemOwner(
   userOrEmail?:
     | {
@@ -62,4 +64,3 @@ export function isSystemOwner(
 
   return false
 }
-

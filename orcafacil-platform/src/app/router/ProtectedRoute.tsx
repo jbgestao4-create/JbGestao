@@ -16,7 +16,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteProps) {
-  const { user, isLoading, signOut } = useAuth()
+  const { user, isLoading, signOut, mustChangePassword } = useAuth()
   const { currentOrganization } = useOrganization()
   const navigate = useNavigate()
   const { setInsideSystem } = useTheme()
@@ -44,6 +44,10 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  if (mustChangePassword && location.pathname !== '/profile') {
+    return <Navigate to="/profile" replace />
   }
 
   const isOwner = isSystemOwner(user)

@@ -5,6 +5,14 @@ import {
 } from './company-management.service'
 import { supabase } from '@app/config/supabase'
 
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
+    auth: {
+      signUp: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
+    },
+  })),
+}))
+
 vi.mock('@app/config/supabase', () => ({
   supabase: {
     rpc: vi.fn(),
@@ -205,10 +213,16 @@ describe('companyManagementService', () => {
       adminName: 'Roberto Silva',
       adminEmail: 'roberto@silva.com',
       adminPassword: 'senha-forte-123',
-      modules: ['MOD-01', 'MOD-02', 'MOD-09', 'MOD-10'],
+      modules: ['MOD-01', 'MOD-01_QUICK_SALE', 'MOD-02', 'MOD-09', 'MOD-10'],
     })
 
     expect(res.success).toBe(true)
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'admin_register_company_with_admin',
+      expect.objectContaining({
+        p_modules: ['MOD-01', 'MOD-01_QUICK_SALE', 'MOD-02', 'MOD-09', 'MOD-10'],
+      }),
+    )
     if (res.success) {
       expect(res.data.organizationId).toBe('new-org-uuid')
       expect(res.data.slug).toBe('mecanica-silva')
