@@ -36,16 +36,38 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
     window.print()
   }
 
-  const formattedDate = new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'medium',
+  const fullYearDate = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
   }).format(new Date(sale.createdAt))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-xs">
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="sale-receipt-overlay fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-xs print:bg-white print:p-0">
+      <style>{`
+        @media print {
+          @page { margin: 4mm; }
+          body * { visibility: hidden !important; }
+          .sale-receipt-print, .sale-receipt-print * { visibility: visible !important; }
+          .sale-receipt-print {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 80mm !important;
+            max-width: 80mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            box-shadow: none !important;
+          }
+        }
+      `}</style>
+      <div className="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl bg-white shadow-2xl print:max-h-none print:max-w-none print:rounded-none print:shadow-none">
         {/* Header do Modal */}
-        <div className="flex items-center justify-between border-b border-gray-100 p-4">
+        <div className="flex items-center justify-between border-b border-gray-100 p-4 print:hidden">
           <div className="flex items-center gap-2">
             <div className="rounded-lg bg-emerald-50 p-1.5 text-emerald-600">
               <CheckCircle2 className="h-5 w-5" />
@@ -65,16 +87,16 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
         </div>
 
         {/* Conteúdo do Comprovante (Formato Térmico / Cupom) */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 print:overflow-visible print:p-0">
           <div
             ref={receiptRef}
-            className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-5 font-mono text-xs text-gray-800 space-y-4 print:border-none print:bg-white print:p-0 print:text-black"
+            className="sale-receipt-print mx-auto space-y-4 rounded-xl border border-dashed border-gray-300 bg-white p-5 font-mono text-xs text-gray-800 print:space-y-3 print:border-none print:bg-white print:p-0 print:text-black"
           >
             {/* Cabeçalho do Cupom */}
             <div className="text-center border-b border-gray-200 pb-3">
               <p className="font-bold text-sm tracking-wider uppercase">JB SOFTWARE GESTÃO</p>
               <p className="text-[11px] text-gray-500 mt-0.5">COMPROVANTE DE VENDA NÃO FISCAL</p>
-              <p className="text-[10px] text-gray-400 mt-1">{formattedDate}</p>
+              <p className="text-[10px] text-gray-400 mt-1">{fullYearDate}</p>
               <p className="text-xs font-semibold text-gray-900 mt-1">Pedido: {sale.saleNumber}</p>
               {(sale.sellerName || sale.operatorName) && (
                 <p className="text-[10px] text-gray-600 mt-0.5">
@@ -108,15 +130,15 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
 
             {/* Tabela de Itens */}
             <div className="border-b border-gray-200 pb-3">
-              <div className="flex justify-between font-bold text-[11px] border-b border-gray-200 pb-1 mb-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 font-bold text-[10px] border-b border-gray-200 pb-1 mb-1">
                 <span>ITEM</span>
-                <span>QTD x VL</span>
-                <span>TOTAL</span>
+                <span className="text-right">QTD X VL</span>
+                <span className="min-w-[4.5rem] text-right">TOTAL</span>
               </div>
               <div className="space-y-1.5 text-[11px]">
                 {sale.items.map((it, idx) => (
-                  <div key={it.id} className="flex justify-between items-start gap-1">
-                    <div className="min-w-0 flex-1 truncate">
+                  <div key={it.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-2">
+                    <div className="min-w-0 truncate">
                       <span className="text-gray-400 mr-1">{idx + 1}.</span>
                       <span className="font-medium text-gray-900">{it.description}</span>
                       {it.itemType === 'service' && (
@@ -125,10 +147,10 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
                         </span>
                       )}
                     </div>
-                    <div className="shrink-0 text-right text-gray-600">
+                    <div className="whitespace-nowrap text-right text-gray-600">
                       {it.quantity} {it.unit} x {formatCurrency(it.unitPrice)}
                     </div>
-                    <div className="shrink-0 text-right font-semibold text-gray-900 min-w-16">
+                    <div className="min-w-[4.5rem] whitespace-nowrap text-right font-semibold text-gray-900">
                       {formatCurrency(it.total)}
                     </div>
                   </div>
@@ -160,7 +182,7 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
                   <span>- {formatCurrency(sale.discount)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm font-bold text-gray-900 border-t border-gray-200 pt-1.5">
+              <div className="flex justify-between border-t border-gray-200 pt-1.5 text-sm font-bold text-gray-900">
                 <span>TOTAL PAGO:</span>
                 <span className="text-base text-blue-700">{formatCurrency(sale.total)}</span>
               </div>
@@ -199,7 +221,7 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
         </div>
 
         {/* Rodapé com Ações */}
-        <div className="border-t border-gray-100 p-4 bg-gray-50 flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50 p-4 print:hidden">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
             [Esc] Fechar
           </Button>
@@ -212,4 +234,3 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
     </div>
   )
 }
-

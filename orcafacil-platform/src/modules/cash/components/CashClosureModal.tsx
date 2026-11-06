@@ -53,6 +53,7 @@ export function CashClosureModal({
   const [closureReason, setClosureReason] = useState<string>('');
   const [showPrintReport, setShowPrintReport] = useState<boolean>(false);
   const [lastReconciliation, setLastReconciliation] = useState<FullSessionReconciliation | null>(null);
+  const [closedAt, setClosedAt] = useState<Date | null>(null);
 
   if (!isOpen) return null;
 
@@ -95,6 +96,7 @@ export function CashClosureModal({
       countedDebitCard: countedDebit,
       closureReason: closureReason.trim() || undefined,
     });
+    setClosedAt(new Date());
     setShowPrintReport(true);
   };
 
@@ -104,9 +106,26 @@ export function CashClosureModal({
 
   if (showPrintReport && lastReconciliation) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-        <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between border-b pb-4 dark:border-zinc-800">
+      <div className="cash-closure-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 print:bg-white print:p-0">
+        <style>{`
+          @media print {
+            @page { margin: 4mm; }
+            body * { visibility: hidden !important; }
+            .cash-closure-print, .cash-closure-print * { visibility: visible !important; }
+            .cash-closure-print {
+              position: absolute !important;
+              inset: 0 auto auto 0 !important;
+              width: 80mm !important;
+              max-width: 80mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              border: 0 !important;
+              box-shadow: none !important;
+            }
+          }
+        `}</style>
+        <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 print:max-h-none print:max-w-none print:overflow-visible print:rounded-none print:border-0 print:p-0 print:shadow-none">
+          <div className="flex items-center justify-between border-b pb-4 dark:border-zinc-800 print:hidden">
             <div className="flex items-center gap-3">
               <div className="rounded-full bg-emerald-100 p-2 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
                 <CheckCircle2 className="h-6 w-6" />
@@ -128,149 +147,85 @@ export function CashClosureModal({
             </button>
           </div>
 
-          <div id="print-session-closure-report" className="mt-4 space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
-            <div className="grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-              <div>
-                <span className="text-xs text-zinc-400">Operador:</span>
-                <p className="font-semibold">{session.operatorName || session.operatorId}</p>
-              </div>
-              <div>
-                <span className="text-xs text-zinc-400">Abertura:</span>
-                <p className="font-semibold">{new Date(session.openedAt).toLocaleString('pt-BR')}</p>
-              </div>
-              <div>
-                <span className="text-xs text-zinc-400">Fechamento:</span>
-                <p className="font-semibold">{new Date().toLocaleString('pt-BR')}</p>
-              </div>
-              <div>
-                <span className="text-xs text-zinc-400">Status Geral:</span>
-                <p
-                  className={`font-semibold ${
-                    lastReconciliation.hasDiscrepancy
-                      ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-emerald-600 dark:text-emerald-400'
-                  }`}
-                >
-                  {lastReconciliation.hasDiscrepancy ? 'Fechado com Divergência' : 'Fechamento Exato'}
-                </p>
-              </div>
+          <div className="cash-closure-print mx-auto mt-4 w-full space-y-4 rounded-xl border border-dashed border-gray-300 bg-white p-5 font-mono text-xs text-gray-800 print:mt-0 print:space-y-3 print:border-0 print:p-0 print:text-black">
+            <div className="border-b border-gray-200 pb-3 text-center">
+              <p className="text-sm font-bold uppercase tracking-wider">JB SOFTWARE GESTÃO</p>
+              <p className="mt-0.5 text-[11px] text-gray-500">COMPROVANTE DE FECHAMENTO DE CAIXA</p>
+              <p className="mt-1 text-[10px] text-gray-500">
+                {new Intl.DateTimeFormat('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hourCycle: 'h23',
+                }).format(closedAt || new Date())}
+              </p>
+              <p className="mt-1 text-[10px]">Sessão: {session.id.slice(0, 8)}</p>
+              <p className="text-[10px]">Terminal: {session.registerName || session.registerId}</p>
             </div>
 
-            {/* Tabela de Conferência */}
-            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 font-semibold">
-                  <tr>
-                    <th className="p-2.5">Forma</th>
-                    <th className="p-2.5 text-right">Esperado (Sistema)</th>
-                    <th className="p-2.5 text-right">Contado (Declarado)</th>
-                    <th className="p-2.5 text-right">Diferença</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  <tr>
-                    <td className="p-2.5 font-medium flex items-center gap-1.5">
-                      <Banknote className="h-4 w-4 text-emerald-500" /> Dinheiro em Espécie
-                    </td>
-                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.money.expected)}</td>
-                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.money.counted)}</td>
-                    <td
-                      className={`p-2.5 text-right font-semibold ${
-                        lastReconciliation.money.difference < 0
-                          ? 'text-rose-600'
-                          : lastReconciliation.money.difference > 0
-                          ? 'text-blue-600'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      {formatCurrency(lastReconciliation.money.difference)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="p-2.5 font-medium flex items-center gap-1.5">
-                      <QrCode className="h-4 w-4 text-teal-500" /> PIX
-                    </td>
-                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.pix.expected)}</td>
-                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.pix.counted)}</td>
-                    <td
-                      className={`p-2.5 text-right font-semibold ${
-                        lastReconciliation.pix.difference < 0
-                          ? 'text-rose-600'
-                          : lastReconciliation.pix.difference > 0
-                          ? 'text-blue-600'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      {formatCurrency(lastReconciliation.pix.difference)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="p-2.5 font-medium flex items-center gap-1.5">
-                      <CreditCard className="h-4 w-4 text-purple-500" /> Cartão de Crédito
-                    </td>
-                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.creditCard.expected)}</td>
-                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.creditCard.counted)}</td>
-                    <td
-                      className={`p-2.5 text-right font-semibold ${
-                        lastReconciliation.creditCard.difference < 0
-                          ? 'text-rose-600'
-                          : lastReconciliation.creditCard.difference > 0
-                          ? 'text-blue-600'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      {formatCurrency(lastReconciliation.creditCard.difference)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="p-2.5 font-medium flex items-center gap-1.5">
-                      <CreditCard className="h-4 w-4 text-indigo-500" /> Cartão de Débito
-                    </td>
-                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.debitCard.expected)}</td>
-                    <td className="p-2.5 text-right font-medium">{formatCurrency(lastReconciliation.debitCard.counted)}</td>
-                    <td
-                      className={`p-2.5 text-right font-semibold ${
-                        lastReconciliation.debitCard.difference < 0
-                          ? 'text-rose-600'
-                          : lastReconciliation.debitCard.difference > 0
-                          ? 'text-blue-600'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      {formatCurrency(lastReconciliation.debitCard.difference)}
-                    </td>
-                  </tr>
-                </tbody>
-                <tfoot className="bg-zinc-50 font-bold dark:bg-zinc-800/80">
-                  <tr>
-                    <td className="p-2.5">Total Geral</td>
-                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.totals.totalExpected)}</td>
-                    <td className="p-2.5 text-right">{formatCurrency(lastReconciliation.totals.totalCounted)}</td>
-                    <td
-                      className={`p-2.5 text-right ${
-                        lastReconciliation.totals.totalDifference < 0
-                          ? 'text-rose-600'
-                          : lastReconciliation.totals.totalDifference > 0
-                          ? 'text-blue-600'
-                          : 'text-emerald-600'
-                      }`}
-                    >
-                      {formatCurrency(lastReconciliation.totals.totalDifference)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+            <div className="space-y-1.5 border-b border-gray-200 pb-3 text-[11px]">
+              <p><span className="font-semibold">Operador:</span> {session.operatorName || session.operatorId}</p>
+              <p><span className="font-semibold">Abertura:</span> {new Date(session.openedAt).toLocaleString('pt-BR')}</p>
+              <p><span className="font-semibold">Fechamento:</span> {(closedAt || new Date()).toLocaleString('pt-BR')}</p>
+              <p>
+                <span className="font-semibold">Status:</span>{' '}
+                {lastReconciliation.hasDiscrepancy ? 'Fechado com Divergência' : 'Fechamento Exato'}
+              </p>
+            </div>
+
+            <div className="space-y-3 border-b border-gray-200 pb-3">
+              {[
+                { label: 'Dinheiro em Espécie', result: lastReconciliation.money },
+                { label: 'PIX', result: lastReconciliation.pix },
+                { label: 'Cartão de Crédito', result: lastReconciliation.creditCard },
+                { label: 'Cartão de Débito', result: lastReconciliation.debitCard },
+              ].map(({ label, result }) => (
+                <div key={label} className="space-y-0.5 text-[11px]">
+                  <p className="font-bold">{label}</p>
+                  <div className="flex justify-between gap-2">
+                    <span>Esperado:</span>
+                    <span className="whitespace-nowrap">{formatCurrency(result.expected)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>Contado:</span>
+                    <span className="whitespace-nowrap">{formatCurrency(result.counted)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>Diferença:</span>
+                    <span className="whitespace-nowrap font-semibold">{formatCurrency(result.difference)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-0.5 border-b border-gray-200 pb-3 text-[11px]">
+              <p className="mb-1 font-bold">TOTAL GERAL</p>
+              <div className="flex justify-between gap-2">
+                <span>Esperado:</span>
+                <span className="whitespace-nowrap">{formatCurrency(lastReconciliation.totals.totalExpected)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>Contado:</span>
+                <span className="whitespace-nowrap">{formatCurrency(lastReconciliation.totals.totalCounted)}</span>
+              </div>
+              <div className="flex justify-between gap-2 font-bold">
+                <span>Diferença:</span>
+                <span className="whitespace-nowrap">{formatCurrency(lastReconciliation.totals.totalDifference)}</span>
+              </div>
             </div>
 
             {closureReason && (
-              <div className="rounded-xl border border-zinc-200 p-3 bg-zinc-50 dark:bg-zinc-800/50 dark:border-zinc-700">
-                <span className="text-xs font-semibold text-zinc-500">Justificativa da Divergência:</span>
-                <p className="mt-1 text-sm italic">{closureReason}</p>
+              <div className="text-[11px]">
+                <p className="font-semibold">Justificativa da Divergência:</p>
+                <p className="mt-1 whitespace-pre-wrap">{closureReason}</p>
               </div>
             )}
           </div>
 
-          <div className="mt-6 flex justify-end gap-3 border-t pt-4 dark:border-zinc-800">
+          <div className="mt-6 flex justify-end gap-3 border-t pt-4 dark:border-zinc-800 print:hidden">
             <button
               onClick={handlePrint}
               type="button"
@@ -581,4 +536,3 @@ export function CashClosureModal({
     </div>
   );
 }
-
