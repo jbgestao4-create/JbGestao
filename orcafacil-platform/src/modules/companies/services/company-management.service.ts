@@ -24,6 +24,9 @@ export interface ManagedCompany {
   address?: string
   responsible?: string
   notes?: string
+  accessPlanId?: UUID | null
+  accessPlanName?: string | null
+  accessPlanDescription?: string | null
   membersCount: number
   modules: DashboardModuleCode[]
 }
@@ -464,6 +467,9 @@ export const companyManagementService = {
               address,
               responsible,
               notes,
+              accessPlanId: row.access_plan_id ?? null,
+              accessPlanName: row.access_plan_name ?? null,
+              accessPlanDescription: row.access_plan_description ?? null,
               membersCount: Number(row.members_count) || 1,
               modules: (row.modules || []) as DashboardModuleCode[],
             }
@@ -565,6 +571,9 @@ export const companyManagementService = {
           address,
           responsible,
           notes,
+          accessPlanId: o.access_plan_id ?? null,
+          accessPlanName: o.access_plan_name ?? null,
+          accessPlanDescription: o.access_plan_description ?? null,
           membersCount: 1,
           modules,
         }

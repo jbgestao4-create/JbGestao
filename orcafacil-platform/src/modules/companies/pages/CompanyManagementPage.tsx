@@ -369,8 +369,20 @@ export function CompanyManagementPage() {
                             <Building2 className="h-5 w-5" />
                           </div>
                           <div>
-                            <div className="font-bold text-gray-900 dark:text-white">
-                              {comp.name}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {comp.name}
+                              </span>
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                  comp.accessPlanName
+                                    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/70 dark:bg-blue-950/50 dark:text-blue-300'
+                                    : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                                }`}
+                              >
+                                <Layers className="h-3 w-3" />
+                                {comp.accessPlanName ?? 'Sem plano'}
+                              </span>
                             </div>
                             <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-gray-400 dark:text-slate-500">
                               <span>Cadastrada em {new Date(comp.createdAt).toLocaleDateString('pt-BR')}</span>

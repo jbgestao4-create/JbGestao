@@ -1,4 +1,4 @@
-import { useState, type SubmitEvent } from 'react'
+import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import {
   Building2,
   Calendar,
@@ -6,6 +6,7 @@ import {
   FileText,
   Infinity,
   Lock,
+  Settings2,
   ShieldAlert,
   Trash2,
   Unlock,
@@ -20,8 +21,10 @@ import {
   normalizeCompanyModules,
   type ManagedCompany,
 } from '../services/company-management.service'
-import { CompanyModulesSelector } from './CompanyModulesSelector'
 import type { DashboardModuleCode } from '@shared/types/common'
+import { ALL_PLATFORM_DASHBOARD_MODULES } from '../services/company-management.service'
+import { accessPlanService, type AccessPlan } from '../services/access-plan.service'
+import { ManageAccessPlansModal } from './ManageAccessPlansModal'
 
 interface EditCompanyModalProps {
   company: ManagedCompany | null
@@ -90,9 +93,49 @@ function EditCompanyForm({
   const [selectedModules, setSelectedModules] = useState<DashboardModuleCode[]>(() =>
     normalizeCompanyModules(company.modules ?? []),
   )
+  const [accessPlans, setAccessPlans] = useState<AccessPlan[]>([])
+  const [selectedPlanId, setSelectedPlanId] = useState(company.accessPlanId ?? '')
+  const [isManagePlansOpen, setIsManagePlansOpen] = useState(false)
+  const [planError, setPlanError] = useState<string | null>(null)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const loadAccessPlans = useCallback(async () => {
+    const result = await accessPlanService.list()
+    if (result.success) {
+      setAccessPlans(result.data)
+      setPlanError(null)
+    } else {
+      setPlanError(result.error)
+    }
+  }, [])
+
+  useEffect(() => {
+    void Promise.resolve().then(loadAccessPlans)
+  }, [loadAccessPlans])
+
+  const assignedPlan = accessPlans.find((plan) => plan.id === selectedPlanId)
+  const assignedPlanName = assignedPlan?.name ?? company.accessPlanName
+  const assignedPlanDescription =
+    assignedPlan?.description ?? company.accessPlanDescription
+  const assignedPlanModules = selectedModules
+
+  const handleAssignPlan = async (plan: AccessPlan): Promise<boolean> => {
+    setIsLoading(true)
+    setError(null)
+    const result = await accessPlanService.assignToCompany(company.id, plan)
+    setIsLoading(false)
+    if (!result.success) {
+      setError(result.error)
+      return false
+    }
+    setSelectedPlanId(plan.id)
+    setSelectedModules(plan.modules)
+    setIsManagePlansOpen(false)
+    onSuccess()
+    return true
+  }
 
   // Adicionar dias ao período de teste
   const handleAddDays = (days: number) => {
@@ -422,12 +465,62 @@ function EditCompanyForm({
           </div>
 
           {/* 2. Plano de Acesso */}
-          <CompanyModulesSelector
-            title="2. Plano de Acesso"
-            selectedCodes={selectedModules}
-            onChange={setSelectedModules}
-            disabled={isLoading}
-          />
+          <section className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-800 dark:text-blue-300">
+                  2. Plano de Acesso
+                </h3>
+                <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white">
+                  {assignedPlanName || 'Nenhum plano definido'}
+                </p>
+                {assignedPlanDescription && (
+                  <p className="mt-1 text-xs text-gray-600 dark:text-slate-300">
+                    {assignedPlanDescription}
+                  </p>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsManagePlansOpen(true)}
+                disabled={isLoading}
+                className="shrink-0"
+              >
+                <Settings2 className="h-4 w-4" /> Gerenciar planos
+              </Button>
+            </div>
+            {planError && (
+              <p role="alert" className="mt-2 text-xs text-rose-700 dark:text-rose-300">
+                {planError}
+              </p>
+            )}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {ALL_PLATFORM_DASHBOARD_MODULES.map((module) => {
+                const enabledFeatures = module.subFeatures.filter((feature) =>
+                  assignedPlanModules.includes(feature.code),
+                )
+                const moduleEnabled =
+                  assignedPlanModules.includes(module.code) || enabledFeatures.length > 0
+                if (!moduleEnabled) return null
+                return (
+                  <div key={module.code} className="rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">{module.name}</p>
+                    <p className="mt-1 text-[11px] text-gray-600 dark:text-slate-400">
+                      {enabledFeatures.length
+                        ? enabledFeatures.map((feature) => feature.name).join(' • ')
+                        : 'Módulo liberado'}
+                    </p>
+                  </div>
+                )
+              })}
+              {assignedPlanModules.length === 0 && (
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Defina um plano para ver os acessos disponíveis para esta empresa.
+                </p>
+              )}
+            </div>
+          </section>
 
           {/* Footer Actions */}
           <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-gray-100 pt-5 dark:border-slate-800">
@@ -464,6 +557,15 @@ function EditCompanyForm({
           </div>
         </form>
       </div>
+      <ManageAccessPlansModal
+        open={isManagePlansOpen}
+        companyName={company.name}
+        assignedPlanId={selectedPlanId || null}
+        assignedModuleCodes={selectedModules}
+        onClose={() => setIsManagePlansOpen(false)}
+        onChanged={loadAccessPlans}
+        onAssign={handleAssignPlan}
+      />
     </div>
   )
 }
