@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type SyntheticEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useOrganization } from '../context/OrganizationContext'
 import { organizationService } from '../services/organization.service'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
@@ -12,6 +13,7 @@ import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
+import { SystemCustomizationSection } from '../components/SystemCustomizationSection'
 import {
   ShieldCheck,
   User,
@@ -22,6 +24,8 @@ import {
   Pencil,
   CheckSquare,
   Square,
+  Building2,
+  Palette,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -137,6 +141,18 @@ export function OrganizationSettingsPage() {
   const { currentOrganization, userRole, organizations, setCurrentOrganization } = useOrganization()
   const { user } = useAuth()
   const { refreshAccess, orgAllowedDashboardModules, canAccessDashboardModule } = useModuleAccess()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTab =
+    searchParams.get('tab') === 'customization' || searchParams.get('tab') === 'personalizacao'
+      ? 'customization'
+      : 'general'
+  const [activeTab, setActiveTab] = useState<'general' | 'customization'>(initialTab)
+
+  const handleTabChange = (tab: 'general' | 'customization') => {
+    setActiveTab(tab)
+    setSearchParams(tab === 'customization' ? { tab: 'customization' } : {})
+  }
+
   const [members, setMembers] = useState<OrganizationMemberDetail[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [manageableOrganizations, setManageableOrganizations] = useState<Organization[]>([])
@@ -564,15 +580,48 @@ export function OrganizationSettingsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
           Configurações da Organização
         </h1>
-        <p className="text-sm text-gray-500">
-          Gerenciamento da empresa, controle de funcionários e permissões de acesso
+        <p className="text-sm text-gray-500 dark:text-slate-400">
+          Gerenciamento da empresa, controle de funcionários, permissões e personalização visual
         </p>
       </div>
 
-      {/* DADOS DA ORGANIZAÇÃO */}
+      {/* OPÇÕES DO MÓDULO ORGANIZADOR */}
+      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
+        <button
+          type="button"
+          onClick={() => handleTabChange('general')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+            activeTab === 'general'
+              ? 'bg-white dark:bg-slate-800 text-[var(--theme-primary,#2563eb)] shadow-xs border border-gray-200 dark:border-slate-700'
+              : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          Dados e Funcionários
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('customization')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+            activeTab === 'customization'
+              ? 'bg-white dark:bg-slate-800 text-[var(--theme-primary,#2563eb)] shadow-xs border border-gray-200 dark:border-slate-700'
+              : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <Palette className="w-4 h-4" />
+          Personalização do Sistema
+        </button>
+      </div>
+
+      {activeTab === 'customization' ? (
+        <SystemCustomizationSection />
+      ) : (
+        <>
+          {/* DADOS DA ORGANIZAÇÃO */}
       <Card>
         <CardHeader>
           <h2 className="text-sm font-semibold text-gray-900">Dados da Empresa</h2>
@@ -788,6 +837,8 @@ export function OrganizationSettingsPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* MODAL CADASTRAR FUNCIONÁRIO */}
       {isAddModalOpen && (

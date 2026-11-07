@@ -558,12 +558,30 @@ export const salesService = {
       // Localiza sessão de caixa aberta automaticamente caso não tenha sido informada explicitamente
       let resolvedSessionId = params.sessionId
       if (!resolvedSessionId) {
-        const openSession = await cashSessionService.findBestOpenSession(
-          organizationId,
-          params.operatorId,
-        )
-        if (openSession) {
-          resolvedSessionId = openSession.id
+        if (params.isPdv !== false) {
+          const openPdv = await cashSessionService.findBestOpenSession(
+            organizationId,
+            params.operatorId,
+            'pdv',
+          )
+          if (openPdv) {
+            resolvedSessionId = openPdv.id
+          }
+        }
+        // Se for Nova Venda (não PDV) ou se não houver PDV aberto, vincula diretamente à sessão do Caixa Geral (/cash)
+        if (!resolvedSessionId) {
+          const openMgmt = await cashSessionService.getOpenCashManagementSession(organizationId)
+          if (openMgmt.success && openMgmt.data) {
+            resolvedSessionId = openMgmt.data.id
+          }
+        }
+      }
+
+      // Validação mandatória: Nova Venda e vendas no PDV exigem caixa aberto
+      if (!resolvedSessionId) {
+        return {
+          success: false,
+          error: 'Não é possível realizar uma venda com o caixa fechado. Por favor, abra o Caixa Geral.',
         }
       }
 
@@ -770,7 +788,7 @@ export const salesService = {
         logger.warn('Não foi possível registrar o recebível de caixa para a venda', cashErr)
       })
 
-      // 6. Registra automaticamente a receita na Sessão de Caixa aberta (Vendas, PDV, O.S. e Orçamentos)
+      // 6. Registra automaticamente a receita na Sessão de Caixa aberta resolvida (PDV ou Caixa Geral)
       if (resolvedSessionId) {
         await cashSessionService.recordSaleInSession(organizationId, resolvedSessionId, {
           total,
@@ -780,6 +798,22 @@ export const salesService = {
           logger.warn('Falha ao registrar venda na sessão de caixa ativa', sessionErr)
         })
       }
+
+      // 7. Sincroniza a venda com o Caixa Geral (/cash) se estiver aberto, refletindo no controle diário
+      await cashSessionService.syncSaleWithCashManagement(organizationId, {
+        total,
+        paymentMethod: params.paymentMethod,
+        amountReceived: params.amountReceived,
+        saleNumber,
+        registerName: params.isPdv !== false
+          ? cashSessionService.getSelectedRegisterName(organizationId) || 'PDV'
+          : 'Nova Venda',
+        operatorName: params.operatorName || params.sellerName,
+        operatorId: params.operatorId,
+        excludeSessionId: resolvedSessionId,
+      }).catch((syncErr) => {
+        logger.warn('Falha ao sincronizar venda com o Caixa Geral', syncErr)
+      })
 
       return {
         success: true,
@@ -865,6 +899,16 @@ export const salesService = {
     paymentMethod: PaymentMethod,
   ): Promise<ServiceResult<void>> {
     try {
+      // Validação mandatória: O caixa precisa estar aberto para faturar
+      const openMgmt = await cashSessionService.getOpenCashManagementSession(organizationId)
+      const openPdv = await cashSessionService.findBestOpenSession(organizationId, undefined, 'pdv')
+      if ((!openMgmt.success || !openMgmt.data) && !openPdv) {
+        return {
+          success: false,
+          error: 'O caixa precisa estar aberto para faturar orçamentos e pedidos. Abra o Caixa Geral ou o terminal PDV.',
+        }
+      }
+
       const { data: quote, error } = await supabase
         .from('quotes')
         .select('id, status, notes')

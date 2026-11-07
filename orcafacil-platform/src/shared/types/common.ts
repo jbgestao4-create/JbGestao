@@ -36,6 +36,7 @@ export interface UserProfile {
   avatarUrl: string | null
   email: string
   createdAt: string
+  themeColor?: string | null
 }
 
 /** Organização da qual o usuário é membro */
@@ -45,6 +46,8 @@ export interface Organization {
   slug: string
   isActive?: boolean
   trialEndsAt?: string | null
+  pdvBackgroundUrl?: string | null
+  logoUrl?: string | null
   createdAt: string
 }
 

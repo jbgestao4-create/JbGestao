@@ -45,7 +45,7 @@ export function ConfigMissingScreen({ missing }: { missing: string[] }) {
               <span>
                 Abra a página de chaves do seu projeto Supabase:{' '}
                 <a
-                  href="https://supabase.com/dashboard/project/odnjkpwfocevlfxeleef/settings/api-keys"
+                  href="https://supabase.com/dashboard/project/atxuclkplpqlczulfhpy/settings/api-keys"
                   target="_blank"
                   rel="noreferrer"
                   className="text-blue-600 font-semibold hover:underline inline-flex items-center gap-0.5"
@@ -75,7 +75,7 @@ export function ConfigMissingScreen({ missing }: { missing: string[] }) {
                 </code>
                 :
                 <pre className="mt-2 p-3 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-[11px] font-mono leading-relaxed">
-                  VITE_SUPABASE_URL=https://odnjkpwfocevlfxeleef.supabase.co{'\n'}
+                  VITE_SUPABASE_URL=https://atxuclkplpqlczulfhpy.supabase.co{'\n'}
                   VITE_SUPABASE_ANON_KEY=coloque_sua_chave_anon_aqui
                 </pre>
               </div>
@@ -84,7 +84,9 @@ export function ConfigMissingScreen({ missing }: { missing: string[] }) {
         </div>
 
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            window.location.reload()
+          }}
           className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/20"
         >
           <RefreshCw className="w-4 h-4" /> Recarregar Aplicação

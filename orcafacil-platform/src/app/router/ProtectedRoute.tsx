@@ -9,6 +9,7 @@ import { useTheme } from '@shared/context/ThemeContext'
 import { AppLayout } from '@app/layouts/AppLayout'
 import { Loader2 } from 'lucide-react'
 import { isSystemOwner } from '@shared/utils/system-owner'
+import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -135,7 +136,12 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
   }
 
   if (hideLayout) {
-    return <>{children}</>
+    return (
+      <>
+        {children}
+        <FeedbackWidget />
+      </>
+    )
   }
 
   return <AppLayout>{children}</AppLayout>

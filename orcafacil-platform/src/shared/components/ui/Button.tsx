@@ -25,10 +25,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       'inline-flex items-center justify-center font-medium transition-colors rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer'
 
     const variants = {
-      primary: 'bg-blue-600 text-white hover:bg-blue-700 focus-visible:outline-blue-600',
+      primary:
+        'bg-[var(--theme-primary,#2563eb)] text-[var(--theme-primary-text,#ffffff)] hover:bg-[var(--theme-primary-hover,#1d4ed8)] active:bg-[var(--theme-primary-active,#1e40af)] focus-visible:outline-[var(--theme-primary,#2563eb)] shadow-xs',
       secondary: 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-slate-100 hover:bg-gray-200 dark:hover:bg-slate-700 focus-visible:outline-gray-400',
       outline:
-        'border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-blue-600',
+        'border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-[var(--theme-primary,#2563eb)]',
       ghost: 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 focus-visible:outline-gray-400',
       danger: 'bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600',
     }

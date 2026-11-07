@@ -17,13 +17,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
+import { organizationService } from '@modules/organizations/services/organization.service'
+import type { ServiceResult } from '@shared/types/common'
 import {
-  organizationService,
-  saveLocalMember,
-} from '@modules/organizations/services/organization.service'
-import type { ServiceResult, UUID } from '@shared/types/common'
-import {
-  clearLocalRemovedUser,
   companyManagementService,
   type CompanyUserItem,
   type ManagedCompany,
@@ -153,21 +149,6 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
     setIsAddingUser(false)
 
     if (res.success) {
-      clearLocalRemovedUser(company.id, cleanEmail)
-      const addedUserId = ((res.data as any)?.userId || `member-${Date.now()}`) as UUID
-      saveLocalMember(company.id, {
-        userId: addedUserId,
-        organizationId: company.id,
-        role: newUserRole,
-        displayName: cleanName,
-        email: cleanEmail,
-        jobTitle: newUserJobTitle.trim() || null,
-        modules: [],
-        dashboardModules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-04'],
-        inventoryAccessLevel: 3,
-        createdAt: new Date().toISOString(),
-      })
-
       setSuccessMsg(`Usuário "${cleanName}" (${cleanEmail}) cadastrado com sucesso nesta organização!`)
       setTimeout(() => setSuccessMsg(null), 5000)
       setIsAddUserOpen(false)

@@ -11,6 +11,17 @@
     --color-brand-500: oklch(55% 0.18 250);
     --color-brand-600: oklch(48% 0.18 250);
     --color-brand-700: oklch(40% 0.18 250);
+
+    /* Tokens centralizados do tema visual do JB Software */
+    --theme-primary: #2563eb;
+    --theme-primary-hover: #1d4ed8;
+    --theme-primary-active: #1e40af;
+    --theme-primary-light: #eff6ff;
+    --theme-primary-subtle: #e6f1fa;
+    --theme-primary-border: #bfdbfe;
+    --theme-primary-text: #ffffff;
+    --theme-primary-dark-bg: rgba(30, 58, 138, 0.25);
+    --theme-primary-dark-text: #93c5fd;
   }
 
   * {
@@ -220,14 +231,14 @@ html.dark table tbody tr:hover {
   background-color: #1f2937 !important;
 }
 
-/* Cards de destaque com tons translúcidos (Blue, Emerald, Purple, Indigo, Amber, Red) */
+/* Cards de destaque com tons translúcidos (Blue / Tema, Emerald, Purple, Indigo, Amber, Red) */
 html.dark .bg-blue-50 {
-  background-color: rgba(30, 58, 138, 0.25) !important;
+  background-color: var(--theme-primary-dark-bg, rgba(30, 58, 138, 0.25)) !important;
 }
 html.dark .text-blue-700,
 html.dark .text-blue-800,
 html.dark .text-blue-900 {
-  color: #93c5fd !important;
+  color: var(--theme-primary-dark-text, #93c5fd) !important;
 }
 
 html.dark .bg-emerald-50 {

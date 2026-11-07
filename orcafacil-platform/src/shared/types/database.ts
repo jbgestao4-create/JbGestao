@@ -436,6 +436,102 @@ export interface Database {
           updated_at?: string
         }
       }
+      feedback_suggestions: {
+        Row: {
+          id: string
+          organization_id: string
+          submitted_by: string
+          submitted_by_name: string
+          organization_name: string
+          type: 'improvement' | 'feature' | 'problem' | 'criticism' | 'praise'
+          title: string
+          description: string
+          additional_info: string | null
+          module_origin: string
+          origin_route: string
+          status: 'received' | 'in_review' | 'approved' | 'in_development' | 'completed' | 'rejected'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          submitted_by?: string
+          submitted_by_name?: string
+          organization_name?: string
+          type: 'improvement' | 'feature' | 'problem' | 'criticism' | 'praise'
+          title: string
+          description: string
+          additional_info?: string | null
+          module_origin: string
+          origin_route: string
+          status?: 'received' | 'in_review' | 'approved' | 'in_development' | 'completed' | 'rejected'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: 'received' | 'in_review' | 'approved' | 'in_development' | 'completed' | 'rejected'
+          updated_at?: string
+        }
+      }
+      feedback_attachments: {
+        Row: {
+          id: string
+          organization_id: string
+          suggestion_id: string
+          uploaded_by: string
+          storage_path: string
+          original_name: string
+          mime_type: string
+          size_bytes: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          suggestion_id: string
+          uploaded_by?: string
+          storage_path: string
+          original_name: string
+          mime_type: string
+          size_bytes: number
+          created_at?: string
+        }
+        Update: never
+      }
+      feedback_history: {
+        Row: {
+          id: string
+          organization_id: string
+          suggestion_id: string
+          changed_by: string | null
+          previous_status: string | null
+          new_status: string
+          observation: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+      }
+      feedback_internal_notes: {
+        Row: {
+          id: string
+          organization_id: string
+          suggestion_id: string
+          owner_id: string
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          suggestion_id: string
+          owner_id: string
+          content: string
+          created_at?: string
+        }
+        Update: never
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -453,6 +549,19 @@ export interface Database {
           uid: string
         }
         Returns: OrganizationRole | null
+      }
+      get_unread_feedback_suggestion_count: {
+        Args: {
+          p_organization_id: string
+        }
+        Returns: number
+      }
+      mark_feedback_suggestion_read: {
+        Args: {
+          p_organization_id: string
+          p_suggestion_id: string
+        }
+        Returns: number
       }
       add_organization_member: {
         Args: {

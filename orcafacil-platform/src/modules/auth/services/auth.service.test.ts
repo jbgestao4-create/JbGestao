@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { signInWithPassword, rpc, refreshSession } = vi.hoisted(() => ({
+const { signInWithPassword, rpc, refreshSession, from } = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
   rpc: vi.fn(),
   refreshSession: vi.fn(),
+  from: vi.fn(),
 }))
 
 vi.mock('@app/config/supabase', () => ({
   supabase: {
     auth: { signInWithPassword, refreshSession },
     rpc,
+    from,
   },
 }))
 
@@ -63,5 +65,18 @@ describe('authService', () => {
       error: 'A nova senha não pode ser igual à senha temporária 12345678.',
     })
     expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('updates theme color preference in user profile', async () => {
+    const eqMock = vi.fn().mockResolvedValue({ error: null })
+    const updateMock = vi.fn().mockReturnValue({ eq: eqMock })
+    from.mockReturnValue({ update: updateMock })
+
+    const result = await authService.updateThemeColor('user-uuid', '#16a34a')
+
+    expect(result).toEqual({ success: true, data: undefined })
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(updateMock).toHaveBeenCalledWith({ theme_color: '#16a34a' })
+    expect(eqMock).toHaveBeenCalledWith('id', 'user-uuid')
   })
 })

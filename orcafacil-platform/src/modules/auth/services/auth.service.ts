@@ -327,9 +327,32 @@ export const authService = {
           : null,
         email: '',
         createdAt: data.created_at,
+        themeColor: data.theme_color ?? null,
       }
     } catch {
       return null
+    }
+  },
+
+  /**
+   * Atualiza a preferência de cor principal do tema do usuário no banco de dados.
+   */
+  async updateThemeColor(userId: UUID, themeColor: string): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ theme_color: themeColor })
+        .eq('id', userId)
+
+      if (error) {
+        logger.error('Falha ao salvar cor do tema no perfil', error)
+        return { success: false, error: 'Não foi possível salvar a cor do sistema no perfil.' }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Erro inesperado ao salvar tema', err)
+      return { success: false, error: 'Ocorreu um erro ao salvar o tema.' }
     }
   },
 

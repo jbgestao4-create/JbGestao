@@ -27,4 +27,9 @@ describe('isSystemOwner', () => {
   it('deve reconhecer metadados de is_platform_owner se presentes', () => {
     expect(isSystemOwner({ email: 'outro@dominio.com', user_metadata: { is_platform_owner: true } })).toBe(true)
   })
+
+  it('não deve conceder perfil de proprietário com base em dados locais', () => {
+    localStorage.setItem('jb_system_owners', JSON.stringify(['cliente@loja.com']))
+    expect(isSystemOwner({ email: 'cliente@loja.com' })).toBe(false)
+  })
 })

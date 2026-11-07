@@ -23,12 +23,6 @@ import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { formatPhoneNumber } from '@shared/utils/phone'
-import {
-  clearFormDraft,
-  getFormDraftKey,
-  readFormDraft,
-  writeFormDraft,
-} from '@shared/utils/form-draft'
 import { Plus, Trash2, ArrowLeft, Search, UserRoundPlus } from 'lucide-react'
 import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
 
@@ -344,46 +338,6 @@ export function QuoteFormPage() {
   const [existingQuoteStatus, setExistingQuoteStatus] = useState<QuoteStatus | null>(null)
   const [isLoadingQuote, setIsLoadingQuote] = useState(isEditing)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [draftRestoredKey, setDraftRestoredKey] = useState<string | null>(null)
-  const draftKey = currentOrganization
-    ? getFormDraftKey('quote', currentOrganization.id, quoteId)
-    : null
-
-  useEffect(() => {
-    if (!draftKey || isEditing || draftRestoredKey === draftKey || customerReturnState?.quoteDraft) return
-    const saved = readFormDraft<QuoteFormDraft>(draftKey)
-    if (saved) {
-      if (saved.selectedCustomerId !== undefined) setSelectedCustomerId(saved.selectedCustomerId)
-      if (saved.quoteDate !== undefined) setQuoteDate(saved.quoteDate)
-      if (saved.validUntil !== undefined) setValidUntil(saved.validUntil)
-      if (saved.notes !== undefined) setNotes(saved.notes)
-      if (saved.discount !== undefined) setDiscount(saved.discount)
-      if (saved.items) setItems(saved.items)
-    }
-    setDraftRestoredKey(draftKey)
-  }, [draftKey, isEditing, draftRestoredKey, customerReturnState])
-
-  useEffect(() => {
-    if (!draftKey || isEditing || draftRestoredKey !== draftKey) return
-    writeFormDraft<QuoteFormDraft>(draftKey, {
-      selectedCustomerId,
-      quoteDate,
-      validUntil,
-      notes,
-      discount,
-      items,
-    })
-  }, [
-    draftKey,
-    isEditing,
-    draftRestoredKey,
-    selectedCustomerId,
-    quoteDate,
-    validUntil,
-    notes,
-    discount,
-    items,
-  ])
 
   useEffect(() => {
     if (!currentOrganization || isOrganizationLoading) return
@@ -690,7 +644,6 @@ export function QuoteFormPage() {
       : await quoteService.createQuote(currentOrganization.id, params)
 
     if (res.success) {
-      if (draftKey) clearFormDraft(draftKey)
       const destinationStatus = quoteId && existingQuoteStatus ? existingQuoteStatus : 'draft'
       await navigate(`/orcafacil/quotes?status=${destinationStatus}`)
     } else {

@@ -1,7 +1,6 @@
 import '@/styles/globals.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { App } from '@app/App'
 import { checkEnvironment } from '@app/config/env'
 import { ConfigMissingScreen } from '@shared/components/ConfigMissingScreen'
 
@@ -11,9 +10,20 @@ if (!rootElement) {
 }
 
 const envStatus = checkEnvironment()
+const root = createRoot(rootElement)
 
-createRoot(rootElement).render(
-  <StrictMode>
-    {envStatus.isValid ? <App /> : <ConfigMissingScreen missing={envStatus.missing} />}
-  </StrictMode>,
-)
+if (!envStatus.isValid) {
+  root.render(
+    <StrictMode>
+      <ConfigMissingScreen missing={envStatus.missing} />
+    </StrictMode>,
+  )
+} else {
+  void import('@app/App').then(({ App }) => {
+    root.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+  })
+}

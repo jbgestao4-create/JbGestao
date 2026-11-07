@@ -8,12 +8,6 @@ import { Input } from '@shared/components/ui/Input'
 import { supplierService, type SupplierParams } from '../services/supplier.service'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import {
-  clearFormDraft,
-  getFormDraftKey,
-  readFormDraft,
-  writeFormDraft,
-} from '@shared/utils/form-draft'
-import {
   supplierInvoiceService,
   type SupplierInvoice,
   MAX_SUPPLIER_INVOICE_SIZE_BYTES,
@@ -81,24 +75,6 @@ export function SupplierFormPage() {
   const supplierKey =
     supplierId && currentOrganization ? `${currentOrganization.id}:${supplierId}` : null
   const isLoadingSupplier = supplierKey !== null && loadedSupplierKey !== supplierKey
-  const [draftRestoredKey, setDraftRestoredKey] = useState<string | null>(null)
-  const draftKey = currentOrganization
-    ? getFormDraftKey('supplier', currentOrganization.id, supplierId)
-    : null
-
-  useEffect(() => {
-    if (!draftKey || isEditing || draftRestoredKey === draftKey) return
-    const saved = readFormDraft<SupplierParams>(draftKey)
-    if (saved) {
-      setForm(saved)
-    }
-    setDraftRestoredKey(draftKey)
-  }, [draftKey, isEditing, draftRestoredKey])
-
-  useEffect(() => {
-    if (!draftKey || isEditing || draftRestoredKey !== draftKey) return
-    writeFormDraft(draftKey, form)
-  }, [draftKey, isEditing, draftRestoredKey, form])
 
   const loadInvoices = async () => {
     if (!currentOrganization || !supplierId) return
@@ -200,7 +176,6 @@ export function SupplierFormPage() {
       return
     }
 
-    if (draftKey) clearFormDraft(draftKey)
     void navigate('/orcafacil/suppliers/search')
   }
 

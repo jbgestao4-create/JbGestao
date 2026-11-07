@@ -17,12 +17,7 @@ import {
   formatCurrency,
 } from '@shared/utils/monetary'
 import {
-  clearFormDraft,
-  getFormDraftKey,
-  readFormDraft,
-  writeFormDraft,
-} from '@shared/utils/form-draft'
-import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   ClipboardList,
@@ -49,6 +44,7 @@ import { SaleReceiptModal } from '../components/SaleReceiptModal'
 import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
 import { serviceOrderService } from '@modules/service-orders/services/service-order.service'
 import type { ServiceOrderDetail } from '@modules/service-orders/domain/service-order'
+import { cashSessionService } from '@modules/cash/services/cash-session.service'
 
 interface CartItem {
   id: string
@@ -114,71 +110,29 @@ export function SaleFormPage() {
   const [error, setError] = useState<string | null>(null)
   const [completedSale, setCompletedSale] = useState<SaleDetail | null>(null)
   const [showReceipt, setShowReceipt] = useState(false)
-  const [draftRestoredKey, setDraftRestoredKey] = useState<string | null>(null)
-  const draftKey = currentOrganization
-    ? getFormDraftKey('sale', currentOrganization.id, quoteId || serviceOrderId || 'new')
-    : null
+  const [hasOpenCashSession, setHasOpenCashSession] = useState<boolean | null>(null)
 
-  useEffect(() => {
-    if (!draftKey || quoteId || serviceOrderId || draftRestoredKey === draftKey) return
-    const saved = readFormDraft<{
-      isConsumidorFinal?: boolean
-      selectedCustomerId?: string
-      customerName?: string
-      customerDocument?: string
-      cart?: CartItem[]
-      discount?: string
-      paymentMethod?: PaymentMethod
-      emitFiscalNow?: boolean
-      notes?: string
-    }>(draftKey)
-    if (saved) {
-      if (saved.isConsumidorFinal !== undefined) setIsConsumidorFinal(saved.isConsumidorFinal)
-      if (saved.selectedCustomerId !== undefined) setSelectedCustomerId(saved.selectedCustomerId)
-      if (saved.customerName !== undefined) setCustomerName(saved.customerName)
-      if (saved.customerDocument !== undefined) setCustomerDocument(saved.customerDocument)
-      if (saved.cart) setCart(saved.cart)
-      if (saved.discount !== undefined) setDiscount(saved.discount)
-      if (saved.paymentMethod) setPaymentMethod(saved.paymentMethod)
-      if (saved.emitFiscalNow !== undefined) setEmitFiscalNow(saved.emitFiscalNow)
-      if (saved.notes !== undefined) setNotes(saved.notes)
+  const checkCashStatus = async () => {
+    if (!currentOrganization) return false
+    try {
+      const [mgmtRes, pdvSession] = await Promise.all([
+        cashSessionService.getOpenCashManagementSession(currentOrganization.id),
+        cashSessionService.findBestOpenSession(currentOrganization.id, user?.id, 'pdv'),
+      ])
+      const isOpen = (mgmtRes.success && !!mgmtRes.data) || !!pdvSession
+      setHasOpenCashSession(isOpen)
+      return isOpen
+    } catch {
+      return false
     }
-    setDraftRestoredKey(draftKey)
-  }, [draftKey, quoteId, serviceOrderId, draftRestoredKey])
-
-  useEffect(() => {
-    if (!draftKey || quoteId || serviceOrderId || draftRestoredKey !== draftKey) return
-    writeFormDraft(draftKey, {
-      isConsumidorFinal,
-      selectedCustomerId,
-      customerName,
-      customerDocument,
-      cart,
-      discount,
-      paymentMethod,
-      emitFiscalNow,
-      notes,
-    })
-  }, [
-    draftKey,
-    quoteId,
-    serviceOrderId,
-    draftRestoredKey,
-    isConsumidorFinal,
-    selectedCustomerId,
-    customerName,
-    customerDocument,
-    cart,
-    discount,
-    paymentMethod,
-    emitFiscalNow,
-    notes,
-  ])
+  }
 
   useEffect(() => {
     if (!currentOrganization) return
 
     let active = true
+
+    void checkCashStatus()
 
     void Promise.all([
       customerService.list(currentOrganization.id),
@@ -571,6 +525,12 @@ export function SaleFormPage() {
       return
     }
 
+    const isCashOpen = await checkCashStatus()
+    if (!isCashOpen) {
+      setError('Não é possível realizar uma venda com o caixa fechado. Por favor, abra o Caixa Geral ou o terminal PDV antes de continuar.')
+      return
+    }
+
     setIsSubmitting(true)
     setError(null)
 
@@ -590,7 +550,7 @@ export function SaleFormPage() {
       discount: discount || '0.00',
       paymentMethod,
       notes,
-      isPdv: true,
+      isPdv: false,
       emitFiscalNow,
       fiscalType: 'nfce' as const,
       operatorId: user?.id,
@@ -607,7 +567,6 @@ export function SaleFormPage() {
     setIsSubmitting(false)
 
     if (res.success) {
-      if (draftKey) clearFormDraft(draftKey)
       if (originQuote?.id) {
         // Atualiza status do orçamento de 'approved' para 'completed' (concluído)
         void quoteService.updateStatus(currentOrganization.id, originQuote.id, 'completed')
@@ -668,6 +627,30 @@ export function SaleFormPage() {
           </div>
         </div>
       </div>
+
+      {/* Alerta de Caixa Fechado */}
+      {hasOpenCashSession === false && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-4 text-amber-900 dark:text-amber-200 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold">Caixa Fechado</p>
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                É obrigatório que o Caixa Geral ou o terminal PDV esteja aberto para realizar uma nova venda e baixar estoque.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => navigate('/cash')}
+            className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs"
+          >
+            Abrir Caixa Agora →
+          </Button>
+        </div>
+      )}
 
       {isLoadingQuote && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-4 text-xs font-medium text-blue-700 dark:text-blue-300 animate-pulse">
@@ -1238,11 +1221,13 @@ export function SaleFormPage() {
                 size="lg"
                 isLoading={isSubmitting}
                 onClick={() => void handleFinalizeSale()}
-                disabled={cart.length === 0}
-                className="w-full justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 text-sm shadow-md transition"
+                disabled={cart.length === 0 || hasOpenCashSession === false}
+                className="w-full justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 text-sm shadow-md transition disabled:opacity-50"
               >
                 <CheckCircle2 className="h-5 w-5 mr-2" />
-                Finalizar Venda &amp; Baixar Estoque
+                {hasOpenCashSession === false
+                  ? 'Caixa Fechado (Abra o Caixa para Vender)'
+                  : 'Finalizar Venda & Baixar Estoque'}
               </Button>
             </CardContent>
           </Card>

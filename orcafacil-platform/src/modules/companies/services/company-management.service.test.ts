@@ -23,9 +23,28 @@ vi.mock('@app/config/supabase', () => ({
   },
 }))
 
+function mockExistingOrganization() {
+  const query = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: {
+        admin_email: null,
+        admin_name: null,
+        cnpj: null,
+        address: null,
+        responsible: null,
+        notes: null,
+      },
+      error: null,
+    }),
+  }
+  vi.mocked(supabase.from).mockReturnValueOnce(query as never)
+}
+
 describe('companyManagementService', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     localStorage.clear()
   })
 
@@ -72,7 +91,7 @@ describe('companyManagementService', () => {
     }
   })
 
-  it('deve alternar o status de ativação da empresa e salvar em storage', async () => {
+  it('deve alternar o status de ativação da empresa remotamente', async () => {
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: { success: true },
       error: null,
@@ -80,7 +99,6 @@ describe('companyManagementService', () => {
 
     const res = await companyManagementService.setCompanyActive('org-123', false)
     expect(res.success).toBe(true)
-    expect(localStorage.getItem('jb_company_status_org-123')).toBe('false')
 
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: { success: true },
@@ -89,7 +107,6 @@ describe('companyManagementService', () => {
 
     const resActive = await companyManagementService.setCompanyActive('org-123', true)
     expect(resActive.success).toBe(true)
-    expect(localStorage.getItem('jb_company_status_org-123')).toBe('true')
   })
 
   it('deve atualizar os módulos permitidos da empresa', async () => {
@@ -105,11 +122,10 @@ describe('companyManagementService', () => {
     ])
 
     expect(res.success).toBe(true)
-    const stored = localStorage.getItem('jb_company_modules_org-123')
-    expect(stored).toBe(JSON.stringify(['MOD-01', 'MOD-04', 'MOD-05']))
   })
 
   it('deve atualizar o nome e o identificador da empresa pela RPC', async () => {
+    mockExistingOrganization()
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: { success: true },
       error: null,
@@ -141,7 +157,7 @@ describe('companyManagementService', () => {
     ])
   })
 
-  it('deve configurar e estender o período de teste salvando na RPC e no storage', async () => {
+  it('deve configurar e estender o período de teste pela RPC', async () => {
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: { success: true },
       error: null,
@@ -155,7 +171,6 @@ describe('companyManagementService', () => {
       p_org_id: 'org-123',
       p_trial_ends_at: trialDate,
     })
-    expect(localStorage.getItem('jb_company_trial_org-123')).toBe(trialDate)
 
     // Testar remoção de expiração (acesso ilimitado / null)
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
@@ -169,7 +184,6 @@ describe('companyManagementService', () => {
       p_org_id: 'org-123',
       p_trial_ends_at: null,
     })
-    expect(localStorage.getItem('jb_company_trial_org-123')).toBe('')
   })
 
   it('não informa sucesso nem armazena permissões quando a atualização de páginas falha', async () => {
@@ -181,10 +195,9 @@ describe('companyManagementService', () => {
     const result = await companyManagementService.updateCompanyModules('org-123', ['MOD-01'])
 
     expect(result).toEqual({ success: false, error: 'Acesso negado' })
-    expect(localStorage.getItem('jb_company_modules_org-123')).toBeNull()
   })
 
-  it('respeita a lista vazia retornada pelo banco mesmo se houver cache local antigo', async () => {
+  it('respeita a lista vazia retornada pelo banco e ignora dados locais antigos', async () => {
     localStorage.setItem('jb_company_modules_org-123', JSON.stringify(['MOD-01']))
     const query = {
       select: vi.fn().mockReturnThis(),
@@ -229,7 +242,7 @@ describe('companyManagementService', () => {
     }
   })
 
-  it('deve usar fallback se a RPC admin_register_company_with_admin não estiver no schema cache', async () => {
+  it('não cadastra uma empresa sem autenticação se a RPC não estiver instalada', async () => {
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: null,
       error: {
@@ -239,13 +252,7 @@ describe('companyManagementService', () => {
     } as any)
 
     vi.mocked(supabase.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'current-owner-id', email: 'owner@jb.com' } },
-      error: null,
-    } as any)
-
-    // Mock create_organization_with_owner fallback
-    vi.mocked(supabase.rpc).mockResolvedValueOnce({
-      data: 'fallback-org-uuid',
+      data: { user: null },
       error: null,
     } as any)
 
@@ -258,11 +265,7 @@ describe('companyManagementService', () => {
       modules: ['MOD-01', 'MOD-03'],
     })
 
-    expect(res.success).toBe(true)
-    if (res.success) {
-      expect(res.data.organizationId).toBe('fallback-org-uuid')
-      expect(res.data.slug).toBe('empresa-fallback')
-    }
+    expect(res).toEqual({ success: false, error: 'Usuário não autenticado.' })
   })
 
   it('deve excluir a empresa através da RPC com motivo', async () => {
@@ -271,9 +274,6 @@ describe('companyManagementService', () => {
       error: null,
     } as any)
 
-    localStorage.setItem('jb_company_modules_org-del-1', JSON.stringify(['MOD-01']))
-    localStorage.setItem('jb_company_status_org-del-1', 'active')
-
     const res = await companyManagementService.deleteCompany('org-del-1', 'Encerramento de contrato')
 
     expect(res.success).toBe(true)
@@ -281,8 +281,6 @@ describe('companyManagementService', () => {
       p_org_id: 'org-del-1',
       p_reason: 'Encerramento de contrato',
     })
-    expect(localStorage.getItem('jb_company_modules_org-del-1')).toBeNull()
-    expect(localStorage.getItem('jb_company_status_org-del-1')).toBeNull()
   })
 
   it('deve usar fallback direto na tabela caso a RPC de exclusão retorne erro de schema cache', async () => {
@@ -319,7 +317,8 @@ describe('companyManagementService', () => {
     expect(codes).toContain('MOD-10')
   })
 
-  it('deve atualizar e persistir os campos estendidos (cnpj, endereco, responsavel, observacoes)', async () => {
+  it('deve atualizar os campos estendidos remotamente (cnpj, endereco, responsavel, observacoes)', async () => {
+    mockExistingOrganization()
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: { success: true },
       error: null,
@@ -356,17 +355,10 @@ describe('companyManagementService', () => {
       },
     ])
 
-    const storedRaw = localStorage.getItem('jb_company_details_org-extended-1')
-    expect(storedRaw).not.toBeNull()
-    const stored = JSON.parse(storedRaw!)
-    expect(stored.cnpj).toBe('12.345.678/0001-90')
-    expect(stored.responsible).toBe('José Carlos')
-    expect(stored.address).toBe('Rua das Flores, 123, Bairro Centro')
-    expect(stored.notes).toBe('Cliente especial da rede')
-    expect(stored.adminEmail).toBe('jose@vip.com')
   })
 
   it('deve permitir cadastrar e redefinir a senha do administrador da organização no editar empresa', async () => {
+    mockExistingOrganization()
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: { success: true },
       error: null,
@@ -460,6 +452,7 @@ describe('companyManagementService', () => {
   })
 
   it('deve permitir cadastrar e redefinir a senha do administrador da organização no editar empresa', async () => {
+    mockExistingOrganization()
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: { success: true },
       error: null,

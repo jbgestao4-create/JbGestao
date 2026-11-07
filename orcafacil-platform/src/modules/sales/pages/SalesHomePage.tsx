@@ -45,6 +45,7 @@ export function SalesHomePage() {
   const [openingBalance, setOpeningBalance] = useState('0,00')
   const [openError, setOpenError] = useState<string | null>(null)
   const [isOpening, setIsOpening] = useState(false)
+  const [isGeneralCashOpen, setIsGeneralCashOpen] = useState(true)
 
   // Modal de Cadastro / Gerenciamento de Caixas PDV
   const [showRegistersModal, setShowRegistersModal] = useState(false)
@@ -61,10 +62,14 @@ export function SalesHomePage() {
       const savedRegName =
         overrideRegisterName || cashSessionService.getSelectedRegisterName(currentOrganization.id)
 
-      const [regRes, openListRes] = await Promise.all([
+      const [regRes, openListRes, generalRes] = await Promise.all([
         cashSessionService.listRegisters(currentOrganization.id),
-        cashSessionService.listOpenSessions(currentOrganization.id),
+        cashSessionService.listOpenPdvSessions(currentOrganization.id),
+        cashSessionService.getOpenCashManagementSession(currentOrganization.id),
       ])
+
+      const isGenOpen = Boolean(generalRes.success && generalRes.data)
+      setIsGeneralCashOpen(isGenOpen)
 
       const regList = regRes.success ? regRes.data : []
       setRegisters(regList)
@@ -158,6 +163,14 @@ export function SalesHomePage() {
     setIsOpening(true)
     setOpenError(null)
 
+    const generalCheck = await cashSessionService.getOpenCashManagementSession(currentOrganization.id)
+    if (!generalCheck.success || !generalCheck.data) {
+      setIsOpening(false)
+      setIsGeneralCashOpen(false)
+      setOpenError('Caixa Geral ainda não aberto, procure o seu administrador')
+      return
+    }
+
     cashSessionService.setSelectedRegisterName(currentOrganization.id, selectedRegister)
 
     // Verifica se o mesmo usuário já possui outro caixa aberto
@@ -193,6 +206,7 @@ export function SalesHomePage() {
 
     const res = await cashSessionService.openSession(currentOrganization.id, {
       registerId: selectedRegister,
+      sessionType: 'pdv',
       operatorId: user.id,
       operatorName: opName,
       openingBalance: cleanBalance,
@@ -427,7 +441,15 @@ export function SalesHomePage() {
 
                 return (
                   <>
-                    {(openError || isOpenedByAnotherUser || hasAnotherOpenByCurrentUser) && (
+                    {!isGeneralCashOpen ? (
+                      <div className="rounded-xl bg-amber-50 p-3.5 text-xs font-semibold text-amber-800 border border-amber-200 flex items-start gap-2.5">
+                        <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-sm text-amber-900">Abertura de PDV Bloqueada</p>
+                          <p className="mt-0.5 text-amber-800">Caixa Geral ainda não aberto, procure o seu administrador</p>
+                        </div>
+                      </div>
+                    ) : (openError || isOpenedByAnotherUser || hasAnotherOpenByCurrentUser) ? (
                       <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200 flex flex-col gap-2">
                         <div className="flex items-start gap-2">
                           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
@@ -450,7 +472,7 @@ export function SalesHomePage() {
                           </button>
                         )}
                       </div>
-                    )}
+                    ) : null}
 
                     {isOpenedByCurrentUser && (
                       <div className="rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 border border-emerald-200 flex items-start gap-2">
@@ -527,7 +549,7 @@ export function SalesHomePage() {
                       </Button>
                       <Button
                         type="submit"
-                        disabled={isOpening || isOpenedByAnotherUser || hasAnotherOpenByCurrentUser}
+                        disabled={isOpening || !isGeneralCashOpen || isOpenedByAnotherUser || hasAnotherOpenByCurrentUser}
                         className="flex-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
                       >
                         {isOpening

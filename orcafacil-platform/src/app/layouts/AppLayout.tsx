@@ -1,5 +1,5 @@
 import { UpcomingBillsAlertModal } from '@modules/cash/components/UpcomingBillsAlertModal'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -8,7 +8,8 @@ import { isSystemOwner } from '@shared/utils/system-owner'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
-import { ThemeToggle } from '@shared/components/ThemeToggle'
+import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
+import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import {
   LayoutDashboard,
   FileSpreadsheet,
@@ -26,6 +27,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  Lightbulb,
 } from 'lucide-react'
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -39,7 +41,39 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null)
+  const [suggestionOwnerCheck, setSuggestionOwnerCheck] = useState<{
+    key: string
+    isOwner: boolean
+  } | null>(null)
   const isMobileMenuOpen = mobileMenuPath === location.pathname
+  const ownerUserId = user?.id
+  const ownerOrganizationId = currentOrganization?.id
+  const suggestionOwnerKey =
+    ownerUserId && ownerOrganizationId ? `${ownerUserId}:${ownerOrganizationId}` : null
+
+  useEffect(() => {
+    let active = true
+    if (ownerUserId && ownerOrganizationId) {
+      void suggestionService
+        .isOrganizationOwner(ownerOrganizationId, ownerUserId)
+        .then((isOwner) => {
+          if (active) {
+            setSuggestionOwnerCheck({
+              key: `${ownerUserId}:${ownerOrganizationId}`,
+              isOwner,
+            })
+          }
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [ownerUserId, ownerOrganizationId])
+
+  const canManageSuggestions =
+    suggestionOwnerKey !== null &&
+    suggestionOwnerCheck?.key === suggestionOwnerKey &&
+    suggestionOwnerCheck.isOwner
 
 
   const handleSignOut = async () => {
@@ -73,11 +107,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }}
         className={`flex min-h-11 items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
           isActive
-            ? 'bg-white text-blue-700 font-semibold shadow-xs dark:bg-blue-950/60 dark:text-blue-300'
+            ? 'bg-white text-[var(--theme-primary,#1d4ed8)] font-semibold shadow-xs dark:bg-[var(--theme-primary-dark-bg,rgba(30,58,138,0.4))] dark:text-[var(--theme-primary-dark-text,#93c5fd)]'
             : 'text-slate-700 hover:bg-white/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white'
         } ${sidebarCollapsed ? 'justify-center' : ''}`}
       >
-        <span className={`shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>{icon}</span>
+        <span className={`shrink-0 ${isActive ? 'text-[var(--theme-primary,#2563eb)] dark:text-[var(--theme-primary-dark-text,#60a5fa)]' : 'text-slate-500 dark:text-slate-400'}`}>{icon}</span>
         {!sidebarCollapsed && label}
       </Link>
     )
@@ -99,7 +133,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           )}
         <aside
           id="mobile-navigation"
-          className={`relative shrink-0 flex-col border-r border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827] transition-all duration-300 ${
+          className={`relative shrink-0 flex-col border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-all duration-300 ${
             isMobileMenuOpen
               ? 'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shadow-xl md:static md:z-auto md:max-w-none md:shadow-none'
               : 'hidden md:flex'
@@ -247,6 +281,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     Administração
                   </span>
                 )}
+                {canManageSuggestions && (
+                  <div>
+                    {!sidebarCollapsed && (
+                      <span className="px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">
+                        Feedback
+                      </span>
+                    )}
+                    <div className="mt-1 space-y-0.5">
+                      {navItem('/suggestions', 'Sugestões', <Lightbulb className="h-4 w-4" />)}
+                    </div>
+                  </div>
+                )}
                 <div className="mt-1 space-y-0.5">
                   {isSystemOwner(user) &&
                     navItem(
@@ -293,7 +339,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         className={isDashboard ? 'min-h-screen bg-slate-50 dark:bg-[#0b0f19]' : 'flex-1 flex flex-col min-w-0 overflow-y-auto'}
       >
         {!isDashboard && (
-          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827] px-3 sm:px-6 lg:px-8">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] px-3 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
               <button
                 type="button"
@@ -319,7 +365,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2.5">
-              <ThemeToggle />
               <ProfileMenu
                 variant="header"
                 displayName={profile?.displayName || 'Usuário'}
@@ -338,6 +383,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         >
           {children}
       <UpcomingBillsAlertModal />
+          <FeedbackWidget />
         </div>
       </main>
     </div>

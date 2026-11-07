@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
   moduleAccessService,
   PLATFORM_MODULES_CATALOG,
@@ -10,9 +10,7 @@ import { useAuth } from '@modules/auth/context/AuthContext'
 import { supabase } from '@app/config/supabase'
 import type { DashboardModuleCode, ModuleCode } from '@shared/types/database'
 import type { InventoryAccessLevel } from '@shared/types/common'
-import { getStoredInventoryLevels, getLocalMembers } from '@modules/organizations/services/organization.service'
 import { logger } from '@shared/lib/logger'
-import { DASHBOARD_MODULES } from '../services/module-access.service'
 import { companyManagementService } from '@modules/companies/services/company-management.service'
 import { isSystemOwner } from '@shared/utils/system-owner'
 
@@ -47,15 +45,12 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
     DashboardModuleCode[]
   >([])
   const [inventoryAccessLevel, setInventoryAccessLevel] = useState<InventoryAccessLevel>(3)
-  const [isLoading, setIsLoading] = useState(true)
   const [loadedOrgKey, setLoadedOrgKey] = useState<string | null>(null)
 
-  const loadAccess = async () => {
-    const targetKey = `${currentOrganization?.id ?? 'none'}:${user?.id ?? 'none'}:${userRole ?? 'none'}`
-    if (loadedOrgKey !== targetKey) {
-      setIsLoading(true)
-    }
+  const targetKey = `${currentOrganization?.id ?? 'none'}:${user?.id ?? 'none'}:${userRole ?? 'none'}`
+  const isLoading = loadedOrgKey !== targetKey
 
+  const loadAccess = useCallback(async () => {
     // 1. Carrega catálogo geral de módulos
     const catResult = await moduleAccessService.getAllModules()
     if (catResult.success) {
@@ -95,27 +90,9 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
           .eq('organization_id', currentOrganization.id)
           .eq('user_id', user.id)
 
-        if (dashboardModulesError || !dashboardPerms || dashboardPerms.length === 0) {
-          const localMembers = getLocalMembers(currentOrganization.id)
-          const found = localMembers.find(
-            (m) =>
-              m.userId === user.id ||
-              (user.email && m.email.toLowerCase() === user.email.toLowerCase()),
-          )
-          if (found && found.dashboardModules && found.dashboardModules.length > 0) {
-            setMemberAllowedDashboardModules(found.dashboardModules)
-          } else if (dashboardModulesError) {
-            logger.warn(
-              'Permissões dos cartões não estão disponíveis; usando acesso padrão até aplicar a migração.',
-              {
-                code: dashboardModulesError.code,
-                message: dashboardModulesError.message,
-              },
-            )
-            setMemberAllowedDashboardModules(DASHBOARD_MODULES.map((module) => module.code))
-          } else {
-            setMemberAllowedDashboardModules([])
-          }
+        if (dashboardModulesError) {
+          logger.error('Erro ao carregar permissões dos cartões no Supabase', dashboardModulesError)
+          setMemberAllowedDashboardModules([])
         } else {
           setMemberAllowedDashboardModules(
             dashboardPerms.map((p) => p.module_code as DashboardModuleCode),
@@ -123,7 +100,6 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
         }
 
         // 4. Carrega nível de acesso específico ao estoque
-        let userInvLevel: InventoryAccessLevel = 3
         try {
           const response = await supabase
             .from('organization_members')
@@ -134,27 +110,22 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
 
           const memberRecord = response.data as { inventory_access_level?: number | null } | null
 
-          if (
+          if (response.error) {
+            logger.error('Erro ao consultar nível de acesso ao estoque no Supabase', response.error)
+            setInventoryAccessLevel(1)
+          } else if (
             memberRecord?.inventory_access_level === 1 ||
             memberRecord?.inventory_access_level === 2 ||
             memberRecord?.inventory_access_level === 3
           ) {
-            userInvLevel = memberRecord.inventory_access_level
+            setInventoryAccessLevel(memberRecord.inventory_access_level)
           } else {
-            const stored: Record<string, InventoryAccessLevel | undefined> = getStoredInventoryLevels(currentOrganization.id)
-            const fallback = stored[user.id]
-            if (fallback) {
-              userInvLevel = fallback
-            }
+            setInventoryAccessLevel(3)
           }
-        } catch {
-          const stored: Record<string, InventoryAccessLevel | undefined> = getStoredInventoryLevels(currentOrganization.id)
-          const fallback = stored[user.id]
-          if (fallback) {
-            userInvLevel = fallback
-          }
+        } catch (error) {
+          logger.error('Exceção ao consultar nível de acesso ao estoque no Supabase', error)
+          setInventoryAccessLevel(1)
         }
-        setInventoryAccessLevel(userInvLevel)
       } else {
         // Proprietários e administradores mantêm acesso total aos cartões e nível 3.
         setMemberAllowedModules([])
@@ -167,14 +138,13 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
       setMemberAllowedDashboardModules([])
       setInventoryAccessLevel(3)
     }
-
     setLoadedOrgKey(targetKey)
-    setIsLoading(false)
-  }
+    setLoadedOrgKey(targetKey)
+  }, [currentOrganization, targetKey, user, userRole])
 
   useEffect(() => {
-    void loadAccess()
-  }, [currentOrganization?.id, userRole, user?.id])
+    void Promise.resolve().then(loadAccess)
+  }, [loadAccess])
 
   /**
    * Avalia se a organização atual e o usuário específico têm acesso ativo a determinado módulo.
@@ -226,7 +196,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
       return true
     }
 
-    return userRole === 'member' && memberAllowedDashboardModules.includes(moduleCode)
+    return memberAllowedDashboardModules.includes(moduleCode)
   }
 
   const canAccessSubFeature = (subFeatureCode: string): boolean => {
@@ -238,7 +208,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
     // Extrai o módulo pai a partir do prefixo (ex: "MOD-01" de "MOD-01_QUICK_SALE")
     const parentModule = (
       subFeatureCode.includes('_') ? subFeatureCode.split('_')[0] : subFeatureCode
-    ) as DashboardModuleCode
+    )
 
     // Se a empresa/usuário não puder acessar o módulo pai, o sub-recurso está bloqueado
     if (!canAccessDashboardModule(parentModule)) {
@@ -260,14 +230,14 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
         // Legado ou sem restrição granular específica: libera todos os sub-itens por padrão
         return true
       }
-      return orgAllowedDashboardModules.includes(subFeatureCode as DashboardModuleCode)
+      return orgAllowedDashboardModules.includes(subFeatureCode)
     }
 
     // Se for funcionário (member):
     // 1. Deve ser permitido para a organização
     if (
       orgHasGranularForModule &&
-      !orgAllowedDashboardModules.includes(subFeatureCode as DashboardModuleCode)
+      !orgAllowedDashboardModules.includes(subFeatureCode)
     ) {
       return false
     }
@@ -281,7 +251,7 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
       return memberAllowedDashboardModules.includes(parentModule)
     }
 
-    return memberAllowedDashboardModules.includes(subFeatureCode as DashboardModuleCode)
+    return memberAllowedDashboardModules.includes(subFeatureCode)
   }
 
   const effectiveInventoryLevel: InventoryAccessLevel =

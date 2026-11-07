@@ -17,10 +17,6 @@ import {
   formatCurrency,
 } from '@shared/utils/monetary'
 import {
-  clearFormDraft,
-  getFormDraftKey,
-} from '@shared/utils/form-draft'
-import {
   AlertTriangle,
   ArrowLeft,
   Camera,
@@ -179,36 +175,26 @@ export function ServiceOrderFormPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const draftKey = useMemo(
-    () =>
-      currentOrganization
-        ? getFormDraftKey('service-order', currentOrganization.id, id)
-        : null,
-    [currentOrganization, id],
-  )
-
-  // Garante que ao clicar em "+ Nova Ordem de Serviço" o formulário sempre venha limpo
-  useEffect(() => {
-    if (!draftKey || isEditing) return
-    clearFormDraft(draftKey)
-  }, [draftKey, isEditing])
-
   // Carrega clientes, estoque, serviços, catálogo de equipamentos e número sequencial / dados da O.S.
   useEffect(() => {
     if (!currentOrganization) return
     let active = true
 
-    setEquipmentCatalog(serviceOrderService.listEquipmentCatalog(currentOrganization.id))
-
     void Promise.all([
+      serviceOrderService.listEquipmentCatalog(currentOrganization.id),
       customerService.list(currentOrganization.id),
       inventoryService.list(currentOrganization.id),
       serviceService.listServices(currentOrganization.id, { status: 'active', pageSize: 200 }),
       !isEditing
         ? serviceOrderService.getNextOrderNumber(currentOrganization.id)
         : Promise.resolve(''),
-    ]).then(([custRes, invRes, svcRes, nextNum]) => {
+    ]).then(([equipmentRes, custRes, invRes, svcRes, nextNum]) => {
       if (!active) return
+      if (equipmentRes.success) {
+        setEquipmentCatalog(equipmentRes.data)
+      } else {
+        setError(equipmentRes.error)
+      }
       if (custRes.success) setCustomers(custRes.data)
       if (invRes.success) {
         setInventoryItems(invRes.data.filter((i) => i.isActive))
@@ -309,7 +295,7 @@ export function ServiceOrderFormPage() {
     }))
   }, [equipmentCatalog, equipmentName])
 
-  const handleAddEquipmentItem = (e: React.FormEvent) => {
+  const handleAddEquipmentItem = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentOrganization) return
     const clean = newEquipmentInput.trim()
@@ -317,7 +303,7 @@ export function ServiceOrderFormPage() {
       setEquipmentModalError('Informe o nome do equipamento / aparelho para cadastrar.')
       return
     }
-    const res = serviceOrderService.addEquipmentToCatalog(currentOrganization.id, clean)
+    const res = await serviceOrderService.addEquipmentToCatalog(currentOrganization.id, clean)
     if (!res.success) {
       setEquipmentModalError(res.error)
       return
@@ -332,10 +318,17 @@ export function ServiceOrderFormPage() {
     setShowEquipmentModal(false)
   }
 
-  const handleRemoveEquipmentItem = (itemToRemove: string) => {
+  const handleRemoveEquipmentItem = async (itemToRemove: string) => {
     if (!currentOrganization) return
-    const next = serviceOrderService.removeEquipmentFromCatalog(currentOrganization.id, itemToRemove)
-    setEquipmentCatalog(next)
+    const result = await serviceOrderService.removeEquipmentFromCatalog(
+      currentOrganization.id,
+      itemToRemove,
+    )
+    if (!result.success) {
+      setEquipmentModalError(result.error)
+      return
+    }
+    setEquipmentCatalog(result.data)
     if (equipmentName.toLocaleLowerCase('pt-BR') === itemToRemove.toLocaleLowerCase('pt-BR')) {
       setEquipmentName('')
     }
@@ -610,7 +603,6 @@ export function ServiceOrderFormPage() {
     setIsSaving(false)
 
     if (res.success) {
-      if (draftKey) clearFormDraft(draftKey)
       if (!isEditing) {
         void navigate('/service-orders?status=queue')
       } else if (nextStatus === 'ready' && initialStatus !== 'ready') {

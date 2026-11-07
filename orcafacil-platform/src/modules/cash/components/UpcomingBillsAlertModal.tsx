@@ -116,7 +116,7 @@ export function UpcomingBillsAlertModal({
     const res = await cashBillsService.payBill(currentOrganization.id, bill.id, {
       paymentMethod: method,
       paidAmount: bill.amount,
-      deductFromOpenSession: method === 'money',
+      deductFromOpenSession: true,
       operatorName,
       userId: user?.id || null,
       notes: 'Baixa realizada pelo Alerta Crítico de Vencimento',

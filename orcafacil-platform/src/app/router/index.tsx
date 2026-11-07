@@ -3,6 +3,7 @@ import { ProtectedRoute } from './ProtectedRoute'
 import { RequireModule } from './RequireModule'
 import { RequireDashboardModule } from './RequireDashboardModule'
 import { RequireOwner } from './RequireOwner'
+import { RequireFeedbackOwner } from './RequireFeedbackOwner'
 import {
   CustomerFormPage,
   CustomersHomePage,
@@ -36,6 +37,7 @@ import {
   CustomerQuotesPortalPage,
   CashManagementPage,
   CompanyManagementPage,
+  SuggestionsAdminPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -74,6 +76,16 @@ export const router = createBrowserRouter([
     path: '/settings/companies',
     element: <Navigate to="/admin/companies" replace />,
   },
+  {
+    path: '/suggestions',
+    element: (
+      <ProtectedRoute>
+        <RequireFeedbackOwner>
+          <SuggestionsAdminPage />
+        </RequireFeedbackOwner>
+      </ProtectedRoute>
+    ),
+  },
 
   // Rotas autenticadas protegidas
   {
@@ -109,6 +121,14 @@ export const router = createBrowserRouter([
         </RequireDashboardModule>
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/settings/customization',
+    element: <Navigate to="/settings/organization?tab=customization" replace />,
+  },
+  {
+    path: '/settings/theme',
+    element: <Navigate to="/settings/organization?tab=customization" replace />,
   },
 
   // Rotas do módulo JB Software (protegidas por autenticação e concessão de módulo)

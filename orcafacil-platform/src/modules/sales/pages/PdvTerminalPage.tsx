@@ -85,6 +85,35 @@ export function PdvTerminalPage() {
   const canManagePdvRegisters = isSystemOwner(user)
   const navigate = useNavigate()
 
+  // Marca d'água / imagem de fundo personalizada do PDV (sincronizada com organização e storage local)
+  const [localPdvBg, setLocalPdvBg] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return (
+      (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
+      localStorage.getItem('pdv_bg_last') ||
+      localStorage.getItem('pdv_background_url') ||
+      null
+    )
+  })
+
+  useEffect(() => {
+    const syncBackground = () => {
+      const bg =
+        currentOrganization?.pdvBackgroundUrl ||
+        (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
+        localStorage.getItem('pdv_bg_last') ||
+        localStorage.getItem('pdv_background_url') ||
+        null
+      setLocalPdvBg(bg)
+    }
+
+    syncBackground()
+    window.addEventListener('storage', syncBackground)
+    return () => window.removeEventListener('storage', syncBackground)
+  }, [currentOrganization?.pdvBackgroundUrl, currentOrganization?.id])
+
+  const pdvBackgroundUrl = currentOrganization?.pdvBackgroundUrl || localPdvBg
+
   // Sessão de Caixa e Seleção de Terminal PDV
   const [registers, setRegisters] = useState<CashRegister[]>([])
   const [selectedRegister, setSelectedRegister] = useState<string>('Caixa 01')
@@ -96,6 +125,7 @@ export function PdvTerminalPage() {
   const [showOpenSessionModal, setShowOpenSessionModal] = useState(false)
   const [openingBalanceInput, setOpeningBalanceInput] = useState('0,00')
   const [openSessionError, setOpenSessionError] = useState<string | null>(null)
+  const [isGeneralCashOpen, setIsGeneralCashOpen] = useState(true)
 
   // Dados do Sistema (Clientes & Produtos)
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
@@ -353,10 +383,14 @@ export function PdvTerminalPage() {
       setSelectedRegister(targetRegister)
       cashSessionService.setSelectedRegisterName(currentOrganization.id, targetRegister)
 
-      const [res, openListRes] = await Promise.all([
-        cashSessionService.getOpenSession(currentOrganization.id, targetRegister),
-        cashSessionService.listOpenSessions(currentOrganization.id),
+      const [res, openListRes, generalRes] = await Promise.all([
+        cashSessionService.getOpenPdvSession(currentOrganization.id, targetRegister),
+        cashSessionService.listOpenPdvSessions(currentOrganization.id),
+        cashSessionService.getOpenCashManagementSession(currentOrganization.id),
       ])
+
+      const isGenOpen = Boolean(generalRes.success && generalRes.data)
+      setIsGeneralCashOpen(isGenOpen)
 
       const otherOpenByCurrentUser =
         openListRes.success && user
@@ -379,7 +413,9 @@ export function PdvTerminalPage() {
         }
       } else {
         setSession(null)
-        if (otherOpenByCurrentUser) {
+        if (!isGenOpen) {
+          setOpenSessionError('Caixa Geral ainda não aberto, procure o seu administrador')
+        } else if (otherOpenByCurrentUser) {
           setOpenSessionError(
             `Você já possui o "${otherOpenByCurrentUser.registerId}" aberto. Cada usuário só pode ter um caixa aberto por vez. Feche primeiro o "${otherOpenByCurrentUser.registerId}" para mudar de caixa.`,
           )
@@ -528,12 +564,22 @@ export function PdvTerminalPage() {
     if (!currentOrganization || !user) return
 
     setOpenSessionError(null)
+
+    const generalCheck = await cashSessionService.getOpenCashManagementSession(currentOrganization.id)
+    if (!generalCheck.success || !generalCheck.data) {
+      setIsGeneralCashOpen(false)
+      setOpenSessionError('Caixa Geral ainda não aberto, procure o seu administrador')
+      pdvSound.playError()
+      return
+    }
+
     cashSessionService.setSelectedRegisterName(currentOrganization.id, selectedRegister)
     const opName = profile?.displayName || user.email?.split('@')[0] || 'Operador'
     const cleanBalance = parseCurrencyInput(openingBalanceInput)
 
     const res = await cashSessionService.openSession(currentOrganization.id, {
       registerId: selectedRegister,
+      sessionType: 'pdv',
       operatorId: user.id,
       operatorName: opName,
       openingBalance: cleanBalance,
@@ -849,14 +895,8 @@ export function PdvTerminalPage() {
       }
 
       // Atualiza estado da sessão localmente
-      const saleTotal = grandTotal
-      const payment = finalMethod
-      void cashSessionService.recordSaleInSession(currentOrganization.id, session.id, {
-        total: saleTotal,
-        paymentMethod: payment,
-        amountReceived: selectedPaymentMethod === 'money' ? amountReceivedInput : grandTotal,
-      }).then((sRes) => {
-        if (sRes.success && sRes.data) setSession(sRes.data)
+      void cashSessionService.getSessionById(currentOrganization.id, session.id).then((freshSession) => {
+        if (freshSession) setSession(freshSession)
       })
 
       // Limpa carrinho para a próxima venda
@@ -943,6 +983,13 @@ export function PdvTerminalPage() {
 
     if (res.success) {
       setSession(res.data)
+      void cashSessionService.syncMovementWithCashManagement(currentOrganization.id, {
+        type: movementType,
+        amount: cleanAmount,
+        reason: movementReasonInput.trim(),
+        registerName: selectedRegister,
+        operatorId: user.id,
+      })
       setShowMovementModal(false)
       setMovementAmountInput('')
       setMovementReasonInput('')
@@ -1305,10 +1352,27 @@ export function PdvTerminalPage() {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
+      {/* Imagem de Fundo Personalizada do PDV com Overlay Escuro de Alto Contraste */}
+      {pdvBackgroundUrl && (
+        <div
+          className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0"
+          aria-hidden="true"
+        >
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-500 pointer-events-none"
+            style={{
+              backgroundImage: `url("${pdvBackgroundUrl}")`,
+            }}
+          />
+          {/* Overlay escuro balanceado para garantir leitura impecável de códigos, preços e produtos */}
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]" />
+        </div>
+      )}
+
       {/* ============================================================== */}
       {/* 1. BARRA SUPERIOR DO TERMINAL (STATUS, CAIXA, OPERADOR, HORÁRIO) */}
       {/* ============================================================== */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-6 backdrop-blur-md">
+      <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-6 backdrop-blur-md">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
             <div className="rounded-lg bg-emerald-500/20 p-1.5 text-emerald-400 ring-1 ring-emerald-500/40">
@@ -1388,11 +1452,11 @@ export function PdvTerminalPage() {
       {/* ============================================================== */}
       {/* 2. ÁREA CENTRAL (GRADE PRINCIPAL DO PDV)                         */}
       {/* ============================================================== */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 overflow-hidden">
+      <main className="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 overflow-hidden">
         {/* COLUNA ESQUERDA: LEITURA DE CÓDIGO DE BARRAS E TABELA DE PRODUTOS (8/12) */}
         <section className="lg:col-span-8 flex flex-col gap-4 overflow-hidden">
           {/* CAMPO DE LEITURA DE CÓDIGO DE BARRAS */}
-          <div className="rounded-2xl border-2 border-emerald-500/40 bg-slate-900 p-3 shadow-lg relative">
+          <div className="rounded-2xl border-2 border-emerald-500/40 bg-slate-900/90 backdrop-blur-md p-3 shadow-lg relative">
             <div className="flex items-center justify-between pb-1.5 px-1 text-xs text-slate-400">
               <span className="font-semibold flex items-center gap-1.5">
                 <Barcode className="h-4 w-4 text-emerald-400" />
@@ -1514,7 +1578,7 @@ export function PdvTerminalPage() {
           </div>
 
           {/* TABELA DE PRODUTOS DA VENDA ATUAL */}
-          <div className="flex-1 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-inner">
+          <div className="flex-1 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-md overflow-hidden shadow-inner">
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-400">
               <div className="flex items-center gap-2">
                 <ShoppingCart className="h-4 w-4 text-emerald-400" />
@@ -1525,11 +1589,23 @@ export function PdvTerminalPage() {
 
             <div className="flex-1 overflow-y-auto">
               {cart.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-500">
-                  <div className="rounded-2xl bg-slate-800/50 p-4 mb-3 border border-slate-800">
-                    <Barcode className="h-10 w-10 text-slate-600" />
-                  </div>
-                  <p className="text-base font-semibold text-slate-400">Caixa Livre • Aguardando Leitura</p>
+                <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-400">
+                  {pdvBackgroundUrl ? (
+                    <div className="mb-4 flex flex-col items-center">
+                      <div className="relative rounded-2xl p-4 bg-slate-900/70 border border-slate-700/60 shadow-2xl backdrop-blur-md max-w-xs flex items-center justify-center overflow-hidden">
+                        <img
+                          src={pdvBackgroundUrl}
+                          alt="Logomarca da Loja"
+                          className="max-h-24 max-w-[220px] object-contain drop-shadow-md select-none pointer-events-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl bg-slate-800/50 p-4 mb-3 border border-slate-800">
+                      <Barcode className="h-10 w-10 text-slate-600" />
+                    </div>
+                  )}
+                  <p className="text-base font-semibold text-slate-200">Caixa Livre • Aguardando Leitura</p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm">
                     Pressione <kbd className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-400 font-mono">1</kbd> para ativar o leitor USB ou digite o código de barras e pressione <kbd className="rounded bg-slate-800 px-1.5 py-0.5 text-white font-mono">Enter</kbd>.
                   </p>
@@ -1669,7 +1745,7 @@ export function PdvTerminalPage() {
           </div>
 
           {/* CARD DE VALORES & TOTAL (ESTILO DISPLAY DE SUPERMERCADO) */}
-          <div className="flex-1 flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl">
+          <div className="flex-1 flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/90 backdrop-blur-md p-5 shadow-xl">
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-sm text-slate-400 font-mono">
                 <span>Subtotal:</span>
@@ -1717,7 +1793,7 @@ export function PdvTerminalPage() {
       {/* ============================================================== */}
       {/* 3. BARRA INFERIOR DE ATALHOS DO TECLADO                         */}
       {/* ============================================================== */}
-      <footer className="min-h-18 lg:h-20 shrink-0 border-t-2 border-slate-800 bg-slate-900/95 px-4 lg:px-6 flex items-center justify-between overflow-x-auto gap-3 text-sm shadow-2xl py-2">
+      <footer className="relative z-10 min-h-18 lg:h-20 shrink-0 border-t-2 border-slate-800 bg-slate-900/95 px-4 lg:px-6 flex items-center justify-between overflow-x-auto gap-3 text-sm shadow-2xl py-2">
         <div className="flex items-center gap-2.5 font-sans">
           <button
             type="button"
@@ -1858,12 +1934,20 @@ export function PdvTerminalPage() {
             </div>
 
             <form onSubmit={handleOpenSession} className="mt-5 space-y-4">
-              {openSessionError && (
+              {!isGeneralCashOpen ? (
+                <div className="rounded-xl bg-amber-500/10 p-3.5 text-xs font-semibold text-amber-300 border border-amber-500/30 flex items-start gap-2.5">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-sm text-amber-200">Abertura de PDV Bloqueada</p>
+                    <p className="mt-0.5 text-amber-300">Caixa Geral ainda não aberto, procure o seu administrador</p>
+                  </div>
+                </div>
+              ) : openSessionError ? (
                 <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-400 border border-rose-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{openSessionError}</span>
                 </div>
-              )}
+              ) : null}
 
               <div>
                 <div className="flex items-center justify-between">
@@ -1953,7 +2037,8 @@ export function PdvTerminalPage() {
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2"
+                  disabled={!isGeneralCashOpen}
+                  className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <CheckCircle2 className="h-5 w-5" />
                   <span>Abrir Caixa e Iniciar Operação</span>

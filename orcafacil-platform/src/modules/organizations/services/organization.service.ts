@@ -15,80 +15,6 @@ import type {
   UUID,
 } from '@shared/types/common'
 
-const INVENTORY_LEVELS_STORAGE_KEY = 'orcafacil_inventory_access_levels'
-export const LOCAL_MEMBERS_STORAGE_PREFIX = 'jb_company_members_'
-
-export function getLocalMembers(orgId: string): OrganizationMemberDetail[] {
-  try {
-    const raw = localStorage.getItem(`${LOCAL_MEMBERS_STORAGE_PREFIX}${orgId}`)
-    return raw ? (JSON.parse(raw) as OrganizationMemberDetail[]) : []
-  } catch {
-    return []
-  }
-}
-
-export function saveLocalMember(orgId: string, member: OrganizationMemberDetail): void {
-  try {
-    const current = getLocalMembers(orgId)
-    const filtered = current.filter(
-      (m) =>
-        m.userId !== member.userId &&
-        m.email.trim().toLowerCase() !== member.email.trim().toLowerCase(),
-    )
-    filtered.push(member)
-    localStorage.setItem(`${LOCAL_MEMBERS_STORAGE_PREFIX}${orgId}`, JSON.stringify(filtered))
-  } catch {
-    // Silently ignore storage errors
-  }
-}
-
-export function removeLocalMember(orgId: string, userId: string): void {
-  try {
-    const current = getLocalMembers(orgId)
-    const filtered = current.filter((m) => m.userId !== userId)
-    localStorage.setItem(`${LOCAL_MEMBERS_STORAGE_PREFIX}${orgId}`, JSON.stringify(filtered))
-  } catch {
-    // Silently ignore storage errors
-  }
-}
-
-export function updateLocalMember(
-  orgId: string,
-  userId: string,
-  updates: Partial<OrganizationMemberDetail>,
-): void {
-  try {
-    const current = getLocalMembers(orgId)
-    const updated = current.map((m) => (m.userId === userId ? { ...m, ...updates } : m))
-    localStorage.setItem(`${LOCAL_MEMBERS_STORAGE_PREFIX}${orgId}`, JSON.stringify(updated))
-  } catch {
-    // Silently ignore storage errors
-  }
-}
-
-export function getStoredInventoryLevels(orgId: string): Record<string, InventoryAccessLevel> {
-  try {
-    const raw = localStorage.getItem(`${INVENTORY_LEVELS_STORAGE_KEY}_${orgId}`)
-    return raw ? (JSON.parse(raw) as Record<string, InventoryAccessLevel>) : {}
-  } catch {
-    return {}
-  }
-}
-
-export function saveStoredInventoryLevel(
-  orgId: string,
-  userId: string,
-  level: InventoryAccessLevel,
-): void {
-  try {
-    const current = getStoredInventoryLevels(orgId)
-    current[userId] = level
-    localStorage.setItem(`${INVENTORY_LEVELS_STORAGE_KEY}_${orgId}`, JSON.stringify(current))
-  } catch {
-    // Silently ignore storage errors
-  }
-}
-
 export interface AddMemberParams {
   organizationId: UUID
   email: string
@@ -106,36 +32,43 @@ export const organizationService = {
    */
   async getUserOrganizations(): Promise<ServiceResult<Organization[]>> {
     try {
-      // 1. Tenta a RPC administrativa segura que garante o vínculo imediato de novos administradores
-      let data: any[] | null = null
+      // 1. Tenta a RPC administrativa para sincronizar vínculos de membros com segurança
       try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('ensure_user_company_access')
-        if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-          data = rpcData
-        }
+        await supabase.rpc('ensure_user_company_access')
       } catch {
         // Ignora silenciosamente se a RPC ainda não estiver criada no banco remoto
       }
 
-      // 2. Se a RPC não retornou dados, consulta diretamente a tabela organizations
-      if (!data || data.length === 0) {
-        const resWithTrial = await supabase
+      // 2. Sempre consulta a tabela organizations para obter todos os campos atualizados, incluindo pdv_background_url e logo_url
+      let data: any[] | null = null
+      const resWithTrial = await supabase
+        .from('organizations')
+        .select('id, name, slug, is_active, trial_ends_at, pdv_background_url, logo_url, created_at')
+        .order('created_at', { ascending: true })
+
+      if (!resWithTrial.error && resWithTrial.data && resWithTrial.data.length > 0) {
+        data = resWithTrial.data as any
+      } else {
+        // Fallback resiliente se a consulta com trial_ends_at falhar
+        const fallbackWithStatus = await supabase
           .from('organizations')
-          .select('id, name, slug, is_active, trial_ends_at, created_at')
+          .select('id, name, slug, is_active, pdv_background_url, logo_url, created_at')
           .order('created_at', { ascending: true })
 
-        if (!resWithTrial.error && resWithTrial.data && resWithTrial.data.length > 0) {
-          data = resWithTrial.data as any
+        if (!fallbackWithStatus.error && fallbackWithStatus.data && fallbackWithStatus.data.length > 0) {
+          data = fallbackWithStatus.data as any
         } else {
-          // Fallback resiliente se a coluna trial_ends_at ou is_active ainda não existirem no banco
-          const fallbackWithStatus = await supabase
-            .from('organizations')
-            .select('id, name, slug, is_active, created_at')
-            .order('created_at', { ascending: true })
+          // Fallback adicional pela RPC direta caso o RLS restrinja o SELECT
+          try {
+            const { data: rpcData, error: rpcError } = await supabase.rpc('ensure_user_company_access')
+            if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+              data = rpcData
+            }
+          } catch {
+            // Ignora silenciosamente
+          }
 
-          if (!fallbackWithStatus.error && fallbackWithStatus.data && fallbackWithStatus.data.length > 0) {
-            data = fallbackWithStatus.data as any
-          } else {
+          if (!data || data.length === 0) {
             const fallbackBasic = await supabase
               .from('organizations')
               .select('id, name, slug, created_at')
@@ -148,127 +81,24 @@ export const organizationService = {
         }
       }
 
-      // 3. Fallback de auto-recuperação pelo e-mail do usuário autenticado se a lista estiver vazia
-      if (!data || data.length === 0) {
-        try {
-          const { data: authData } = await supabase.auth.getUser()
-          const currentUserEmail = authData?.user?.email?.trim().toLowerCase()
-          if (currentUserEmail) {
-            // Tenta consultar organizations pelo admin_email
-            const { data: byEmail, error: byEmailError } = await supabase
-              .from('organizations')
-              .select('id, name, slug, is_active, trial_ends_at, created_at')
-              .ilike('admin_email', currentUserEmail)
-
-            if (!byEmailError && byEmail && byEmail.length > 0) {
-              data = byEmail as any
-            } else {
-              // Tenta recuperar do storage local de administradores da empresa
-              const localAdminOrg = localStorage.getItem(`jb_company_admin_${currentUserEmail}`)
-              if (localAdminOrg) {
-                const parsed = JSON.parse(localAdminOrg)
-                if (parsed?.id && parsed?.name) {
-                  data = [
-                    {
-                      id: parsed.id,
-                      name: parsed.name,
-                      slug: parsed.slug || 'empresa',
-                      is_active: true,
-                      trial_ends_at: null,
-                      created_at: new Date().toISOString(),
-                    },
-                  ]
-                  // Auto-vincula em segundo plano na tabela organization_members
-                  if (authData?.user?.id) {
-                    void supabase.from('organization_members').upsert({
-                      organization_id: parsed.id,
-                      user_id: authData.user.id,
-                      role: 'admin',
-                    } as any)
-                  }
-                }
-              }
-
-              // Tenta recuperar do storage local de membros de empresas
-              if (!data || data.length === 0) {
-                try {
-                  for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i)
-                    if (key && key.startsWith(LOCAL_MEMBERS_STORAGE_PREFIX)) {
-                      const orgId = key.replace(LOCAL_MEMBERS_STORAGE_PREFIX, '')
-                      const localMembers = getLocalMembers(orgId)
-                      const found = localMembers.find(
-                        (m) => m.email.toLowerCase() === currentUserEmail,
-                      )
-                      if (found) {
-                        const detailsRaw = localStorage.getItem(`jb_company_details_${orgId}`)
-                        let orgName = 'Minha Empresa'
-                        let orgSlug = 'empresa'
-                        if (detailsRaw) {
-                          try {
-                            const p = JSON.parse(detailsRaw)
-                            orgName = p.name || orgName
-                            orgSlug = p.slug || orgSlug
-                          } catch {
-                            // ignore
-                          }
-                        }
-                        data = [
-                          {
-                            id: orgId,
-                            name: orgName,
-                            slug: orgSlug,
-                            is_active: true,
-                            trial_ends_at: null,
-                            created_at: new Date().toISOString(),
-                          },
-                        ]
-                        break
-                      }
-                    }
-                  }
-                } catch {
-                  // ignore
-                }
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      let rawList = (data ?? []) as any[]
-      try {
-        const deletedRaw = localStorage.getItem('jb_deleted_companies')
-        if (deletedRaw) {
-          const deletedSet = new Set(JSON.parse(deletedRaw))
-          rawList = rawList.filter((org) => !deletedSet.has(org.id))
-        }
-      } catch {
-        // ignore
-      }
-
       return {
         success: true,
-        data: rawList.map((org: any) => {
-          const localStatus = localStorage.getItem(`jb_company_status_${org.id}`)
-          const isActive = localStatus !== null ? localStatus === 'true' : (org.is_active !== false)
-
-          const localTrial = localStorage.getItem(`jb_company_trial_${org.id}`)
-          const trialEndsAt =
-            localTrial !== null
-              ? localTrial === ''
-                ? null
-                : localTrial
-              : (org.trial_ends_at ?? null)
+        data: ((data ?? []) as any[]).map((org: any) => {
+          const localBg =
+            (typeof window !== 'undefined' && org.id
+              ? localStorage.getItem(`pdv_bg_${org.id}`) ||
+                localStorage.getItem('pdv_bg_last') ||
+                localStorage.getItem('pdv_background_url')
+              : null) || null
 
           return {
             id: org.id,
             name: org.name,
             slug: org.slug,
-            isActive,
-            trialEndsAt,
+            isActive: org.is_active !== false,
+            trialEndsAt: org.trial_ends_at ?? null,
+            pdvBackgroundUrl: org.pdv_background_url || localBg,
+            logoUrl: org.logo_url ?? null,
             createdAt: org.created_at,
           }
         }),
@@ -303,37 +133,26 @@ export const organizationService = {
         return memberRow.role as OrganizationRole
       }
 
-      // Se o e-mail do usuário corresponder ao admin_email da empresa, é admin
-      try {
-        const { data: authData } = await supabase.auth.getUser()
-        const userEmail = authData?.user?.email?.trim().toLowerCase()
-        if (userEmail) {
-          const { data: orgData } = await supabase
-            .from('organizations')
-            .select('admin_email')
-            .eq('id', orgId)
-            .maybeSingle()
-          if (orgData?.admin_email && orgData.admin_email.trim().toLowerCase() === userEmail) {
-            return 'admin'
-          }
+      const { data: authData } = await supabase.auth.getUser()
+      const userEmail = authData.user?.email?.trim().toLowerCase()
+      if (userEmail) {
+        const { data: orgData, error: organizationError } = await supabase
+          .from('organizations')
+          .select('admin_email')
+          .eq('id', orgId)
+          .maybeSingle()
+        if (
+          !organizationError &&
+          orgData?.admin_email &&
+          orgData.admin_email.trim().toLowerCase() === userEmail
+        ) {
+          return 'admin'
         }
-
-        // Verifica nos membros salvos localmente
-        const localMembers = getLocalMembers(orgId)
-        const found = localMembers.find(
-          (m) => m.userId === userId || (userEmail && m.email.toLowerCase() === userEmail),
-        )
-        if (found) {
-          return found.role
-        }
-      } catch {
-        // ignore
       }
 
-      // Usuário autenticado com acesso a esta empresa padrão tem permissão de administrador
-      return 'admin'
+      return null
     } catch {
-      return 'admin'
+      return null
     }
   },
 
@@ -481,13 +300,10 @@ export const organizationService = {
         })
       }
 
-      const storedLevels = getStoredInventoryLevels(orgId)
       const inventoryLevelByUserId = new Map<string, InventoryAccessLevel>(
         (membersExtraData ?? []).map((m: any) => [
           m.user_id,
-          ((m.inventory_access_level as InventoryAccessLevel | undefined) ||
-            storedLevels[m.user_id] ||
-            3),
+          (m.inventory_access_level as InventoryAccessLevel | undefined) || 3,
         ]),
       )
 
@@ -497,8 +313,7 @@ export const organizationService = {
 
       return {
         success: true,
-        data: (() => {
-          const memberList: OrganizationMemberDetail[] = (memberRows ?? []).map((row: any) => ({
+        data: (memberRows ?? []).map((row: any) => ({
             userId: row.user_id,
             organizationId: row.organization_id,
             role: row.role as OrganizationRole,
@@ -515,53 +330,9 @@ export const organizationService = {
                       .filter((permission) => permission.user_id === row.user_id)
                       .map((permission) => permission.module_code),
             inventoryAccessLevel:
-              inventoryLevelByUserId.get(row.user_id) || storedLevels[row.user_id] || 3,
+              inventoryLevelByUserId.get(row.user_id) || 3,
             createdAt: row.created_at,
-          }))
-
-          // Mescla com membros salvos localmente
-          const localMembers = getLocalMembers(orgId)
-          const existingUserIds = new Set(memberList.map((m) => m.userId))
-          const existingEmails = new Set(memberList.map((m) => m.email.toLowerCase()))
-
-          for (const loc of localMembers) {
-            if (!existingUserIds.has(loc.userId) && !existingEmails.has(loc.email.toLowerCase())) {
-              memberList.push(loc)
-              existingUserIds.add(loc.userId)
-              existingEmails.add(loc.email.toLowerCase())
-            }
-          }
-
-          // Se o administrador cadastrado para a empresa ainda não estiver na lista, adiciona para visualização
-          try {
-            const localDetailsRaw = localStorage.getItem(`jb_company_details_${orgId}`)
-            let adminEmail = ''
-            let adminName = ''
-            if (localDetailsRaw) {
-              const parsed = JSON.parse(localDetailsRaw)
-              adminEmail = parsed.adminEmail || ''
-              adminName = parsed.adminName || parsed.responsible || 'Administrador'
-            }
-            if (adminEmail && !existingEmails.has(adminEmail.toLowerCase())) {
-              memberList.unshift({
-                userId: (`admin-${orgId}`) as UUID,
-                organizationId: orgId,
-                role: 'admin',
-                displayName: adminName,
-                email: adminEmail,
-                jobTitle: 'Administrador da Empresa',
-                modules: [],
-                dashboardModules: [],
-                inventoryAccessLevel: 3,
-                createdAt: new Date().toISOString(),
-              })
-            }
-          } catch {
-            // ignore
-          }
-
-          return memberList
-        })(),
+          })),
       }
     } catch (err) {
       logger.error('Exceção ao listar detalhes dos membros', err)
@@ -637,120 +408,118 @@ export const organizationService = {
       const error = rpcResult?.error
 
       if (!error) {
-        const addedUserId =
-          (rpcResult?.data as any)?.userId ||
-          createdUserId ||
-          (`member-${Date.now()}`)
-
-        if (params.inventoryAccessLevel !== undefined) {
-          saveStoredInventoryLevel(
-            params.organizationId,
-            addedUserId,
-            params.inventoryAccessLevel,
-          )
-          try {
-            await supabase
-              .from('organization_members')
-              .update({ inventory_access_level: params.inventoryAccessLevel })
-              .eq('organization_id', params.organizationId)
-              .eq('user_id', addedUserId)
-          } catch {
-            // Ignora se coluna ainda não existir no DB remoto
+        let addedUserId = (rpcResult?.data as any)?.userId || createdUserId
+        if (!addedUserId) {
+          const { data: profileRecord, error: profileError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', cleanEmail)
+            .maybeSingle()
+          if (profileError || !profileRecord?.id) {
+            logger.error('Não foi possível confirmar o usuário cadastrado no Supabase', profileError)
+            return { success: false, error: 'O usuário foi cadastrado, mas não foi possível confirmar seu vínculo.' }
           }
+          addedUserId = profileRecord.id
         }
 
-        saveLocalMember(params.organizationId, {
-          userId: addedUserId as UUID,
-          organizationId: params.organizationId,
-          role: params.role,
-          displayName: cleanName,
-          email: cleanEmail,
-          jobTitle: params.jobTitle?.trim() || null,
-          modules: [],
-          dashboardModules: params.dashboardModules,
-          inventoryAccessLevel: params.inventoryAccessLevel ?? 3,
-          createdAt: new Date().toISOString(),
-        })
+        if (params.inventoryAccessLevel !== undefined) {
+          const { error: accessLevelError } = await supabase
+            .from('organization_members')
+            .update({ inventory_access_level: params.inventoryAccessLevel })
+            .eq('organization_id', params.organizationId)
+            .eq('user_id', addedUserId)
+          if (accessLevelError) {
+            logger.error('Erro ao salvar nível de acesso ao estoque', accessLevelError)
+            return { success: false, error: 'Não foi possível salvar o nível de acesso ao estoque.' }
+          }
+        }
 
         return { success: true, data: { userId: addedUserId } }
       }
 
       logger.warn('Aviso ao executar add_organization_member, tentando fallback de vínculo...', { message: error.message })
 
-      // 3. Fallback resiliente: localiza perfil pelo email ou id criado e vincula diretamente
       let targetUserId = createdUserId
       if (!targetUserId) {
-        const { data: profileRecord } = await supabase
+        const { data: profileRecord, error: profileError } = await supabase
           .from('profiles')
           .select('id')
           .eq('email', cleanEmail)
           .maybeSingle()
+        if (profileError) {
+          logger.error('Erro ao localizar perfil para vinculação no Supabase', profileError)
+          return { success: false, error: 'Não foi possível localizar o perfil do usuário.' }
+        }
         targetUserId = profileRecord?.id || null
       }
 
-      const finalUserId = targetUserId || (`member-${Date.now()}`)
+      if (!targetUserId) {
+        logger.error('RPC add_organization_member falhou e não há perfil para vínculo', error)
+        return { success: false, error: error.message || 'Não foi possível cadastrar o usuário.' }
+      }
 
-      if (targetUserId) {
-        try {
-          await supabase.from('profiles').upsert({
-            id: targetUserId,
-            email: cleanEmail,
-            display_name: cleanName,
-          } as any)
-        } catch {
-          // ignore
+      const { error: profileUpsertError } = await supabase.from('profiles').upsert({
+        id: targetUserId,
+        email: cleanEmail,
+        display_name: cleanName,
+      } as any)
+      if (profileUpsertError) {
+        logger.error('Erro ao salvar perfil no Supabase', profileUpsertError)
+        return { success: false, error: 'Não foi possível salvar o perfil do usuário.' }
+      }
+
+      const { error: membershipError } = await supabase.from('organization_members').upsert({
+        organization_id: params.organizationId,
+        user_id: targetUserId,
+        role: params.role,
+        job_title: params.jobTitle?.trim() || null,
+      } as any)
+      if (membershipError) {
+        logger.error('Erro ao salvar vínculo no Supabase', membershipError)
+        return { success: false, error: 'Não foi possível vincular o usuário à organização.' }
+      }
+
+      if (params.role === 'member') {
+        const { error: permissionsDeleteError } = await supabase
+          .from('organization_member_dashboard_modules')
+          .delete()
+          .eq('organization_id', params.organizationId)
+          .eq('user_id', targetUserId)
+        if (permissionsDeleteError) {
+          logger.error('Erro ao substituir permissões do usuário', permissionsDeleteError)
+          return { success: false, error: 'Não foi possível salvar as permissões do usuário.' }
         }
 
-        try {
-          await supabase.from('organization_members').upsert({
-            organization_id: params.organizationId,
-            user_id: targetUserId,
-            role: params.role,
-            job_title: params.jobTitle?.trim() || null,
-          } as any)
-        } catch {
-          // ignore
-        }
-
-        if (params.role === 'member' && params.dashboardModules.length > 0) {
-          try {
-            await supabase
-              .from('organization_member_dashboard_modules')
-              .delete()
-              .eq('organization_id', params.organizationId)
-              .eq('user_id', targetUserId)
-
-            await supabase.from('organization_member_dashboard_modules').insert(
+        if (params.dashboardModules.length > 0) {
+          const { error: permissionsInsertError } = await supabase
+            .from('organization_member_dashboard_modules')
+            .insert(
               params.dashboardModules.map((modCode) => ({
                 organization_id: params.organizationId,
                 user_id: targetUserId,
                 module_code: modCode,
               })) as any,
             )
-          } catch {
-            // ignore
+          if (permissionsInsertError) {
+            logger.error('Erro ao salvar permissões do usuário', permissionsInsertError)
+            return { success: false, error: 'Não foi possível salvar as permissões do usuário.' }
           }
         }
       }
 
       if (params.inventoryAccessLevel !== undefined) {
-        saveStoredInventoryLevel(params.organizationId, finalUserId, params.inventoryAccessLevel)
+        const { error: accessLevelError } = await supabase
+          .from('organization_members')
+          .update({ inventory_access_level: params.inventoryAccessLevel })
+          .eq('organization_id', params.organizationId)
+          .eq('user_id', targetUserId)
+        if (accessLevelError) {
+          logger.error('Erro ao salvar nível de acesso ao estoque', accessLevelError)
+          return { success: false, error: 'Não foi possível salvar o nível de acesso ao estoque.' }
+        }
       }
 
-      saveLocalMember(params.organizationId, {
-        userId: finalUserId as UUID,
-        organizationId: params.organizationId,
-        role: params.role,
-        displayName: cleanName,
-        email: cleanEmail,
-        jobTitle: params.jobTitle?.trim() || null,
-        modules: [],
-        dashboardModules: params.dashboardModules,
-        inventoryAccessLevel: params.inventoryAccessLevel ?? 3,
-        createdAt: new Date().toISOString(),
-      })
-
-      return { success: true, data: { userId: finalUserId } }
+      return { success: true, data: { userId: targetUserId } }
     } catch (err) {
       logger.error('Exceção ao cadastrar funcionário', err)
       return { success: false, error: 'Erro inesperado ao cadastrar funcionário.' }
@@ -771,13 +540,6 @@ export const organizationService = {
     },
   ): Promise<ServiceResult<void>> {
     try {
-      updateLocalMember(orgId, params.userId, {
-        displayName: params.name.trim(),
-        email: params.email.trim(),
-        jobTitle: params.jobTitle.trim() || null,
-        role: params.role,
-      })
-
       const { error } = await supabase.rpc('update_organization_member', {
         p_org_id: orgId,
         p_user_id: params.userId,
@@ -788,24 +550,14 @@ export const organizationService = {
       })
 
       if (error) {
-        try {
-          await supabase
-            .from('organization_members')
-            .update({
-              role: params.role,
-              job_title: params.jobTitle.trim() || null,
-            } as any)
-            .eq('organization_id', orgId)
-            .eq('user_id', params.userId)
-        } catch {
-          // ignore
-        }
+        logger.error('Erro ao atualizar funcionário no Supabase', error)
+        return { success: false, error: error.message || 'Não foi possível atualizar o funcionário.' }
       }
 
       return { success: true, data: undefined }
     } catch (err) {
       logger.error('Exceção ao atualizar funcionário', err)
-      return { success: true, data: undefined }
+      return { success: false, error: 'Erro ao atualizar o funcionário no Supabase.' }
     }
   },
 
@@ -814,28 +566,20 @@ export const organizationService = {
    */
   async removeMember(orgId: UUID, userId: UUID): Promise<ServiceResult<void>> {
     try {
-      removeLocalMember(orgId, userId)
       const { error } = await supabase.rpc('remove_organization_member', {
         p_org_id: orgId,
         p_user_id: userId,
       })
 
       if (error) {
-        try {
-          await supabase
-            .from('organization_members')
-            .delete()
-            .eq('organization_id', orgId)
-            .eq('user_id', userId)
-        } catch {
-          // ignore
-        }
+        logger.error('Erro ao remover membro no Supabase', error)
+        return { success: false, error: error.message || 'Não foi possível remover o membro.' }
       }
 
       return { success: true, data: undefined }
     } catch (err) {
-      removeLocalMember(orgId, userId)
-      return { success: true, data: undefined }
+      logger.error('Exceção ao remover membro no Supabase', err)
+      return { success: false, error: 'Erro ao remover o membro no Supabase.' }
     }
   },
 
@@ -894,14 +638,6 @@ export const organizationService = {
     inventoryAccessLevel?: InventoryAccessLevel,
   ): Promise<ServiceResult<void>> {
     try {
-      updateLocalMember(orgId, userId, {
-        dashboardModules: modules,
-        ...(inventoryAccessLevel !== undefined ? { inventoryAccessLevel } : {}),
-      })
-      if (inventoryAccessLevel !== undefined) {
-        saveStoredInventoryLevel(orgId, userId, inventoryAccessLevel)
-      }
-
       const { error } = await supabase.rpc('update_member_dashboard_modules', {
         p_org_id: orgId,
         p_user_id: userId,
@@ -909,31 +645,26 @@ export const organizationService = {
       })
 
       if (error) {
-        try {
-          await supabase
-            .from('organization_member_dashboard_modules')
-            .delete()
-            .eq('organization_id', orgId)
-            .eq('user_id', userId)
+        logger.error('Erro ao atualizar permissões do painel no Supabase', error)
+        return { success: false, error: error.message || 'Não foi possível salvar as permissões.' }
+      }
 
-          if (modules.length > 0) {
-            await supabase.from('organization_member_dashboard_modules').insert(
-              modules.map((m) => ({
-                organization_id: orgId,
-                user_id: userId,
-                module_code: m,
-              })) as any,
-            )
-          }
-        } catch {
-          // ignore
+      if (inventoryAccessLevel !== undefined) {
+        const { error: accessLevelError } = await supabase
+          .from('organization_members')
+          .update({ inventory_access_level: inventoryAccessLevel })
+          .eq('organization_id', orgId)
+          .eq('user_id', userId)
+        if (accessLevelError) {
+          logger.error('Erro ao atualizar nível de acesso ao estoque no Supabase', accessLevelError)
+          return { success: false, error: 'Não foi possível salvar o nível de acesso ao estoque.' }
         }
       }
 
       return { success: true, data: undefined }
     } catch (err) {
       logger.error('Exceção ao atualizar permissões dos módulos da página inicial', err)
-      return { success: true, data: undefined }
+      return { success: false, error: 'Erro ao atualizar permissões no Supabase.' }
     }
   },
 
@@ -955,6 +686,106 @@ export const organizationService = {
     } catch (err) {
       logger.error('Exceção ao atualizar organização', err)
       return { success: false, error: 'Erro inesperado ao atualizar a organização.' }
+    }
+  },
+
+  /**
+   * Faz upload de imagem de fundo / logo para o PDV da organização
+   */
+  async uploadPdvBackground(
+    organizationId: UUID,
+    file: File,
+  ): Promise<ServiceResult<{ url: string }>> {
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+      const filePath = `${organizationId}/pdv_bg_${Date.now()}.${ext}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('company-assets')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+        })
+
+      if (uploadError) {
+        logger.warn('Bucket de assets não acessível no momento, aplicando imagem via codificação local persistente', {
+          error: uploadError.message,
+        })
+        // Fallback resiliente: Converte para Base64 Data URL para não bloquear a personalização
+        const base64Url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+        return { success: true, data: { url: base64Url } }
+      }
+
+      const { data: publicData } = supabase.storage
+        .from('company-assets')
+        .getPublicUrl(filePath)
+
+      return {
+        success: true,
+        data: { url: publicData.publicUrl },
+      }
+    } catch (err) {
+      logger.warn('Exceção ao fazer upload de imagem do PDV, utilizando fallback local', {
+        error: String(err),
+      })
+      try {
+        const base64Url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+        return { success: true, data: { url: base64Url } }
+      } catch {
+        return { success: false, error: 'Erro ao processar imagem selecionada.' }
+      }
+    }
+  },
+
+  /**
+   * Salva a URL da imagem de fundo do PDV na organização
+   */
+  async updatePdvBackground(
+    organizationId: UUID,
+    backgroundUrl: string | null,
+  ): Promise<ServiceResult<void>> {
+    try {
+      // Salva no localStorage como cache imediato e redundante
+      if (typeof window !== 'undefined') {
+        if (backgroundUrl) {
+          localStorage.setItem(`pdv_bg_${organizationId}`, backgroundUrl)
+          localStorage.setItem('pdv_bg_last', backgroundUrl)
+          localStorage.setItem('pdv_background_url', backgroundUrl)
+        } else {
+          localStorage.removeItem(`pdv_bg_${organizationId}`)
+          localStorage.removeItem('pdv_bg_last')
+          localStorage.removeItem('pdv_background_url')
+        }
+        window.dispatchEvent(new Event('storage'))
+      }
+
+      const { error } = await supabase
+        .from('organizations')
+        .update({ pdv_background_url: backgroundUrl })
+        .eq('id', organizationId)
+
+      if (error) {
+        logger.warn('Aviso ao sincronizar imagem de fundo com banco remoto; imagem persistida localmente com sucesso', {
+          error: error.message,
+        })
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.warn('Exceção ao persistir no banco; imagem mantida no cache local', {
+        error: String(err),
+      })
+      return { success: true, data: undefined }
     }
   },
 }

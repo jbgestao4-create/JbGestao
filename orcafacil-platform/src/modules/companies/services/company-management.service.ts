@@ -2,13 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@app/config/supabase'
 import { env } from '@app/config/env'
 import { logger } from '@shared/lib/logger'
-import {
-  organizationService,
-  getLocalMembers,
-  saveLocalMember,
-  removeLocalMember,
-  LOCAL_MEMBERS_STORAGE_PREFIX,
-} from '@modules/organizations/services/organization.service'
+import { organizationService } from '@modules/organizations/services/organization.service'
 import type { DashboardModuleCode, ServiceResult, UUID } from '@shared/types/common'
 
 export interface ManagedCompany {
@@ -66,69 +60,6 @@ export interface UpdateCompanyDetailsParams {
   responsible?: string
   notes?: string
   modules?: DashboardModuleCode[]
-}
-
-const LOCAL_STORAGE_MODULES_PREFIX = 'jb_company_modules_'
-const LOCAL_STORAGE_STATUS_PREFIX = 'jb_company_status_'
-export const LOCAL_STORAGE_TRIAL_PREFIX = 'jb_company_trial_'
-export const LOCAL_STORAGE_DETAILS_PREFIX = 'jb_company_details_'
-export const LOCAL_STORAGE_DELETED_KEY = 'jb_deleted_companies'
-export const LOCAL_STORAGE_REMOVED_USERS_PREFIX = 'jb_removed_users_'
-
-export function getLocalRemovedUsers(companyId: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(`${LOCAL_STORAGE_REMOVED_USERS_PREFIX}${companyId}`)
-    if (!raw) return new Set()
-    return new Set(JSON.parse(raw))
-  } catch {
-    return new Set()
-  }
-}
-
-export function addLocalRemovedUser(companyId: string, identifier: string): void {
-  try {
-    const set = getLocalRemovedUsers(companyId)
-    set.add(identifier.toLowerCase())
-    localStorage.setItem(
-      `${LOCAL_STORAGE_REMOVED_USERS_PREFIX}${companyId}`,
-      JSON.stringify(Array.from(set)),
-    )
-  } catch {
-    // ignore
-  }
-}
-
-export function clearLocalRemovedUser(companyId: string, identifier: string): void {
-  try {
-    const set = getLocalRemovedUsers(companyId)
-    set.delete(identifier.toLowerCase())
-    localStorage.setItem(
-      `${LOCAL_STORAGE_REMOVED_USERS_PREFIX}${companyId}`,
-      JSON.stringify(Array.from(set)),
-    )
-  } catch {
-    // ignore
-  }
-}
-
-export function getLocalDeletedCompanies(): Set<string> {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_DELETED_KEY)
-    if (!raw) return new Set()
-    return new Set(JSON.parse(raw))
-  } catch {
-    return new Set()
-  }
-}
-
-export function addLocalDeletedCompany(companyId: string) {
-  try {
-    const set = getLocalDeletedCompanies()
-    set.add(companyId)
-    localStorage.setItem(LOCAL_STORAGE_DELETED_KEY, JSON.stringify(Array.from(set)))
-  } catch {
-    // ignore
-  }
 }
 
 export interface DashboardSubFeature {
@@ -413,67 +344,28 @@ export const companyManagementService = {
    */
   async listAll(): Promise<ServiceResult<ManagedCompany[]>> {
     try {
-      const localDeleted = getLocalDeletedCompanies()
       const { data, error } = await supabase.rpc('admin_get_all_organizations')
 
       if (!error && Array.isArray(data)) {
-        const companies: ManagedCompany[] = data
-          .filter((row: any) => !localDeleted.has(row.id))
-          .map((row: any) => {
-            const localTrial = localStorage.getItem(`${LOCAL_STORAGE_TRIAL_PREFIX}${row.id}`)
-            const trialEndsAt =
-              localTrial !== null
-                ? localTrial === ''
-                  ? null
-                  : localTrial
-                : (row.trial_ends_at ?? null)
-
-            const localDetailsRaw = localStorage.getItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${row.id}`)
-            let localDetails: {
-              cnpj?: string
-              address?: string
-              responsible?: string
-              notes?: string
-              adminEmail?: string
-              adminName?: string
-            } = {}
-            if (localDetailsRaw) {
-              try {
-                localDetails = JSON.parse(localDetailsRaw)
-              } catch {
-                // ignore
-              }
-            }
-
-            const adminEmail =
-              row.admin_email || localDetails.adminEmail || `admin@${row.slug}.com`
-            const adminName =
-              row.admin_name || localDetails.adminName || localDetails.responsible || 'Administrador'
-            const cnpj = row.cnpj || localDetails.cnpj || ''
-            const address = row.address || localDetails.address || ''
-            const responsible = row.responsible || localDetails.responsible || ''
-            const notes = row.notes || localDetails.notes || ''
-
-            return {
-              id: row.id,
-              name: row.name,
-              slug: row.slug,
-              isActive: row.is_active !== false,
-              trialEndsAt,
-              createdAt: row.created_at,
-              adminEmail,
-              adminName,
-              cnpj,
-              address,
-              responsible,
-              notes,
-              accessPlanId: row.access_plan_id ?? null,
-              accessPlanName: row.access_plan_name ?? null,
-              accessPlanDescription: row.access_plan_description ?? null,
-              membersCount: Number(row.members_count) || 1,
-              modules: (row.modules || []) as DashboardModuleCode[],
-            }
-          })
+        const companies: ManagedCompany[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          isActive: row.is_active !== false,
+          trialEndsAt: row.trial_ends_at ?? null,
+          createdAt: row.created_at,
+          adminEmail: row.admin_email ?? '',
+          adminName: row.admin_name ?? '',
+          cnpj: row.cnpj ?? '',
+          address: row.address ?? '',
+          responsible: row.responsible ?? '',
+          notes: row.notes ?? '',
+          accessPlanId: row.access_plan_id ?? null,
+          accessPlanName: row.access_plan_name ?? null,
+          accessPlanDescription: row.access_plan_description ?? null,
+          membersCount: Number(row.members_count) || 1,
+          modules: (row.modules || []) as DashboardModuleCode[],
+        }))
         return { success: true, data: companies }
       }
 
@@ -508,76 +400,25 @@ export const companyManagementService = {
         }
       }
 
-      const activeOrgs = orgs.filter((o: any) => !localDeleted.has(o.id))
-
-      const mapped: ManagedCompany[] = activeOrgs.map((o: any) => {
-        const localStatus = localStorage.getItem(`${LOCAL_STORAGE_STATUS_PREFIX}${o.id}`)
-        const isActive = localStatus !== null ? localStatus === 'true' : (o.is_active !== false)
-
-        const localTrial = localStorage.getItem(`${LOCAL_STORAGE_TRIAL_PREFIX}${o.id}`)
-        const trialEndsAt =
-          localTrial !== null
-            ? localTrial === ''
-              ? null
-              : localTrial
-            : (o.trial_ends_at ?? null)
-
-        let modules: DashboardModuleCode[] = ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code)
-        try {
-          const stored = localStorage.getItem(`${LOCAL_STORAGE_MODULES_PREFIX}${o.id}`)
-          if (stored) {
-            modules = JSON.parse(stored) as DashboardModuleCode[]
-          }
-        } catch {
-          // ignore
-        }
-
-        const localDetailsRaw = localStorage.getItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${o.id}`)
-        let localDetails: {
-          cnpj?: string
-          address?: string
-          responsible?: string
-          notes?: string
-          adminEmail?: string
-          adminName?: string
-        } = {}
-        if (localDetailsRaw) {
-          try {
-            localDetails = JSON.parse(localDetailsRaw)
-          } catch {
-            // ignore
-          }
-        }
-
-        const adminEmail =
-          o.admin_email || localDetails.adminEmail || `admin@${o.slug}.com`
-        const adminName =
-          o.admin_name || localDetails.adminName || localDetails.responsible || 'Administrador'
-        const cnpj = o.cnpj || localDetails.cnpj || ''
-        const address = o.address || localDetails.address || ''
-        const responsible = o.responsible || localDetails.responsible || ''
-        const notes = o.notes || localDetails.notes || ''
-
-        return {
+      const mapped: ManagedCompany[] = orgs.map((o: any) => ({
           id: o.id,
           name: o.name,
           slug: o.slug,
-          isActive,
-          trialEndsAt,
+          isActive: o.is_active !== false,
+          trialEndsAt: o.trial_ends_at ?? null,
           createdAt: o.created_at,
-          adminEmail,
-          adminName,
-          cnpj,
-          address,
-          responsible,
-          notes,
+          adminEmail: o.admin_email ?? '',
+          adminName: o.admin_name ?? '',
+          cnpj: o.cnpj ?? '',
+          address: o.address ?? '',
+          responsible: o.responsible ?? '',
+          notes: o.notes ?? '',
           accessPlanId: o.access_plan_id ?? null,
           accessPlanName: o.access_plan_name ?? null,
           accessPlanDescription: o.access_plan_description ?? null,
           membersCount: 1,
-          modules,
-        }
-      })
+          modules: ALL_PLATFORM_DASHBOARD_MODULES.map((module) => module.code),
+        }))
 
       return { success: true, data: mapped }
     } catch (err) {
@@ -591,9 +432,6 @@ export const companyManagementService = {
    */
   async setCompanyActive(companyId: UUID, isActive: boolean): Promise<ServiceResult<void>> {
     try {
-      // Grava no localStorage para consistência imediata
-      localStorage.setItem(`${LOCAL_STORAGE_STATUS_PREFIX}${companyId}`, String(isActive))
-
       // 1. Tenta executar a RPC segura
       const { error: rpcError } = await supabase.rpc('admin_set_organization_active', {
         p_org_id: companyId,
@@ -604,14 +442,14 @@ export const companyManagementService = {
         return { success: true, data: undefined }
       }
 
-      // 2. Fallback direto se a RPC não existir
-      try {
-        await supabase
-          .from('organizations')
-          .update({ is_active: isActive } as any)
-          .eq('id', companyId)
-      } catch {
-        // Fallback silently handled
+      const { error } = await supabase
+        .from('organizations')
+        .update({ is_active: isActive } as any)
+        .eq('id', companyId)
+
+      if (error) {
+        logger.error('Erro ao alterar status da empresa no Supabase', error)
+        return { success: false, error: 'Erro ao alterar status da empresa.' }
       }
 
       return { success: true, data: undefined }
@@ -642,68 +480,32 @@ export const companyManagementService = {
         .replace(/[^a-z0-9-]+/g, '-')
         .replace(/^-+|-+$/g, '')
 
-      // 1. Armazena imediatamente em localStorage para garantia de consistência offline e atualização instantânea na UI
-      if (params.isActive !== undefined) {
-        localStorage.setItem(`${LOCAL_STORAGE_STATUS_PREFIX}${companyId}`, String(params.isActive))
-      }
-      if (params.trialEndsAt !== undefined) {
-        localStorage.setItem(`${LOCAL_STORAGE_TRIAL_PREFIX}${companyId}`, params.trialEndsAt ?? '')
-      }
-      if (params.modules !== undefined) {
-        localStorage.setItem(`${LOCAL_STORAGE_MODULES_PREFIX}${companyId}`, JSON.stringify(params.modules))
-        localStorage.setItem('jb_company_modules', JSON.stringify(params.modules))
-      }
-      const cleanCnpj = params.cnpj !== undefined ? params.cnpj.trim() : undefined
-      const cleanAddress = params.address !== undefined ? params.address.trim() : undefined
-      const cleanResponsible = params.responsible !== undefined ? params.responsible.trim() : undefined
-      const cleanNotes = params.notes !== undefined ? params.notes.trim() : undefined
+      const { data: existingCompany, error: existingCompanyError } = await supabase
+        .from('organizations')
+        .select('admin_email, admin_name, cnpj, address, responsible, notes')
+        .eq('id', companyId)
+        .maybeSingle()
 
-      // Armazena detalhes estendidos no localStorage
-      const existingDetailsRaw = localStorage.getItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`)
-      let existingDetails: Record<string, any> = {}
-      if (existingDetailsRaw) {
-        try {
-          existingDetails = JSON.parse(existingDetailsRaw)
-        } catch {
-          // ignore
-        }
+      if (existingCompanyError || !existingCompany) {
+        logger.error('Erro ao consultar dados atuais da empresa no Supabase', existingCompanyError)
+        return { success: false, error: 'Não foi possível carregar os dados atuais da empresa.' }
       }
 
+      const cleanCnpj = params.cnpj !== undefined ? params.cnpj.trim() : existingCompany.cnpj
+      const cleanAddress = params.address !== undefined ? params.address.trim() : existingCompany.address
+      const cleanResponsible =
+        params.responsible !== undefined ? params.responsible.trim() : existingCompany.responsible
+      const cleanNotes = params.notes !== undefined ? params.notes.trim() : existingCompany.notes
       const cleanAdminEmail =
         params.adminEmail !== undefined
           ? params.adminEmail.trim().toLowerCase()
-          : (existingDetails.adminEmail || '')
+          : (existingCompany.admin_email || '')
       const cleanAdminName =
         params.adminName !== undefined
           ? params.adminName.trim()
-          : (existingDetails.adminName || '')
-
-      const mergedDetails = {
-        ...existingDetails,
-        ...(cleanCnpj !== undefined ? { cnpj: cleanCnpj } : {}),
-        ...(cleanAddress !== undefined ? { address: cleanAddress } : {}),
-        ...(cleanResponsible !== undefined ? { responsible: cleanResponsible } : {}),
-        ...(cleanNotes !== undefined ? { notes: cleanNotes } : {}),
-        adminEmail: cleanAdminEmail,
-        adminName: cleanAdminName,
-      }
-
-      localStorage.setItem(
-        `${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`,
-        JSON.stringify(mergedDetails),
-      )
+          : (existingCompany.admin_name || '')
 
       if (cleanAdminEmail) {
-        localStorage.setItem(
-          `jb_company_admin_${cleanAdminEmail}`,
-          JSON.stringify({
-            id: companyId,
-            name: cleanName,
-            slug: cleanSlug,
-            modules: params.modules || [],
-          }),
-        )
-
         // Se senha foi informada para cadastrar/redefinir o administrador, garante conta em auth.users
         if (params.adminPassword && params.adminPassword.trim().length >= 6) {
           try {
@@ -743,10 +545,10 @@ export const companyManagementService = {
             ? params.adminPassword.trim()
             : null,
         p_modules: params.modules || null,
-        p_cnpj: cleanCnpj ?? existingDetails.cnpj ?? null,
-        p_address: cleanAddress ?? existingDetails.address ?? null,
-        p_responsible: cleanResponsible ?? existingDetails.responsible ?? null,
-        p_notes: cleanNotes ?? existingDetails.notes ?? null,
+        p_cnpj: cleanCnpj ?? null,
+        p_address: cleanAddress ?? null,
+        p_responsible: cleanResponsible ?? null,
+        p_notes: cleanNotes ?? null,
       })
 
       if (!fullError) {
@@ -874,25 +676,6 @@ export const companyManagementService = {
           // ignore
         }
 
-        // Remove do cache de login do admin
-        try {
-          localStorage.removeItem(`jb_company_admin_${cleanEmail}`)
-        } catch {
-          // ignore
-        }
-      }
-
-      // 3. Atualiza cache de detalhes no localStorage
-      try {
-        const detailsRaw = localStorage.getItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`)
-        if (detailsRaw) {
-          const parsed = JSON.parse(detailsRaw)
-          parsed.adminEmail = ''
-          parsed.adminName = ''
-          localStorage.setItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`, JSON.stringify(parsed))
-        }
-      } catch {
-        // ignore
       }
 
       return { success: true, data: undefined }
@@ -913,73 +696,37 @@ export const companyManagementService = {
     try {
       const cleanEmail = userEmail?.trim().toLowerCase()
 
-      // 1. Marca imediatamente no conjunto local de excluídos da empresa
-      addLocalRemovedUser(companyId, String(userId))
-      if (cleanEmail) {
-        addLocalRemovedUser(companyId, cleanEmail)
-        if (cleanEmail === 'alex@gmail.com') {
-          localStorage.removeItem(`jb_alex_linked_${companyId}`)
-        }
-      }
-
-      // 2. Remove do armazenamento local de membros da organização
-      removeLocalMember(companyId, String(userId))
-      if (cleanEmail) {
-        try {
-          const current = getLocalMembers(companyId)
-          const filtered = current.filter(
-            (m) => m.userId !== String(userId) && m.email?.toLowerCase() !== cleanEmail,
-          )
-          localStorage.setItem(`${LOCAL_MEMBERS_STORAGE_PREFIX}${companyId}`, JSON.stringify(filtered))
-        } catch {
-          // ignore
-        }
-      }
-
-      // 2. Se for admin cadastrado nos detalhes da empresa, limpa os detalhes
-      if (cleanEmail) {
-        try {
-          const detailsRaw = localStorage.getItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`)
-          if (detailsRaw) {
-            const parsed = JSON.parse(detailsRaw)
-            if (parsed.adminEmail && parsed.adminEmail.toLowerCase() === cleanEmail) {
-              parsed.adminEmail = ''
-              parsed.adminName = ''
-              localStorage.setItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`, JSON.stringify(parsed))
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // 3. Tenta remover via RPC / organizationService
+      // Remove via RPC / organizationService
       if (!String(userId).startsWith('admin-')) {
-        try {
-          await organizationService.removeMember(companyId, userId as UUID)
-        } catch {
-          // ignore
+        const result = await organizationService.removeMember(companyId, userId as UUID)
+        if (!result.success) {
+          return result
         }
       }
 
-      // 4. Se tiver e-mail, busca o perfil e desvincula direto de organization_members
+      // If the user is not in the membership table, resolve by email before returning.
       if (cleanEmail) {
-        try {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('email', cleanEmail)
-            .maybeSingle()
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', cleanEmail)
+          .maybeSingle()
 
-          if (profile?.id) {
-            await supabase
-              .from('organization_members')
-              .delete()
-              .eq('organization_id', companyId)
-              .eq('user_id', profile.id)
+        if (profileError) {
+          logger.error('Erro ao localizar usuário da empresa no Supabase', profileError)
+          return { success: false, error: 'Não foi possível localizar o usuário no Supabase.' }
+        }
+
+        if (profile?.id && String(profile.id) !== String(userId)) {
+          const { error: deleteError } = await supabase
+            .from('organization_members')
+            .delete()
+            .eq('organization_id', companyId)
+            .eq('user_id', profile.id)
+          if (deleteError) {
+            logger.error('Erro ao desvincular usuário da empresa no Supabase', deleteError)
+            return { success: false, error: 'Não foi possível remover o usuário da organização.' }
           }
-        } catch {
-          // ignore
         }
       }
 
@@ -1013,13 +760,7 @@ export const companyManagementService = {
    */
   async deleteCompany(companyId: UUID, reason?: string): Promise<ServiceResult<void>> {
     try {
-      // 1. Marca imediatamente localmente para garantia de consistência de interface
-      addLocalDeletedCompany(companyId)
-      localStorage.removeItem(`${LOCAL_STORAGE_MODULES_PREFIX}${companyId}`)
-      localStorage.removeItem(`${LOCAL_STORAGE_STATUS_PREFIX}${companyId}`)
-      localStorage.removeItem(`${LOCAL_STORAGE_TRIAL_PREFIX}${companyId}`)
-
-      // 2. Tenta a RPC segura administrativa
+      // Tenta a RPC segura administrativa
       const { error: rpcError } = await supabase.rpc('admin_delete_organization_with_reason', {
         p_org_id: companyId,
         p_reason: reason?.trim() || null,
@@ -1036,7 +777,8 @@ export const companyManagementService = {
         .eq('id', companyId)
 
       if (deleteError) {
-        logger.warn('Aviso ao excluir empresa diretamente', { message: deleteError.message })
+        logger.error('Erro ao excluir empresa diretamente no Supabase', deleteError)
+        return { success: false, error: 'Não foi possível excluir a empresa no Supabase.' }
       }
 
       return { success: true, data: undefined }
@@ -1052,9 +794,6 @@ export const companyManagementService = {
    */
   async setTrialPeriod(companyId: UUID, trialEndsAt: string | null): Promise<ServiceResult<void>> {
     try {
-      // Salva no storage local para efeito imediato na interface
-      localStorage.setItem(`${LOCAL_STORAGE_TRIAL_PREFIX}${companyId}`, trialEndsAt ?? '')
-
       // 1. Tenta a RPC administrativa segura
       const { error: rpcError } = await supabase.rpc('admin_set_organization_trial', {
         p_org_id: companyId,
@@ -1065,14 +804,14 @@ export const companyManagementService = {
         return { success: true, data: undefined }
       }
 
-      // 2. Fallback direto se a RPC ainda não estiver criada no banco remoto
-      try {
-        await supabase
-          .from('organizations')
-          .update({ trial_ends_at: trialEndsAt } as any)
-          .eq('id', companyId)
-      } catch {
-        // Ignora silenciosamente no fallback
+      const { error } = await supabase
+        .from('organizations')
+        .update({ trial_ends_at: trialEndsAt } as any)
+        .eq('id', companyId)
+
+      if (error) {
+        logger.error('Erro ao salvar período de teste no Supabase', error)
+        return { success: false, error: 'Não foi possível configurar o período de teste.' }
       }
 
       return { success: true, data: undefined }
@@ -1132,8 +871,6 @@ export const companyManagementService = {
         }
       }
 
-      localStorage.setItem(`${LOCAL_STORAGE_MODULES_PREFIX}${companyId}`, JSON.stringify(modules))
-      localStorage.setItem('jb_company_modules', JSON.stringify(modules))
       return { success: true, data: undefined }
     } catch (err) {
       logger.error('Exceção ao atualizar módulos da empresa', err)
@@ -1156,37 +893,14 @@ export const companyManagementService = {
         return data.map((r: any) => r.module_code as DashboardModuleCode)
       }
 
-      // 2. Se deu erro (ex: tabela ainda não existe no Supabase ou permissão negada), usa fallback do localStorage
-      const localSpecific = localStorage.getItem(`${LOCAL_STORAGE_MODULES_PREFIX}${companyId}`)
-      if (localSpecific) {
-        try {
-          const parsed = JSON.parse(localSpecific)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed as DashboardModuleCode[]
-          }
-        } catch {
-          // ignore
-        }
+      if (error) {
+        logger.error('Erro ao carregar módulos da empresa no Supabase', error)
+        return []
       }
-
-      // 3. Consulta fallback em localStorage geral
-      const localGeneral = localStorage.getItem('jb_company_modules')
-      if (localGeneral) {
-        try {
-          const parsed = JSON.parse(localGeneral)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed as DashboardModuleCode[]
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // 4. Se a organização ainda não tiver restrições configuradas, retorna todos os módulos padrão
-      return ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code)
+      return []
     } catch (err) {
       logger.error('Exceção ao carregar páginas liberadas para a empresa', err)
-      return ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code)
+      return []
     }
   },
 
@@ -1342,45 +1056,6 @@ export const companyManagementService = {
           // ignore
         }
 
-        // Salva módulos, status e dados rápidos do administrador e empresa
-        localStorage.setItem(`${LOCAL_STORAGE_MODULES_PREFIX}${newOrgId}`, JSON.stringify(params.modules))
-        localStorage.setItem('jb_company_modules', JSON.stringify(params.modules))
-        localStorage.setItem(`${LOCAL_STORAGE_STATUS_PREFIX}${newOrgId}`, 'true')
-        localStorage.setItem(
-          `${LOCAL_STORAGE_DETAILS_PREFIX}${newOrgId}`,
-          JSON.stringify({
-            cnpj: params.cnpj?.trim() || '',
-            address: params.address?.trim() || '',
-            responsible: params.responsible?.trim() || '',
-            notes: params.notes?.trim() || '',
-            adminEmail: cleanEmail,
-            adminName: cleanAdminName,
-          }),
-        )
-        localStorage.setItem(
-          `jb_company_admin_${cleanEmail}`,
-          JSON.stringify({
-            id: newOrgId,
-            name: params.name.trim(),
-            slug: cleanSlug,
-            modules: params.modules,
-          }),
-        )
-
-        // Registra o administrador como membro local exclusivo desta organização
-        saveLocalMember(newOrgId, {
-          userId: (`admin-${newOrgId}`) as UUID,
-          organizationId: newOrgId,
-          role: 'admin',
-          displayName: cleanAdminName || 'Administrador',
-          email: cleanEmail,
-          jobTitle: 'Administrador da Empresa',
-          modules: [],
-          dashboardModules: params.modules || [],
-          inventoryAccessLevel: 3,
-          createdAt: new Date().toISOString(),
-        })
-
         return {
           success: true,
           data: {
@@ -1408,43 +1083,6 @@ export const companyManagementService = {
           // ignore
         }
 
-        localStorage.setItem(`${LOCAL_STORAGE_MODULES_PREFIX}${orgId}`, JSON.stringify(params.modules))
-        localStorage.setItem('jb_company_modules', JSON.stringify(params.modules))
-        localStorage.setItem(`${LOCAL_STORAGE_STATUS_PREFIX}${orgId}`, 'true')
-        localStorage.setItem(
-          `${LOCAL_STORAGE_DETAILS_PREFIX}${orgId}`,
-          JSON.stringify({
-            cnpj: params.cnpj?.trim() || '',
-            address: params.address?.trim() || '',
-            responsible: params.responsible?.trim() || '',
-            notes: params.notes?.trim() || '',
-            adminEmail: cleanEmail,
-            adminName: cleanAdminName,
-          }),
-        )
-        localStorage.setItem(
-          `jb_company_admin_${cleanEmail}`,
-          JSON.stringify({
-            id: orgId,
-            name: params.name.trim(),
-            slug: cleanSlug,
-            modules: params.modules,
-          }),
-        )
-
-        // Registra o administrador como membro local exclusivo desta organização
-        saveLocalMember(orgId, {
-          userId: (`admin-${orgId}`) as UUID,
-          organizationId: orgId,
-          role: 'admin',
-          displayName: cleanAdminName || 'Administrador',
-          email: cleanEmail,
-          jobTitle: 'Administrador da Empresa',
-          modules: [],
-          dashboardModules: params.modules || [],
-          inventoryAccessLevel: 3,
-          createdAt: new Date().toISOString(),
-        })
       }
 
       return {
@@ -1465,220 +1103,82 @@ export const companyManagementService = {
    */
   async getCompanyUsers(companyId: UUID): Promise<ServiceResult<CompanyUserItem[]>> {
     try {
-      const removedSet = getLocalRemovedUsers(companyId)
-
-      // 1. Tenta a RPC admin_get_company_users se existir no banco remoto
       const { data, error } = await supabase.rpc('admin_get_company_users', {
         p_org_id: companyId,
       })
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         return {
           success: true,
-          data: data
-            .map((row: any) => ({
-              userId: row.user_id,
-              displayName: row.display_name || 'Usuário',
-              email: row.email || '',
-              role: row.role || 'member',
-              jobTitle: row.job_title || null,
-              createdAt: row.created_at,
-            }))
-            .filter(
-              (u) =>
-                !removedSet.has(String(u.userId).toLowerCase()) &&
-                (!u.email || !removedSet.has(u.email.toLowerCase())),
-            ),
+          data: data.map((row: any) => ({
+            userId: row.user_id,
+            displayName: row.display_name || 'Usuário',
+            email: row.email || '',
+            role: row.role || 'member',
+            jobTitle: row.job_title || null,
+            createdAt: row.created_at,
+          })),
         }
       }
 
-      // 2. Consulta através de organizationService.getMembersWithDetails (utiliza get_organization_members_with_details com SECURITY DEFINER)
-      let users: CompanyUserItem[] = []
-      try {
-        const membersRes = await organizationService.getMembersWithDetails(companyId)
-        if (membersRes.success && Array.isArray(membersRes.data) && membersRes.data.length > 0) {
-          users = membersRes.data.map((m) => ({
-            userId: m.userId,
-            displayName: m.displayName || 'Usuário',
-            email: m.email || '',
-            role: m.role || 'member',
-            jobTitle: m.jobTitle || (m.role === 'admin' ? 'Administrador da Empresa' : null),
-            createdAt: m.createdAt,
-          }))
+      logger.warn('RPC admin_get_company_users falhou; consultando membros remotos', {
+        message: error?.message,
+      })
+      const membersRes = await organizationService.getMembersWithDetails(companyId)
+      if (membersRes.success) {
+        return {
+          success: true,
+          data: membersRes.data.map((member) => ({
+            userId: member.userId,
+            displayName: member.displayName || 'Usuário',
+            email: member.email || '',
+            role: member.role || 'member',
+            jobTitle: member.jobTitle || (member.role === 'admin' ? 'Administrador da Empresa' : null),
+            createdAt: member.createdAt,
+          })),
         }
-      } catch {
-        // ignore
       }
 
-      // 3. Fallback adicional direto na tabela organization_members (sem o join inválido com profiles)
-      if (users.length === 0) {
-        try {
-          const { data: rawMembers, error: rawMembersError } = await supabase
-            .from('organization_members')
-            .select('user_id, role, job_title, created_at')
-            .eq('organization_id', companyId)
+      const { data: rawMembers, error: rawMembersError } = await supabase
+        .from('organization_members')
+        .select('user_id, role, job_title, created_at')
+        .eq('organization_id', companyId)
 
-          if (!rawMembersError && Array.isArray(rawMembers) && rawMembers.length > 0) {
-            const userIds = rawMembers.map((m: any) => m.user_id)
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select('id, display_name, email')
-              .in('id', userIds)
+      if (rawMembersError) {
+        logger.error('Erro ao consultar membros da empresa no Supabase', rawMembersError)
+        return { success: false, error: 'Não foi possível carregar os usuários da organização.' }
+      }
 
-            const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]))
-            users = rawMembers.map((m: any) => {
-              const prof = profileMap.get(m.user_id)
-              return {
-                userId: m.user_id,
-                displayName: prof?.display_name || 'Usuário',
-                email: prof?.email || '',
-                role: m.role || 'member',
-                jobTitle: m.job_title || null,
-                createdAt: m.created_at,
-              }
-            })
+      const userIds = (rawMembers ?? []).map((member) => member.user_id)
+      if (userIds.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .in('id', userIds)
+
+      if (profilesError) {
+        logger.error('Erro ao carregar perfis de membros no Supabase', profilesError)
+        return { success: false, error: 'Não foi possível carregar os perfis dos usuários.' }
+      }
+
+      const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+      return {
+        success: true,
+        data: (rawMembers ?? []).map((member) => {
+          const profile = profileMap.get(member.user_id)
+          return {
+            userId: member.user_id,
+            displayName: profile?.display_name || 'Usuário',
+            email: profile?.email || '',
+            role: member.role || 'member',
+            jobTitle: member.job_title || null,
+            createdAt: member.created_at,
           }
-        } catch {
-          // ignore
-        }
+        }),
       }
-
-      // 4. Mescla com membros cadastrados localmente
-      const localMembers = getLocalMembers(companyId)
-      const existingEmails = new Set(users.map((u) => u.email.toLowerCase()))
-      for (const loc of localMembers) {
-        if (!existingEmails.has(loc.email.toLowerCase())) {
-          users.push({
-            userId: loc.userId,
-            displayName: loc.displayName || 'Funcionário',
-            email: loc.email,
-            role: loc.role,
-            jobTitle: loc.jobTitle || null,
-            createdAt: loc.createdAt,
-          })
-          existingEmails.add(loc.email.toLowerCase())
-        }
-      }
-
-      // 5. Consulta os dados cadastrais da organização para obter admin, slug e nome
-      const localDetailsRaw = localStorage.getItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`)
-      let localDetails: any = {}
-      if (localDetailsRaw) {
-        try {
-          localDetails = JSON.parse(localDetailsRaw)
-        } catch {
-          // ignore
-        }
-      }
-
-      const { data: orgData } = await supabase
-        .from('organizations')
-        .select('name, slug, admin_email, admin_name, created_at')
-        .eq('id', companyId)
-        .maybeSingle()
-
-      // 6. Vincula Alexsandro EXCLUSIVAMENTE à organização 'Venda de Acessórios' e NUNCA a outras empresas
-      const isVendaDeAcessorios =
-        (orgData?.slug === 'venda-de-acessorios' ||
-          (orgData?.name && orgData.name.toLowerCase().includes('venda de acessorios'))) &&
-        !removedSet.has('alex@gmail.com')
-
-      if (isVendaDeAcessorios && !existingEmails.has('alex@gmail.com')) {
-        try {
-          const rpcRes = await supabase.rpc('add_organization_member', {
-            p_org_id: companyId,
-            p_email: 'alex@gmail.com',
-            p_name: 'Alexsandro',
-            p_password: 'Senha@123456',
-            p_role: 'member',
-            p_modules: [],
-            p_job_title: 'Colaborador',
-            p_dashboard_modules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-04'],
-          })
-
-          const resolvedUserId =
-            (rpcRes?.data as any)?.userId ||
-            ('6ec41719-2f4a-4a3c-a0ff-09d3db5a0620' as UUID)
-
-          const alexUser: CompanyUserItem = {
-            userId: resolvedUserId,
-            displayName: 'Alexsandro',
-            email: 'alex@gmail.com',
-            role: 'member',
-            jobTitle: 'Colaborador',
-            createdAt: new Date().toISOString(),
-          }
-          users.push(alexUser)
-          existingEmails.add('alex@gmail.com')
-
-          saveLocalMember(companyId, {
-            userId: resolvedUserId,
-            organizationId: companyId,
-            role: 'member',
-            displayName: 'Alexsandro',
-            email: 'alex@gmail.com',
-            jobTitle: 'Colaborador',
-            modules: [],
-            dashboardModules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-04'],
-            inventoryAccessLevel: 3,
-            createdAt: new Date().toISOString(),
-          })
-          localStorage.setItem(`jb_alex_linked_${companyId}`, 'true')
-        } catch {
-          const fallbackUserId = '6ec41719-2f4a-4a3c-a0ff-09d3db5a0620' as UUID
-          users.push({
-            userId: fallbackUserId,
-            displayName: 'Alexsandro',
-            email: 'alex@gmail.com',
-            role: 'member',
-            jobTitle: 'Colaborador',
-            createdAt: new Date().toISOString(),
-          })
-          existingEmails.add('alex@gmail.com')
-
-          saveLocalMember(companyId, {
-            userId: fallbackUserId,
-            organizationId: companyId,
-            role: 'member',
-            displayName: 'Alexsandro',
-            email: 'alex@gmail.com',
-            jobTitle: 'Colaborador',
-            modules: [],
-            dashboardModules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-04'],
-            inventoryAccessLevel: 3,
-            createdAt: new Date().toISOString(),
-          })
-          localStorage.setItem(`jb_alex_linked_${companyId}`, 'true')
-        }
-      }
-
-      // 7. Garante que o administrador cadastrado da organização conste na lista
-      const adminEmail = orgData?.admin_email || localDetails.adminEmail
-      const adminName = orgData?.admin_name || localDetails.adminName || 'Administrador'
-
-      if (
-        adminEmail &&
-        !existingEmails.has(adminEmail.toLowerCase()) &&
-        !removedSet.has(adminEmail.toLowerCase()) &&
-        !removedSet.has(`admin-${companyId}`.toLowerCase())
-      ) {
-        users.unshift({
-          userId: ('admin-' + companyId) as UUID,
-          displayName: adminName,
-          email: adminEmail,
-          role: 'admin',
-          jobTitle: 'Administrador da Empresa',
-          createdAt: orgData?.created_at || new Date().toISOString(),
-        })
-      }
-
-      const finalUsers = users.filter(
-        (u) =>
-          !removedSet.has(String(u.userId).toLowerCase()) &&
-          (!u.email || !removedSet.has(u.email.toLowerCase())),
-      )
-
-      return { success: true, data: finalUsers }
     } catch (err) {
       logger.error('Exceção ao listar usuários da empresa', err)
       return { success: false, error: 'Erro inesperado ao listar usuários.' }
@@ -1715,22 +1215,6 @@ export const companyManagementService = {
         return {
           success: false,
           error: rpcError.message || 'Não foi possível redefinir a senha do usuário.',
-        }
-      }
-
-      // 2. Se for o administrador cadastrado nos detalhes da empresa, atualiza cache sincronizado
-      if (cleanEmail) {
-        try {
-          const detailsRaw = localStorage.getItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`)
-          if (detailsRaw) {
-            const parsed = JSON.parse(detailsRaw)
-            if (parsed.adminEmail && parsed.adminEmail.toLowerCase() === cleanEmail) {
-              parsed.adminPassword = cleanPassword
-              localStorage.setItem(`${LOCAL_STORAGE_DETAILS_PREFIX}${companyId}`, JSON.stringify(parsed))
-            }
-          }
-        } catch {
-          // ignore
         }
       }
 

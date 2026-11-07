@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   AlertTriangle,
   Banknote,
@@ -54,6 +54,19 @@ export function CashClosureModal({
   const [showPrintReport, setShowPrintReport] = useState<boolean>(false);
   const [lastReconciliation, setLastReconciliation] = useState<FullSessionReconciliation | null>(null);
   const [closedAt, setClosedAt] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowPrintReport(false);
+      setLastReconciliation(null);
+      setCountedMoneyStr('');
+      setCountedPixStr('');
+      setCountedCreditStr('');
+      setCountedDebitStr('');
+      setClosureReason('');
+      setClosedAt(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

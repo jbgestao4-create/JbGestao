@@ -91,32 +91,15 @@ export interface PayCashBillParams {
   sessionId?: string | null
   openSessionId?: string | null
   deductFromOpenSession?: boolean
+  attachmentUrl?: string | null
+  attachmentName?: string | null
+  attachmentFile?: File | null
   notes?: string | null
   operatorName?: string | null
   userId?: string | null
 }
 
-const BILLS_STORAGE_KEY_PREFIX = 'orcafacil_cash_bills_'
 const DISMISSED_ALERTS_KEY_PREFIX = 'orcafacil_dismissed_bill_alerts_'
-
-function getLocalBills(orgId: string): CashBill[] {
-  try {
-    const raw = localStorage.getItem(`${BILLS_STORAGE_KEY_PREFIX}${orgId}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as CashBill[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveLocalBills(orgId: string, bills: CashBill[]) {
-  try {
-    localStorage.setItem(`${BILLS_STORAGE_KEY_PREFIX}${orgId}`, JSON.stringify(bills))
-  } catch {
-    // ignore storage quota errors
-  }
-}
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear()
@@ -221,51 +204,26 @@ export const cashBillsService = {
    */
   async listBills(organizationId: UUID): Promise<ServiceResult<CashBill[]>> {
     try {
-      const localBills = getLocalBills(organizationId)
-
       const { data, error } = await supabase
         .from('cash_bills')
         .select('*, suppliers(name)')
         .eq('organization_id', organizationId)
         .order('due_date', { ascending: true })
 
-      if (!error && Array.isArray(data)) {
-        const remoteBills = (data as CashBillRow[]).map(mapBillRow)
-        const byId = new Map<string, CashBill>()
-
-        for (const r of remoteBills) {
-          const localMatch = localBills.find((l) => l.id === r.id)
-          byId.set(r.id, {
-            ...r,
-            supplierName: r.supplierName || localMatch?.supplierName || null,
-            attachmentDataUrl: r.attachmentDataUrl || localMatch?.attachmentDataUrl || null,
-          })
-        }
-
-        for (const l of localBills) {
-          if (!byId.has(l.id)) {
-            byId.set(l.id, l)
-          }
-        }
-
-        const merged = Array.from(byId.values()).sort((a, b) =>
-          a.dueDate.localeCompare(b.dueDate),
-        )
-        saveLocalBills(organizationId, merged)
-        return { success: true, data: merged }
+      if (error) {
+        logger.error('Erro ao consultar boletos no Supabase', error)
+        return { success: false, error: 'Não foi possível carregar os boletos e contas a pagar.' }
       }
 
       return {
         success: true,
-        data: [...localBills].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+        data: ((data ?? []) as CashBillRow[])
+          .map(mapBillRow)
+          .sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
       }
     } catch (err) {
-      logger.warn('Erro ao consultar boletos no banco, usando cache local', err as Record<string, unknown>)
-      const localBills = getLocalBills(organizationId)
-      return {
-        success: true,
-        data: [...localBills].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
-      }
+      logger.error('Erro inesperado ao consultar boletos no Supabase', err)
+      return { success: false, error: 'Não foi possível carregar os boletos e contas a pagar.' }
     }
   },
 
@@ -427,44 +385,17 @@ export const cashBillsService = {
         .select('*, suppliers(name)')
         .single()
 
-      let createdBill: CashBill
-      if (!error && data) {
-        createdBill = {
-          ...mapBillRow(data as CashBillRow),
-          supplierName:
-            mapBillRow(data as CashBillRow).supplierName || params.supplierName || null,
-          attachmentDataUrl,
-        }
-      } else {
-        createdBill = {
-          id: crypto.randomUUID ? crypto.randomUUID() : `bill-${Date.now()}`,
-          organizationId,
-          description: cleanDesc,
-          beneficiaryName: params.beneficiaryName?.trim() || null,
-          supplierId: params.supplierId || null,
-          supplierName: params.supplierName || null,
-          category: params.category || 'Outros',
-          amount: amountStr,
-          dueDate: dueDateStr,
-          barcode: params.barcode?.trim() || null,
-          status,
-          paidAt: status === 'paid' ? nowIso : null,
-          paidAmount: status === 'paid' ? amountStr : null,
-          paymentMethod: status === 'paid' ? params.paymentMethod || 'money' : null,
-          cashSessionId: null,
-          cashEntryId,
-          attachmentName,
-          attachmentPath: null,
-          attachmentDataUrl,
-          notes: params.notes?.trim() || null,
-          creatorName: params.creatorName || null,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        }
+      if (error || !data) {
+        logger.error('Erro ao cadastrar boleto no Supabase', error)
+        return { success: false, error: 'Não foi possível salvar o boleto no Supabase.' }
       }
 
-      const currentLocal = getLocalBills(organizationId).filter((b) => b.id !== createdBill.id)
-      saveLocalBills(organizationId, [createdBill, ...currentLocal])
+      const row = mapBillRow(data as CashBillRow)
+      const createdBill: CashBill = {
+        ...row,
+        supplierName: row.supplierName || params.supplierName || null,
+        attachmentDataUrl,
+      }
 
       // Se um novo boleto pendente nos próximos 10 dias foi cadastrado, reativa o alerta
       if (status === 'pending' && calculateDaysUntilDue(dueDateStr) <= 10) {
@@ -513,44 +444,79 @@ export const cashBillsService = {
       // Verifica se existe uma sessão de caixa aberta para lançar a saída correspondente
       let targetSessionId = params.openSessionId || params.sessionId || null
       if (!targetSessionId) {
-        const bestOpen = await cashSessionService.findBestOpenSession(
-          organizationId,
-          params.userId || undefined,
-        )
-        if (bestOpen) {
-          targetSessionId = bestOpen.id
+        const mgmtRes = await cashSessionService.getOpenCashManagementSession(organizationId)
+        if (mgmtRes.success && mgmtRes.data) {
+          targetSessionId = mgmtRes.data.id
+        } else {
+          const openMgmt = await cashSessionService.findBestOpenSession(
+            organizationId,
+            params.userId || undefined,
+            'cash_management',
+          )
+          const openPdv = await cashSessionService.findBestOpenSession(
+            organizationId,
+            params.userId || undefined,
+            'pdv',
+          )
+          targetSessionId = openMgmt?.id || openPdv?.id || null
         }
       }
 
-      // Se houver caixa aberto e o pagamento for em Dinheiro do caixa (ou marcado para descontar do caixa),
-      // registra automaticamente a saída (Sangria de Pagamento de Boleto/Fornecedor) na sessão!
-      const shouldDeductFromCashDrawer =
-        params.deductFromOpenSession !== undefined
-          ? params.deductFromOpenSession
-          : params.paymentMethod === 'money'
+      // Regra de negócio obrigatória: Baixa de fatura/boleto só é permitida com caixa aberto para registrar a sangria
+      if (!targetSessionId) {
+        return {
+          success: false,
+          error: 'O caixa precisa estar aberto para realizar a baixa de faturas/boletos e registrar a sangria no fluxo de caixa.',
+        }
+      }
+
+      // Faz upload do comprovante se fornecido como arquivo
+      let finalAttachmentUrl = params.attachmentUrl || null
+      let finalAttachmentName = params.attachmentName || null
+
+      if (!finalAttachmentUrl && params.attachmentFile) {
+        const uploadRes = await cashSessionService.uploadMovementAttachment(
+          organizationId,
+          params.attachmentFile,
+        )
+        if (uploadRes.success && uploadRes.data) {
+          finalAttachmentUrl = uploadRes.data.url
+          finalAttachmentName = uploadRes.data.fileName
+        }
+      }
+
+      // Se houver caixa aberto e estiver marcado para descontar (ou por padrão ativo com caixa aberto),
+      // registra automaticamente a saída (Sangria de Pagamento de Boleto/Fatura) com o comprovante anexo!
+      const shouldDeductFromCashDrawer = params.deductFromOpenSession !== false
 
       if (targetSessionId && shouldDeductFromCashDrawer) {
-        await cashSessionService.recordMovement(organizationId, targetSessionId, {
+        const movRes = await cashSessionService.recordMovement(organizationId, targetSessionId, {
           type: 'bleed',
           amount: paidAmountStr,
-          reason: `Baixa de Boleto (${existing.category}): ${existing.description}`,
+          reason: `Baixa de Boleto/Fatura (${existing.category}): ${existing.description}`,
           category: `Pagamento de Boleto (${existing.category})`,
           referenceId: existing.id,
+          attachmentUrl: finalAttachmentUrl || existing.attachmentDataUrl || null,
+          attachmentName: finalAttachmentName || existing.attachmentName || null,
           operatorName: params.operatorName || undefined,
           userId: params.userId || undefined,
         })
+
+        if (!movRes.success) {
+          logger.warn('Aviso ao registrar sangria no caixa aberto', { error: movRes.error })
+        }
       }
 
-      // Atualiza no banco remoto se possível
-      try {
-        await supabase
-          .from('cash_bills')
-          .update({
+      const { error: updateError } = await supabase
+        .from('cash_bills')
+        .update({
             status: 'paid',
             paid_at: nowIso,
             paid_amount: paidAmountStr,
             payment_method: params.paymentMethod,
             cash_session_id: targetSessionId,
+            attachment_name: finalAttachmentName || existing.attachmentName || null,
+            attachment_data_url: finalAttachmentUrl || existing.attachmentDataUrl || null,
             notes: params.notes
               ? existing.notes
                 ? `${existing.notes} • Baixa: ${params.notes}`
@@ -560,8 +526,10 @@ export const cashBillsService = {
           })
           .eq('organization_id', organizationId)
           .eq('id', billId)
-      } catch {
-        // fallback local
+
+      if (updateError) {
+        logger.error('Erro ao registrar pagamento do boleto no Supabase', updateError)
+        return { success: false, error: 'Não foi possível registrar o pagamento no Supabase.' }
       }
 
       const updatedBill: CashBill = {
@@ -571,6 +539,8 @@ export const cashBillsService = {
         paidAmount: paidAmountStr,
         paymentMethod: params.paymentMethod,
         cashSessionId: targetSessionId,
+        attachmentName: finalAttachmentName || existing.attachmentName || null,
+        attachmentDataUrl: finalAttachmentUrl || existing.attachmentDataUrl || null,
         notes: params.notes
           ? existing.notes
             ? `${existing.notes} • Baixa: ${params.notes}`
@@ -578,11 +548,6 @@ export const cashBillsService = {
           : existing.notes,
         updatedAt: nowIso,
       }
-
-      const local = getLocalBills(organizationId).map((b) =>
-        b.id === billId ? updatedBill : b,
-      )
-      saveLocalBills(organizationId, local)
 
       return { success: true, data: updatedBill }
     } catch (err) {
@@ -602,20 +567,16 @@ export const cashBillsService = {
     try {
       const nowIso = new Date().toISOString()
 
-      try {
-        await supabase
-          .from('cash_bills')
-          .update({ status, updated_at: nowIso })
-          .eq('organization_id', organizationId)
-          .eq('id', billId)
-      } catch {
-        // fallback local
-      }
+      const { error } = await supabase
+        .from('cash_bills')
+        .update({ status, updated_at: nowIso })
+        .eq('organization_id', organizationId)
+        .eq('id', billId)
 
-      const local = getLocalBills(organizationId).map((b) =>
-        b.id === billId ? { ...b, status, updatedAt: nowIso } : b,
-      )
-      saveLocalBills(organizationId, local)
+      if (error) {
+        logger.error('Erro ao atualizar status do boleto no Supabase', error)
+        return { success: false, error: 'Não foi possível atualizar o status do boleto.' }
+      }
 
       return { success: true, data: undefined }
     } catch {
@@ -628,22 +589,20 @@ export const cashBillsService = {
    */
   async deleteBill(organizationId: UUID, billId: string): Promise<ServiceResult<void>> {
     try {
-      try {
-        await supabase
-          .from('cash_bills')
-          .delete()
-          .eq('organization_id', organizationId)
-          .eq('id', billId)
-      } catch {
-        // fallback local
+      const { error } = await supabase
+        .from('cash_bills')
+        .delete()
+        .eq('organization_id', organizationId)
+        .eq('id', billId)
+
+      if (error) {
+        logger.error('Erro ao excluir boleto no Supabase', error)
+        return { success: false, error: 'Não foi possível remover o boleto.' }
       }
 
-      const local = getLocalBills(organizationId).filter((b) => b.id !== billId)
-      saveLocalBills(organizationId, local)
       return { success: true, data: undefined }
     } catch {
       return { success: false, error: 'Não foi possível remover o boleto.' }
     }
   },
 }
-

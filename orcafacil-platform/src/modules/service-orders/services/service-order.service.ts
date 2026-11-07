@@ -23,9 +23,6 @@ export type {
   ServiceOrderStatus,
 } from '../domain/service-order'
 
-const LOCAL_ORDERS_PREFIX = 'orcafacil_service_orders_'
-const LOCAL_EQUIPMENTS_PREFIX = 'orcafacil_os_equipments_'
-
 interface ServiceOrderRow {
   id: string
   organization_id: string
@@ -125,25 +122,6 @@ export interface SaveServiceOrderParams {
   creatorName?: string | null
 }
 
-function getLocalOrders(orgId: string): ServiceOrderDetail[] {
-  try {
-    const raw = localStorage.getItem(`${LOCAL_ORDERS_PREFIX}${orgId}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as ServiceOrderDetail[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveLocalOrders(orgId: string, orders: ServiceOrderDetail[]) {
-  try {
-    localStorage.setItem(`${LOCAL_ORDERS_PREFIX}${orgId}`, JSON.stringify(orders))
-  } catch {
-    // ignore storage errors
-  }
-}
-
 function parsePhotos(raw: unknown): ServiceOrderPhoto[] {
   if (!Array.isArray(raw)) return []
   return raw
@@ -221,49 +199,6 @@ function mapRowToListItem(row: ServiceOrderRow): ServiceOrderListItem {
   }
 }
 
-function mapDetailToListItem(detail: ServiceOrderDetail): ServiceOrderListItem {
-  const hasDamage =
-    Boolean(detail.damageNotes?.trim()) ||
-    detail.damageChecklist.some(
-      (c) => c !== 'Sem Avarias identificadas' && c !== 'Sem avarias externas aparentes',
-    )
-
-  return {
-    id: detail.id,
-    organizationId: detail.organizationId,
-    orderNumber: detail.orderNumber,
-    status: normalizeStatus(detail.status),
-    priority: detail.priority,
-    customerId: detail.customerId,
-    customerName: detail.customerName,
-    customerPhone: detail.customerPhone,
-    customerDocument: detail.customerDocument,
-    equipmentName: detail.equipmentName,
-    equipmentBrand: detail.equipmentBrand,
-    equipmentModel: detail.equipmentModel,
-    serialNumber: detail.serialNumber,
-    reportedProblem: detail.reportedProblem,
-    pendingReason: detail.pendingReason ?? detail.internalNotes ?? null,
-    solutionApplied: detail.solutionApplied,
-    technicianName: detail.technicianName,
-    estimatedDeliveryDate: detail.estimatedDeliveryDate,
-    photosCount: detail.photos.length,
-    firstPhotoUrl: detail.photos[0]?.dataUrl ?? null,
-    hasDamage,
-    productsSubtotal: detail.productsSubtotal,
-    servicesSubtotal: detail.servicesSubtotal,
-    subtotal: detail.subtotal,
-    discount: detail.discount,
-    total: detail.total,
-    saleId: detail.saleId,
-    saleNumber: detail.saleNumber,
-    creatorName: detail.creatorName,
-    closedAt: detail.closedAt,
-    createdAt: detail.createdAt,
-    updatedAt: detail.updatedAt,
-  }
-}
-
 function mapRowToDetail(row: ServiceOrderRow, itemRows: ServiceOrderItemRow[]): ServiceOrderDetail {
   const items: ServiceOrderItem[] = itemRows.map((it) => ({
     id: it.id,
@@ -330,27 +265,18 @@ export const serviceOrderService = {
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false })
 
-      if (!error && Array.isArray(data)) {
-        return {
-          success: true,
-          data: (data as ServiceOrderRow[]).map(mapRowToListItem),
-        }
+      if (error) {
+        logger.error('Erro ao listar O.S. no Supabase', error)
+        return { success: false, error: 'Não foi possível carregar as Ordens de Serviço.' }
       }
 
-      const local = getLocalOrders(organizationId)
       return {
         success: true,
-        data: local
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .map(mapDetailToListItem),
+        data: ((data ?? []) as ServiceOrderRow[]).map(mapRowToListItem),
       }
     } catch (err) {
-      logger.warn('Erro ao listar O.S. do banco, usando cache local', err as Record<string, unknown>)
-      const local = getLocalOrders(organizationId)
-      return {
-        success: true,
-        data: local.map(mapDetailToListItem),
-      }
+      logger.error('Erro inesperado ao listar O.S. no Supabase', err)
+      return { success: false, error: 'Não foi possível carregar as Ordens de Serviço.' }
     }
   },
 
@@ -363,35 +289,34 @@ export const serviceOrderService = {
         .eq('id', id)
         .maybeSingle()
 
-      if (!orderError && orderData) {
-        const { data: itemsData } = await supabase
+      if (orderError) {
+        logger.error('Erro ao consultar Ordem de Serviço no Supabase', orderError)
+        return { success: false, error: 'Erro ao carregar Ordem de Serviço.' }
+      }
+      if (!orderData) {
+        return { success: false, error: 'Ordem de Serviço não encontrada.' }
+      }
+
+      const { data: itemsData, error: itemsError } = await supabase
           .from('service_order_items')
           .select('*')
           .eq('organization_id', organizationId)
           .eq('service_order_id', id)
           .order('created_at', { ascending: true })
 
-        return {
-          success: true,
-          data: mapRowToDetail(
-            orderData as ServiceOrderRow,
-            (itemsData as ServiceOrderItemRow[]) ?? [],
-          ),
-        }
+      if (itemsError) {
+        logger.error('Erro ao carregar itens da Ordem de Serviço', itemsError)
+        return { success: false, error: 'Erro ao carregar os itens da Ordem de Serviço.' }
       }
 
-      const local = getLocalOrders(organizationId)
-      const found = local.find((o) => o.id === id)
-      if (found) {
-        return { success: true, data: { ...found, status: normalizeStatus(found.status) } }
+      return {
+        success: true,
+        data: mapRowToDetail(
+          orderData as ServiceOrderRow,
+          (itemsData as ServiceOrderItemRow[]) ?? [],
+        ),
       }
-      return { success: false, error: 'Ordem de Serviço não encontrada.' }
     } catch {
-      const local = getLocalOrders(organizationId)
-      const found = local.find((o) => o.id === id)
-      if (found) {
-        return { success: true, data: { ...found, status: normalizeStatus(found.status) } }
-      }
       return { success: false, error: 'Erro ao carregar Ordem de Serviço.' }
     }
   },
@@ -497,12 +422,16 @@ export const serviceOrderService = {
         .select('*')
         .single()
 
-      if (!insertError && insertedOrder) {
-        const orderRow = insertedOrder as ServiceOrderRow
-        let insertedItemRows: ServiceOrderItemRow[] = []
+      if (insertError || !insertedOrder) {
+        logger.error('Erro ao criar Ordem de Serviço no Supabase', insertError)
+        return { success: false, error: 'Não foi possível salvar a Ordem de Serviço no Supabase.' }
+      }
 
-        if (computedItems.length > 0) {
-          const { data: itemsData } = await supabase
+      const orderRow = insertedOrder as ServiceOrderRow
+      let insertedItemRows: ServiceOrderItemRow[] = []
+
+      if (computedItems.length > 0) {
+        const { data: itemsData, error: itemsError } = await supabase
             .from('service_order_items')
             .insert(
               computedItems.map((it) => ({
@@ -520,62 +449,14 @@ export const serviceOrderService = {
             )
             .select('*')
 
-          insertedItemRows = (itemsData as ServiceOrderItemRow[]) ?? []
+        if (itemsError) {
+          logger.error('Erro ao salvar itens da Ordem de Serviço no Supabase', itemsError)
+          return { success: false, error: 'Não foi possível salvar os itens da Ordem de Serviço.' }
         }
-
-        const detail = mapRowToDetail(orderRow, insertedItemRows)
-        const local = getLocalOrders(organizationId).filter((o) => o.id !== detail.id)
-        saveLocalOrders(organizationId, [detail, ...local])
-        return { success: true, data: detail }
+        insertedItemRows = (itemsData as ServiceOrderItemRow[]) ?? []
       }
 
-      // Fallback local
-      const fallbackDetail: ServiceOrderDetail = {
-        id: crypto.randomUUID(),
-        organizationId,
-        orderNumber,
-        status: params.status,
-        priority: params.priority,
-        customerId: params.customerId || null,
-        customerName: params.customerName.trim(),
-        customerPhone: params.customerPhone?.trim() || null,
-        customerDocument: params.customerDocument?.trim() || null,
-        equipmentName: params.equipmentName.trim(),
-        equipmentBrand: params.equipmentBrand?.trim() || null,
-        equipmentModel: params.equipmentModel?.trim() || null,
-        serialNumber: params.serialNumber?.trim() || null,
-        equipmentColor: params.equipmentColor?.trim() || null,
-        accessories: params.accessories?.trim() || null,
-        devicePassword: params.devicePassword?.trim() || null,
-        damageNotes: params.damageNotes?.trim() || null,
-        damageChecklist: params.damageChecklist,
-        photos: params.photos,
-        reportedProblem: params.reportedProblem.trim(),
-        technicalDiagnosis: params.technicalDiagnosis?.trim() || null,
-        solutionApplied: params.solutionApplied?.trim() || null,
-        technicianName: params.technicianName?.trim() || null,
-        estimatedDeliveryDate: params.estimatedDeliveryDate || null,
-        warrantyDays: params.warrantyDays ?? 90,
-        warrantyTerms: params.warrantyTerms?.trim() || null,
-        internalNotes: (params.pendingReason ?? params.internalNotes)?.trim() || null,
-        pendingReason: (params.pendingReason ?? params.internalNotes)?.trim() || null,
-        productsSubtotal,
-        servicesSubtotal,
-        subtotal,
-        discount,
-        total,
-        saleId: null,
-        saleNumber: null,
-        creatorName: params.creatorName || null,
-        closedAt: params.status === 'closed' ? nowIso : null,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        items: computedItems,
-      }
-
-      const local = getLocalOrders(organizationId)
-      saveLocalOrders(organizationId, [fallbackDetail, ...local])
-      return { success: true, data: fallbackDetail }
+      return { success: true, data: mapRowToDetail(orderRow, insertedItemRows) }
     } catch (err) {
       logger.error('Erro ao criar Ordem de Serviço', err)
       return { success: false, error: 'Erro inesperado ao salvar Ordem de Serviço.' }
@@ -693,61 +574,36 @@ export const serviceOrderService = {
           insertedItemRows = (itemsData as ServiceOrderItemRow[]) ?? []
         }
 
-        const detail = mapRowToDetail(orderRow, insertedItemRows)
-        const local = getLocalOrders(organizationId).map((o) => (o.id === id ? detail : o))
-        saveLocalOrders(organizationId, local)
-        return { success: true, data: detail }
+        return { success: true, data: mapRowToDetail(orderRow, insertedItemRows) }
       }
 
-      // Fallback local
-      const local = getLocalOrders(organizationId)
-      const existing = local.find((o) => o.id === id)
-      if (!existing) {
-        return { success: false, error: 'Ordem de Serviço não encontrada para atualização.' }
+      if (updateError || !updatedOrder) {
+        logger.error('Erro ao atualizar Ordem de Serviço no Supabase', updateError)
+        return {
+          success: false,
+          error: updateError?.message || 'Não foi possível atualizar a Ordem de Serviço no Supabase.',
+        }
       }
 
-      const updatedLocal: ServiceOrderDetail = {
-        ...existing,
-        status: params.status,
-        priority: params.priority,
-        customerId: params.customerId || null,
-        customerName: params.customerName.trim(),
-        customerPhone: params.customerPhone?.trim() || null,
-        customerDocument: params.customerDocument?.trim() || null,
-        equipmentName: params.equipmentName.trim(),
-        equipmentBrand: params.equipmentBrand?.trim() || null,
-        equipmentModel: params.equipmentModel?.trim() || null,
-        serialNumber: params.serialNumber?.trim() || null,
-        equipmentColor: params.equipmentColor?.trim() || null,
-        accessories: params.accessories?.trim() || null,
-        devicePassword: params.devicePassword?.trim() || null,
-        damageNotes: params.damageNotes?.trim() || null,
-        damageChecklist: params.damageChecklist,
-        photos: params.photos,
-        reportedProblem: params.reportedProblem.trim(),
-        technicalDiagnosis: params.technicalDiagnosis?.trim() || null,
-        solutionApplied: params.solutionApplied?.trim() || null,
-        technicianName: params.technicianName?.trim() || null,
-        estimatedDeliveryDate: params.estimatedDeliveryDate || null,
-        warrantyDays: params.warrantyDays ?? 90,
-        warrantyTerms: params.warrantyTerms?.trim() || null,
-        internalNotes: (params.pendingReason ?? params.internalNotes)?.trim() || null,
-        pendingReason: (params.pendingReason ?? params.internalNotes)?.trim() || null,
-        productsSubtotal,
-        servicesSubtotal,
-        subtotal,
-        discount,
-        total,
-        closedAt: params.status === 'closed' ? nowIso : existing.closedAt,
-        updatedAt: nowIso,
-        items: computedItems,
+      const { data: updatedItems, error: itemsError } = await supabase
+        .from('service_order_items')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('service_order_id', id)
+        .order('created_at', { ascending: true })
+
+      if (itemsError) {
+        logger.error('Erro ao consultar itens da Ordem de Serviço', itemsError)
+        return { success: false, error: 'Erro ao carregar os itens da Ordem de Serviço.' }
       }
 
-      saveLocalOrders(
-        organizationId,
-        local.map((o) => (o.id === id ? updatedLocal : o)),
-      )
-      return { success: true, data: updatedLocal }
+      return {
+        success: true,
+        data: mapRowToDetail(
+          updatedOrder as ServiceOrderRow,
+          (updatedItems as ServiceOrderItemRow[]) ?? [],
+        ),
+      }
     } catch (err) {
       logger.error('Erro ao atualizar Ordem de Serviço', err)
       return { success: false, error: 'Erro inesperado ao atualizar Ordem de Serviço.' }
@@ -763,12 +619,14 @@ export const serviceOrderService = {
   ): Promise<ServiceResult<void>> {
     try {
       if (status === 'ready') {
-        const local = getLocalOrders(organizationId)
-        const order = local.find((o) => o.id === id)
+        const orderResult = await this.getById(organizationId, id)
+        if (!orderResult.success) {
+          return { success: false, error: orderResult.error }
+        }
         const effectiveSolution =
           (solutionApplied !== undefined && solutionApplied !== null
             ? solutionApplied
-            : order?.solutionApplied)?.trim() || ''
+            : orderResult.data.solutionApplied)?.trim() || ''
 
         if (!effectiveSolution) {
           return {
@@ -796,29 +654,8 @@ export const serviceOrderService = {
         .eq('organization_id', organizationId)
         .eq('id', id)
 
-      const local = getLocalOrders(organizationId).map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status,
-              internalNotes:
-                pendingReason !== undefined ? pendingReason?.trim() || null : o.internalNotes,
-              pendingReason:
-                pendingReason !== undefined
-                  ? pendingReason?.trim() || null
-                  : (o.pendingReason ?? o.internalNotes ?? null),
-              solutionApplied:
-                solutionApplied !== undefined && solutionApplied !== null
-                  ? solutionApplied.trim() || null
-                  : o.solutionApplied,
-              closedAt: status === 'closed' ? nowIso : o.closedAt,
-              updatedAt: nowIso,
-            }
-          : o,
-      )
-      saveLocalOrders(organizationId, local)
-
-      if (error && !local.some((o) => o.id === id)) {
+      if (error) {
+        logger.error('Erro ao alterar status da O.S. no Supabase', error)
         return { success: false, error: error.message || 'Erro ao alterar status da O.S.' }
       }
 
@@ -836,7 +673,7 @@ export const serviceOrderService = {
   ): Promise<ServiceResult<void>> {
     try {
       const nowIso = new Date().toISOString()
-      await supabase
+      const { error } = await supabase
         .from('service_orders')
         .update({
           status: 'closed',
@@ -848,19 +685,10 @@ export const serviceOrderService = {
         .eq('organization_id', organizationId)
         .eq('id', id)
 
-      const local = getLocalOrders(organizationId).map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: 'closed' as const,
-              saleId,
-              saleNumber: saleNumber || null,
-              closedAt: nowIso,
-              updatedAt: nowIso,
-            }
-          : o,
-      )
-      saveLocalOrders(organizationId, local)
+      if (error) {
+        logger.error('Erro ao vincular venda à Ordem de Serviço no Supabase', error)
+        return { success: false, error: 'Erro ao vincular venda à Ordem de Serviço.' }
+      }
       return { success: true, data: undefined }
     } catch {
       return { success: false, error: 'Erro ao vincular venda à Ordem de Serviço.' }
@@ -869,65 +697,106 @@ export const serviceOrderService = {
 
   async delete(organizationId: UUID, id: UUID): Promise<ServiceResult<void>> {
     try {
-      await supabase
+      const { error } = await supabase
         .from('service_orders')
         .delete()
         .eq('organization_id', organizationId)
         .eq('id', id)
 
-      const local = getLocalOrders(organizationId).filter((o) => o.id !== id)
-      saveLocalOrders(organizationId, local)
+      if (error) {
+        logger.error('Erro ao excluir Ordem de Serviço no Supabase', error)
+        return { success: false, error: 'Erro ao excluir Ordem de Serviço.' }
+      }
       return { success: true, data: undefined }
     } catch {
       return { success: false, error: 'Erro ao excluir Ordem de Serviço.' }
     }
   },
 
-  listEquipmentCatalog(organizationId: UUID): string[] {
+  async listEquipmentCatalog(organizationId: UUID): Promise<ServiceResult<string[]>> {
     try {
-      const raw = localStorage.getItem(`${LOCAL_EQUIPMENTS_PREFIX}${organizationId}`)
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as unknown
-      if (!Array.isArray(parsed)) return []
-      return parsed
-        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        .map((item) => item.trim())
-    } catch {
-      return []
+      const { data, error } = await supabase
+        .from('service_order_equipment_catalog' as any)
+        .select('name')
+        .eq('organization_id', organizationId)
+        .order('name', { ascending: true })
+
+      if (error) {
+        logger.error('Erro ao carregar catálogo de equipamentos', error)
+        return { success: false, error: 'Não foi possível carregar o catálogo de equipamentos.' }
+      }
+
+      return {
+        success: true,
+        data: (data ?? []).map((row: { name: string }) => row.name),
+      }
+    } catch (error) {
+      logger.error('Exceção ao carregar catálogo de equipamentos', error)
+      return { success: false, error: 'Não foi possível carregar o catálogo de equipamentos.' }
     }
   },
 
-  addEquipmentToCatalog(organizationId: UUID, equipmentName: string): ServiceResult<string[]> {
+  async addEquipmentToCatalog(
+    organizationId: UUID,
+    equipmentName: string,
+  ): Promise<ServiceResult<string[]>> {
     const clean = equipmentName.trim()
     if (!clean) {
       return { success: false, error: 'Informe o nome do equipamento / aparelho.' }
     }
-    const current = this.listEquipmentCatalog(organizationId)
-    const exists = current.some(
-      (item) => item.toLocaleLowerCase('pt-BR') === clean.toLocaleLowerCase('pt-BR'),
-    )
-    const next = exists
-      ? current
-      : [...current, clean].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+
     try {
-      localStorage.setItem(`${LOCAL_EQUIPMENTS_PREFIX}${organizationId}`, JSON.stringify(next))
-    } catch {
-      // ignore storage errors
+      const normalizedName = clean.toLocaleLowerCase('pt-BR')
+      const { data: existing, error: lookupError } = await supabase
+        .from('service_order_equipment_catalog' as any)
+        .select('id')
+        .eq('organization_id', organizationId)
+        .eq('normalized_name', normalizedName)
+        .maybeSingle()
+
+      if (lookupError) {
+        logger.error('Erro ao verificar catálogo de equipamentos', lookupError)
+        return { success: false, error: 'Não foi possível verificar o catálogo de equipamentos.' }
+      }
+
+      if (!existing) {
+        const { error: insertError } = await supabase
+          .from('service_order_equipment_catalog' as any)
+          .insert({ organization_id: organizationId, name: clean })
+
+        if (insertError) {
+          logger.error('Erro ao cadastrar equipamento no Supabase', insertError)
+          return { success: false, error: 'Não foi possível cadastrar o equipamento.' }
+        }
+      }
+
+      return this.listEquipmentCatalog(organizationId)
+    } catch (error) {
+      logger.error('Exceção ao cadastrar equipamento no Supabase', error)
+      return { success: false, error: 'Não foi possível cadastrar o equipamento.' }
     }
-    return { success: true, data: next }
   },
 
-  removeEquipmentFromCatalog(organizationId: UUID, equipmentName: string): string[] {
-    const current = this.listEquipmentCatalog(organizationId)
-    const next = current.filter(
-      (item) => item.toLocaleLowerCase('pt-BR') !== equipmentName.trim().toLocaleLowerCase('pt-BR'),
-    )
+  async removeEquipmentFromCatalog(
+    organizationId: UUID,
+    equipmentName: string,
+  ): Promise<ServiceResult<string[]>> {
     try {
-      localStorage.setItem(`${LOCAL_EQUIPMENTS_PREFIX}${organizationId}`, JSON.stringify(next))
-    } catch {
-      // ignore storage errors
+      const { error } = await supabase
+        .from('service_order_equipment_catalog' as any)
+        .delete()
+        .eq('organization_id', organizationId)
+        .eq('normalized_name', equipmentName.trim().toLocaleLowerCase('pt-BR'))
+
+      if (error) {
+        logger.error('Erro ao remover equipamento do catálogo', error)
+        return { success: false, error: 'Não foi possível remover o equipamento do catálogo.' }
+      }
+
+      return this.listEquipmentCatalog(organizationId)
+    } catch (error) {
+      logger.error('Exceção ao remover equipamento do catálogo', error)
+      return { success: false, error: 'Não foi possível remover o equipamento do catálogo.' }
     }
-    return next
   },
 }
-

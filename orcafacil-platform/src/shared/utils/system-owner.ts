@@ -50,17 +50,5 @@ export function isSystemOwner(
     return true
   }
 
-  try {
-    const custom = localStorage.getItem('jb_system_owners')
-    if (custom && email) {
-      const parsed = JSON.parse(custom)
-      if (Array.isArray(parsed) && parsed.map((e: string) => e.toLowerCase()).includes(email)) {
-        return true
-      }
-    }
-  } catch {
-    // ignore storage exceptions
-  }
-
   return false
 }

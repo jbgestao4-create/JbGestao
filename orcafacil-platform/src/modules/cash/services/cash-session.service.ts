@@ -5,6 +5,7 @@ import type { PaymentMethod } from '@modules/sales/services/sales.service'
 import {
   type CashRegister,
   type CashSession,
+  type CashSessionType,
   type CashSessionMovement,
   calculateExpectedMoney,
   reconcileFullSession,
@@ -13,29 +14,7 @@ import {
   toMoneyString,
 } from '../domain/cash-session'
 
-const SESSIONS_STORAGE_KEY_PREFIX = 'orcafacil_cash_sessions_'
-const MOVEMENTS_STORAGE_KEY_PREFIX = 'orcafacil_cash_movements_'
-const REGISTERS_STORAGE_KEY_PREFIX = 'orcafacil_cash_registers_'
 const SELECTED_REGISTER_KEY_PREFIX = 'orcafacil_selected_register_'
-
-function getLocalStorageRegisters(orgId: string): CashRegister[] {
-  try {
-    const raw = localStorage.getItem(`${REGISTERS_STORAGE_KEY_PREFIX}${orgId}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as CashRegister[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveLocalStorageRegisters(orgId: string, registers: CashRegister[]) {
-  try {
-    localStorage.setItem(`${REGISTERS_STORAGE_KEY_PREFIX}${orgId}`, JSON.stringify(registers))
-  } catch {
-    // ignorar falha de gravação local
-  }
-}
 
 interface CashRegisterRow {
   id: string
@@ -58,80 +37,11 @@ function mapRegisterRow(row: CashRegisterRow): CashRegister {
   }
 }
 
-function getLocalStorageSessions(orgId: string): CashSession[] {
-  try {
-    const raw = localStorage.getItem(`${SESSIONS_STORAGE_KEY_PREFIX}${orgId}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as CashSession[]
-    if (!Array.isArray(parsed)) return []
-
-    // Garante que cada operador tenha no máximo 1 caixa aberto por vez no cache local
-    const seenOpenByOperator = new Set<string>()
-    let modified = false
-    const sanitized = parsed.map((session) => {
-      if (session.status === 'open') {
-        if (seenOpenByOperator.has(session.openedBy)) {
-          modified = true
-          return {
-            ...session,
-            status: 'closed' as const,
-            closedBy: session.openedBy,
-            closedAt: new Date().toISOString(),
-            countedMoney: session.expectedMoney,
-            difference: '0.00',
-          }
-        }
-        seenOpenByOperator.add(session.openedBy)
-      }
-      return session
-    })
-
-    if (modified) {
-      saveLocalStorageSessions(orgId, sanitized)
-    }
-
-    return sanitized
-  } catch {
-    return []
-  }
-}
-
-function saveLocalStorageSessions(orgId: string, sessions: CashSession[]) {
-  try {
-    localStorage.setItem(`${SESSIONS_STORAGE_KEY_PREFIX}${orgId}`, JSON.stringify(sessions))
-  } catch {
-    // ignorar falha de gravação local
-  }
-}
-
-function getLocalStorageMovements(orgId: string, sessionId: string): CashSessionMovement[] {
-  try {
-    const raw = localStorage.getItem(`${MOVEMENTS_STORAGE_KEY_PREFIX}${orgId}_${sessionId}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as CashSessionMovement[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveLocalStorageMovement(orgId: string, sessionId: string, movement: CashSessionMovement) {
-  try {
-    const current = getLocalStorageMovements(orgId, sessionId)
-    current.push(movement)
-    localStorage.setItem(
-      `${MOVEMENTS_STORAGE_KEY_PREFIX}${orgId}_${sessionId}`,
-      JSON.stringify(current),
-    )
-  } catch {
-    // ignorar falha
-  }
-}
-
 interface CashSessionRow {
   id: string
   organization_id: string
   register_id: string
+  session_type?: 'pdv' | 'cash_management' | null
   opened_by: string
   closed_by: string | null
   operator_name: string
@@ -168,6 +78,7 @@ function mapSessionRow(row: CashSessionRow): CashSession {
     id: row.id,
     organizationId: row.organization_id,
     registerId: row.register_id,
+    sessionType: row.session_type || 'pdv',
     openedBy: row.opened_by,
     closedBy: row.closed_by,
     operatorName: row.operator_name,
@@ -209,6 +120,7 @@ function mapSessionRow(row: CashSessionRow): CashSession {
 export interface OpenSessionParams {
   registerId?: string
   registerName?: string
+  sessionType?: 'pdv' | 'cash_management'
   operatorId: string
   operatorName: string
   openingBalance: string | number
@@ -229,6 +141,9 @@ export interface RecordMovementParams {
   referenceId?: string
   operatorName?: string
   userId?: string
+  attachmentUrl?: string | null
+  attachmentName?: string | null
+  moveToAccount?: boolean
 }
 
 export interface CloseSessionParams {
@@ -290,48 +205,17 @@ export const cashSessionService = {
         .eq('is_active', true)
         .order('name', { ascending: true })
 
-      const localRegisters = getLocalStorageRegisters(organizationId).filter(
-        (r) => r.id !== 'default-caixa-01',
-      )
-      const combinedMap = new Map<string, CashRegister>()
-
-      if (!error && Array.isArray(data)) {
-        for (const row of data as CashRegisterRow[]) {
-          const mapped = mapRegisterRow(row)
-          combinedMap.set(mapped.name.toLocaleLowerCase('pt-BR'), mapped)
-        }
-      } else {
-        for (const loc of localRegisters) {
-          if (loc.isActive !== false) {
-            const key = loc.name.toLocaleLowerCase('pt-BR')
-            if (!combinedMap.has(key)) {
-              combinedMap.set(key, loc)
-            }
-          }
-        }
+      if (error) {
+        logger.error('Erro ao listar caixas no Supabase', error)
+        return { success: false, error: 'Não foi possível carregar os caixas cadastrados.' }
       }
 
-      if (combinedMap.size === 0) {
-        combinedMap.set('caixa 01', defaultRegister)
-      }
-
-      const list = Array.from(combinedMap.values()).sort((a, b) =>
+      const list = ((data ?? []) as CashRegisterRow[]).map(mapRegisterRow).sort((a, b) =>
         a.name.localeCompare(b.name, 'pt-BR', { numeric: true }),
       )
-      saveLocalStorageRegisters(
-        organizationId,
-        list.filter((r) => r.id !== 'default-caixa-01'),
-      )
-      return { success: true, data: list }
+      return { success: true, data: list.length > 0 ? list : [defaultRegister] }
     } catch {
-      const localRegisters = getLocalStorageRegisters(organizationId).filter(
-        (r) => r.id !== 'default-caixa-01',
-      )
-      const list = localRegisters.length > 0 ? localRegisters : [defaultRegister]
-      return {
-        success: true,
-        data: list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
-      }
+      return { success: false, error: 'Não foi possível carregar os caixas cadastrados.' }
     }
   },
 
@@ -355,9 +239,10 @@ export const cashSessionService = {
       }
 
       const existingRes = await this.listRegisters(organizationId)
-      const existingList = (existingRes.success ? existingRes.data : []).filter(
-        (r) => r.id !== 'default-caixa-01',
-      )
+      if (!existingRes.success) {
+        return { success: false, error: existingRes.error }
+      }
+      const existingList = existingRes.data.filter((r) => r.id !== 'default-caixa-01')
       if (
         existingList.some(
           (r) => r.name.toLocaleLowerCase('pt-BR') === cleanName.toLocaleLowerCase('pt-BR'),
@@ -366,7 +251,6 @@ export const cashSessionService = {
         return { success: false, error: `Já existe um caixa cadastrado com o nome "${cleanName}".` }
       }
 
-      const nowIso = new Date().toISOString()
       const { data, error } = await supabase
         .from('cash_registers')
         .insert({
@@ -378,29 +262,12 @@ export const cashSessionService = {
         .select('*')
         .single()
 
-      let created: CashRegister
-      if (!error && data) {
-        created = mapRegisterRow(data as CashRegisterRow)
-      } else {
-        created = {
-          id: `local-reg-${Date.now()}`,
-          organizationId,
-          name: cleanName,
-          description: cleanDesc,
-          isActive: true,
-          createdAt: nowIso,
-        }
+      if (error || !data) {
+        logger.error('Erro ao cadastrar Caixa PDV no Supabase', error)
+        return { success: false, error: 'Não foi possível cadastrar o Caixa PDV.' }
       }
 
-      const updatedLocal = [
-        ...existingList.filter(
-          (r) => r.name.toLocaleLowerCase('pt-BR') !== cleanName.toLocaleLowerCase('pt-BR'),
-        ),
-        created,
-      ]
-      saveLocalStorageRegisters(organizationId, updatedLocal)
-
-      return { success: true, data: created }
+      return { success: true, data: mapRegisterRow(data as CashRegisterRow) }
     } catch (err) {
       logger.error('Erro ao cadastrar Caixa PDV', err)
       return { success: false, error: 'Erro inesperado ao cadastrar Caixa PDV.' }
@@ -417,27 +284,28 @@ export const cashSessionService = {
   ): Promise<ServiceResult<void>> {
     try {
       const openRes = await this.getOpenSession(organizationId, registerName)
-      if (openRes.success && openRes.data) {
+      if (!openRes.success) {
+        return { success: false, error: openRes.error }
+      }
+      if (openRes.data) {
         return {
           success: false,
           error: `Não é possível excluir o "${registerName}" pois ele está com sessão aberta pelo operador "${openRes.data.operatorName}".`,
         }
       }
 
-      if (!registerId.startsWith('local-') && registerId !== 'default-caixa-01') {
-        await supabase
+      if (registerId !== 'default-caixa-01') {
+        const { error } = await supabase
           .from('cash_registers')
           .delete()
           .eq('organization_id', organizationId)
           .eq('id', registerId)
-      }
 
-      const local = getLocalStorageRegisters(organizationId).filter(
-        (r) =>
-          r.id !== registerId &&
-          r.name.toLocaleLowerCase('pt-BR') !== registerName.trim().toLocaleLowerCase('pt-BR'),
-      )
-      saveLocalStorageRegisters(organizationId, local)
+        if (error) {
+          logger.error('Erro ao remover Caixa PDV no Supabase', error)
+          return { success: false, error: 'Erro ao remover Caixa PDV.' }
+        }
+      }
 
       return { success: true, data: undefined }
     } catch (err) {
@@ -447,49 +315,54 @@ export const cashSessionService = {
   },
 
   /**
-   * Lista todas as sessões abertas no momento em qualquer caixa da organização
+   * Lista sessões abertas no momento na organização (opcionalmente filtrando por tipo: 'pdv' ou 'cash_management')
    */
-  async listOpenSessions(organizationId: UUID): Promise<ServiceResult<CashSession[]>> {
+  async listOpenSessions(
+    organizationId: UUID,
+    sessionType?: 'pdv' | 'cash_management',
+  ): Promise<ServiceResult<CashSession[]>> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cash_sessions')
         .select('*')
         .eq('organization_id', organizationId)
         .eq('status', 'open')
 
-      const localOpen = getLocalStorageSessions(organizationId).filter((s) => s.status === 'open')
-
-      if (!error && Array.isArray(data)) {
-        const remoteOpen = (data as CashSessionRow[]).map(mapSessionRow)
-        const byRegister = new Map<string, CashSession>()
-        const seenOperators = new Set<string>()
-
-        for (const s of [...remoteOpen, ...localOpen]) {
-          if (!byRegister.has(s.registerId) && !seenOperators.has(s.openedBy)) {
-            byRegister.set(s.registerId, s)
-            seenOperators.add(s.openedBy)
-          }
-        }
-        return { success: true, data: Array.from(byRegister.values()) }
+      if (sessionType) {
+        query = query.eq('session_type', sessionType)
       }
 
-      return { success: true, data: localOpen }
+      const { data, error } = await query
+
+      if (error) {
+        logger.error('Erro ao listar sessões abertas no Supabase', error)
+        return { success: false, error: 'Não foi possível consultar os caixas abertos.' }
+      }
+
+      return { success: true, data: ((data ?? []) as CashSessionRow[]).map(mapSessionRow) }
     } catch {
-      const local = getLocalStorageSessions(organizationId).filter((s) => s.status === 'open')
-      return { success: true, data: local }
+      return { success: false, error: 'Não foi possível consultar os caixas abertos.' }
     }
   },
 
   /**
-   * Localiza a sessão aberta mais adequada para vincular vendas/OS automaticamente
+   * Lista apenas as sessões abertas dos terminais de PDV (/orcafacil/sales)
+   */
+  async listOpenPdvSessions(organizationId: UUID): Promise<ServiceResult<CashSession[]>> {
+    return this.listOpenSessions(organizationId, 'pdv')
+  },
+
+  /**
+   * Localiza a sessão aberta mais adequada para vincular vendas/OS no PDV
    */
   async findBestOpenSession(
     organizationId: UUID,
     preferredOperatorId?: string,
+    sessionType: 'pdv' | 'cash_management' = 'pdv',
   ): Promise<CashSession | null> {
     try {
       const selectedReg = this.getSelectedRegisterName(organizationId)
-      const openListRes = await this.listOpenSessions(organizationId)
+      const openListRes = await this.listOpenSessions(organizationId, sessionType)
       if (openListRes.success && openListRes.data.length > 0) {
         if (preferredOperatorId) {
           const byOp = openListRes.data.find((s) => s.openedBy === preferredOperatorId)
@@ -499,8 +372,7 @@ export const cashSessionService = {
         if (byReg) return byReg
         return openListRes.data[0]
       }
-      const fallback = await this.getOpenSession(organizationId, selectedReg)
-      return fallback.success ? fallback.data : null
+      return null
     } catch {
       return null
     }
@@ -511,39 +383,32 @@ export const cashSessionService = {
    */
   async getSessionById(organizationId: UUID, sessionId: string): Promise<CashSession | null> {
     try {
-      if (!sessionId.startsWith('local-')) {
-        const { data, error } = await supabase
-          .from('cash_sessions')
-          .select('*')
-          .eq('organization_id', organizationId)
-          .eq('id', sessionId)
-          .maybeSingle()
+      const { data, error } = await supabase
+        .from('cash_sessions')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('id', sessionId)
+        .maybeSingle()
 
-        if (!error && data) {
-          return mapSessionRow(data as CashSessionRow)
-        }
+      if (error) {
+        logger.error('Erro ao consultar sessão de caixa no Supabase', error)
+        return null
       }
-    } catch {
-      // fallback abaixo
-    }
 
-    const local = getLocalStorageSessions(organizationId)
-    const foundLocal = local.find((s) => s.id === sessionId)
-    if (foundLocal) return foundLocal
-
-    const openRes = await this.getOpenSession(organizationId)
-    if (openRes.success && openRes.data && openRes.data.id === sessionId) {
-      return openRes.data
+      return data ? mapSessionRow(data as CashSessionRow) : null
+    } catch (error) {
+      logger.error('Exceção ao consultar sessão de caixa no Supabase', error)
+      return null
     }
-    return null
   },
 
   /**
-   * Obtém a sessão de caixa atualmente aberta para o caixa/operador da organização
+   * Obtém a sessão de caixa atualmente aberta para um terminal e escopo
    */
   async getOpenSession(
     organizationId: UUID,
     registerId = 'Caixa 01',
+    sessionType: 'pdv' | 'cash_management' = 'pdv',
   ): Promise<ServiceResult<CashSession | null>> {
     try {
       const { data, error } = await supabase
@@ -552,60 +417,192 @@ export const cashSessionService = {
         .eq('organization_id', organizationId)
         .eq('register_id', registerId)
         .eq('status', 'open')
+        .eq('session_type', sessionType)
         .maybeSingle()
 
-      if (!error && data) {
-        return { success: true, data: mapSessionRow(data as CashSessionRow) }
+      if (error) {
+        logger.error('Erro ao consultar sessão aberta no Supabase', error)
+        return { success: false, error: 'Não foi possível consultar a sessão de caixa.' }
       }
 
-      // Se der erro de tabela inexistente no cache ou não encontrar no banco, consulta localmente
-      const localSessions = getLocalStorageSessions(organizationId)
-      const openLocal =
-        localSessions.find((s) => s.registerId === registerId && s.status === 'open') || null
-
-      return { success: true, data: openLocal }
+      return { success: true, data: data ? mapSessionRow(data as CashSessionRow) : null }
     } catch (err) {
-      logger.warn('Erro ao consultar sessão aberta no banco, buscando localmente', err as Record<string, unknown>)
-      const localSessions = getLocalStorageSessions(organizationId)
-      const openLocal =
-        localSessions.find((s) => s.registerId === registerId && s.status === 'open') || null
-      return { success: true, data: openLocal }
+      logger.error('Erro ao consultar sessão aberta no Supabase', err)
+      return { success: false, error: 'Não foi possível consultar a sessão de caixa.' }
     }
   },
 
   /**
-   * Abre um novo turno/sessão de caixa
+   * Obtém a sessão de caixa atualmente aberta para um terminal de PDV
+   */
+  async getOpenPdvSession(
+    organizationId: UUID,
+    registerId = 'Caixa 01',
+  ): Promise<ServiceResult<CashSession | null>> {
+    return this.getOpenSession(organizationId, registerId, 'pdv')
+  },
+
+  /**
+   * Obtém a sessão aberta do Caixa Geral da empresa (/cash)
+   */
+  async getOpenCashManagementSession(
+    organizationId: UUID,
+  ): Promise<ServiceResult<CashSession | null>> {
+    try {
+      const { data, error } = await supabase
+        .from('cash_sessions')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('status', 'open')
+        .eq('session_type', 'cash_management')
+        .maybeSingle()
+
+      if (error) {
+        logger.error('Erro ao consultar Caixa Geral aberto no Supabase', error)
+        return { success: false, error: 'Não foi possível consultar o Caixa Geral.' }
+      }
+
+      return { success: true, data: data ? mapSessionRow(data as CashSessionRow) : null }
+    } catch (err) {
+      logger.error('Erro ao consultar Caixa Geral aberto no Supabase', err)
+      return { success: false, error: 'Não foi possível consultar o Caixa Geral.' }
+    }
+  },
+
+  /**
+   * Obtém a última sessão de caixa fechada (ex: Caixa Geral ou PDV).
+   * Utilizado para herdar obrigatoriamente o saldo final com o qual o caixa anterior encerrou.
+   */
+  async getLastClosedSession(
+    organizationId: UUID,
+    sessionType: CashSessionType = 'cash_management',
+  ): Promise<ServiceResult<CashSession | null>> {
+    try {
+      const { data, error } = await supabase
+        .from('cash_sessions')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('session_type', sessionType)
+        .eq('status', 'closed')
+        .order('closed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        logger.error('Erro ao consultar última sessão de caixa fechada no Supabase', error)
+        return { success: false, error: 'Não foi possível consultar a última sessão fechada.' }
+      }
+
+      if (data) {
+        return { success: true, data: mapSessionRow(data as CashSessionRow) }
+      }
+
+      // Fallback para sessões anteriores que possam não ter session_type gravado
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('cash_sessions')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('status', 'closed')
+        .order('closed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (fallbackError) {
+        return { success: false, error: 'Não foi possível consultar a última sessão fechada.' }
+      }
+
+      return {
+        success: true,
+        data: fallbackData ? mapSessionRow(fallbackData as CashSessionRow) : null,
+      }
+    } catch (err) {
+      logger.error('Exceção ao consultar última sessão de caixa fechada', err)
+      return { success: false, error: 'Erro inesperado ao consultar a última sessão fechada.' }
+    }
+  },
+
+  /**
+   * Abre um novo turno/sessão de caixa (com separação total entre PDV e Caixa Geral)
    */
   async openSession(
     organizationId: UUID,
     params: OpenSessionParams,
   ): Promise<ServiceResult<CashSession>> {
     try {
-      const registerId = params.registerId || 'Caixa 01'
+      const sessionType = params.sessionType || 'pdv'
+      const registerId =
+        params.registerId ||
+        (sessionType === 'cash_management' ? 'Caixa Geral' : 'Caixa 01')
 
-      // 1. Verifica se já existe um caixa aberto para este terminal
-      const checkResult = await this.getOpenSession(organizationId, registerId)
-      if (checkResult.success && checkResult.data) {
-        const existing = checkResult.data
-        if (existing.openedBy !== params.operatorId) {
-          return {
-            success: false,
-            error: `O ${registerId} já está aberto pelo operador "${existing.operatorName}". É obrigatório realizar o fechamento do caixa anterior (Tecla F12) antes de abrir uma nova sessão.`,
+      if (sessionType === 'cash_management') {
+        // 1. Gestão de Caixa (/cash): verifica se o Caixa Geral já está aberto
+        const checkResult = await this.getOpenCashManagementSession(organizationId)
+        if (!checkResult.success) {
+          return { success: false, error: checkResult.error }
+        }
+        if (checkResult.data) {
+          return { success: true, data: checkResult.data }
+        }
+
+        // Se o saldo inicial não tiver sido fornecido, busca o valor do último caixa fechado
+        if (params.openingBalance === undefined || params.openingBalance === null) {
+          const lastClosedRes = await this.getLastClosedSession(organizationId, 'cash_management')
+          if (lastClosedRes.success && lastClosedRes.data) {
+            const closed = lastClosedRes.data
+            const closingVal =
+              closed.countedMoney !== null &&
+              closed.countedMoney !== undefined &&
+              closed.countedMoney !== ''
+                ? parseFloat(closed.countedMoney)
+                : parseFloat(closed.expectedMoney) || 0
+            params.openingBalance = closingVal
           }
         }
-        return { success: true, data: existing }
-      }
+      } else {
+        // 2. PDV (/orcafacil/sales):
+        // 2.0 O caixa PDV só pode ser aberto quando o Caixa Geral estiver aberto
+        const generalSessionRes = await this.getOpenCashManagementSession(organizationId)
+        if (!generalSessionRes.success) {
+          return { success: false, error: generalSessionRes.error }
+        }
+        if (!generalSessionRes.data) {
+          return {
+            success: false,
+            error: 'Caixa Geral ainda não aberto, procure o seu administrador',
+          }
+        }
 
-      // 2. Impede que o mesmo usuário abra dois caixas diferentes simultaneamente
-      const openListRes = await this.listOpenSessions(organizationId)
-      if (openListRes.success) {
+        // 2.1 Verifica se já existe um caixa de PDV aberto para este terminal específico
+        const checkResult = await this.getOpenPdvSession(organizationId, registerId)
+        if (!checkResult.success) {
+          return { success: false, error: checkResult.error }
+        }
+        if (checkResult.data) {
+          const existing = checkResult.data
+          if (existing.openedBy !== params.operatorId) {
+            return {
+              success: false,
+              error: `O ${registerId} já está aberto pelo operador "${existing.operatorName}". É obrigatório realizar o fechamento do caixa anterior (Tecla F12) antes de abrir uma nova sessão.`,
+            }
+          }
+          return { success: true, data: existing }
+        }
+
+        // 2.2 Impede que o mesmo usuário abra dois caixas de PDV simultaneamente
+        const openListRes = await this.listOpenPdvSessions(organizationId)
+        if (!openListRes.success) {
+          return { success: false, error: openListRes.error }
+        }
         const otherOpenByUser = openListRes.data.find(
-          (s) => s.openedBy === params.operatorId && s.registerId !== registerId && s.status === 'open',
+          (s) =>
+            s.openedBy === params.operatorId &&
+            s.registerId !== registerId &&
+            s.status === 'open',
         )
         if (otherOpenByUser) {
           return {
             success: false,
-            error: `Você já possui o "${otherOpenByUser.registerId}" aberto. Cada usuário só pode ter um caixa aberto por vez. Feche primeiro o "${otherOpenByUser.registerId}" para abrir outro caixa.`,
+            error: `Você já possui o "${otherOpenByUser.registerId}" aberto. Cada operador só pode ter um caixa de PDV aberto por vez. Feche primeiro o "${otherOpenByUser.registerId}" para abrir outro caixa.`,
           }
         }
       }
@@ -620,6 +617,7 @@ export const cashSessionService = {
         .insert({
           organization_id: organizationId,
           register_id: registerId,
+          session_type: sessionType,
           opened_by: params.operatorId,
           operator_name: params.operatorName,
           status: 'open',
@@ -641,57 +639,108 @@ export const cashSessionService = {
         .select('*')
         .single()
 
-      let newSession: CashSession
-
-      if (!error && data) {
-        newSession = mapSessionRow(data as CashSessionRow)
-      } else {
-        // Fallback local caso tabela não esteja migrada no Supabase
-        newSession = {
-          id: `local-session-${Date.now()}`,
-          organizationId,
-          registerId,
-          openedBy: params.operatorId,
-          closedBy: null,
-          operatorName: params.operatorName,
-          status: 'open',
-          openingBalance: initialBalanceStr,
-          openedAt: nowIso,
-          closedAt: null,
-          totalSales: '0.00',
-          totalMoney: '0.00',
-          totalPix: '0.00',
-          totalCreditCard: '0.00',
-          totalDebitCard: '0.00',
-          totalAdditionalEntries: '0.00',
-          totalWithdrawals: '0.00',
-          totalCancellations: '0.00',
-          totalBillPayments: '0.00',
-          expectedMoney: initialBalanceStr,
-          countedMoney: null,
-          countedPix: null,
-          countedCreditCard: null,
-          countedDebitCard: null,
-          difference: null,
-          conferenceAttempts: 0,
-          discrepancyJustification: null,
-          supervisorAuthorizedBy: null,
-          salesCount: 0,
-          notes: params.notes?.trim() || null,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        }
+      if (error || !data) {
+        logger.error('Erro ao abrir sessão de caixa no Supabase', error)
+        return { success: false, error: 'Não foi possível abrir a sessão de caixa no Supabase.' }
       }
 
-      // Salva ou atualiza no localStorage
-      const local = getLocalStorageSessions(organizationId).filter((s) => s.id !== newSession.id)
-      local.push(newSession)
-      saveLocalStorageSessions(organizationId, local)
-
-      return { success: true, data: newSession }
+      return { success: true, data: mapSessionRow(data as CashSessionRow) }
     } catch (err) {
       logger.error('Exceção ao abrir sessão de caixa', err)
       return { success: false, error: 'Erro inesperado ao realizar abertura de caixa.' }
+    }
+  },
+
+  /**
+   * Sincroniza uma venda realizada (no PDV ou avulsa/Nova Venda) com a sessão de Caixa Geral (/cash) se ela estiver aberta.
+   * Acumula os valores no Caixa Geral e adiciona uma movimentação no extrato.
+   */
+  async syncSaleWithCashManagement(
+    organizationId: UUID,
+    params: {
+      total: string
+      paymentMethod: PaymentMethod
+      amountReceived?: string
+      saleNumber?: string
+      registerName?: string
+      operatorName?: string
+      operatorId?: string
+      excludeSessionId?: string
+    },
+  ): Promise<void> {
+    try {
+      const openMgmtRes = await this.getOpenCashManagementSession(organizationId)
+      if (!openMgmtRes.success || !openMgmtRes.data) {
+        // Se o Caixa Geral não estiver aberto no momento, não há o que sincronizar
+        return
+      }
+
+      const mgmtSession = openMgmtRes.data
+
+      // Acumula os totais no Caixa Geral somente se a venda já não tiver sido registrada diretamente nele
+      if (!params.excludeSessionId || params.excludeSessionId !== mgmtSession.id) {
+        await this.recordSaleInSession(organizationId, mgmtSession.id, {
+          total: params.total,
+          paymentMethod: params.paymentMethod,
+          amountReceived: params.amountReceived,
+        })
+      }
+
+      // Registra a movimentação no extrato do Caixa Geral
+      const methodLabels: Record<PaymentMethod, string> = {
+        money: 'Dinheiro',
+        pix: 'PIX',
+        credit_card: 'Cartão de Crédito',
+        debit_card: 'Cartão de Débito',
+        on_credit: 'A Prazo / Crediário',
+        other: 'Outro',
+      }
+      const paymentLabel = methodLabels[params.paymentMethod] || 'Outro'
+      const saleLabel = params.saleNumber ? `Venda ${params.saleNumber}` : 'Venda'
+      const pdvLabel = params.registerName ? ` [${params.registerName}]` : ' [Nova Venda]'
+      const reasonText = `${saleLabel}${pdvLabel} • ${paymentLabel}`
+
+      await supabase.from('cash_session_movements').insert({
+        organization_id: organizationId,
+        session_id: mgmtSession.id,
+        type: 'supply',
+        amount: toMoneyString(toCents(params.total)),
+        reason: reasonText,
+        created_by: params.operatorId || null,
+      })
+    } catch (err) {
+      logger.warn('Erro ao sincronizar venda do PDV com o Caixa Geral (/cash)', { error: err })
+    }
+  },
+
+  /**
+   * Sincroniza uma movimentação manual do PDV (sangria ou suprimento) com o Caixa Geral se estiver aberto
+   */
+  async syncMovementWithCashManagement(
+    organizationId: UUID,
+    params: {
+      type: 'supply' | 'bleed'
+      amount: string | number
+      reason: string
+      registerName?: string
+      operatorId?: string
+    },
+  ): Promise<void> {
+    try {
+      const openMgmtRes = await this.getOpenCashManagementSession(organizationId)
+      if (!openMgmtRes.success || !openMgmtRes.data) return
+
+      const mgmtSession = openMgmtRes.data
+      const pdvTag = params.registerName ? `[${params.registerName}] ` : '[PDV] '
+
+      await this.recordMovement(organizationId, mgmtSession.id, {
+        type: params.type,
+        amount: params.amount,
+        reason: `${pdvTag}${params.reason}`.trim(),
+        userId: params.operatorId,
+      })
+    } catch (err) {
+      logger.warn('Erro ao sincronizar movimentação manual do PDV com o Caixa Geral', { error: err })
     }
   },
 
@@ -754,9 +803,7 @@ export const cashSessionService = {
         ...updatedFields,
       }
 
-      // Tenta atualizar no Supabase se não for ID puramente local
-      if (!sessionId.startsWith('local-')) {
-        await supabase
+      const { error } = await supabase
           .from('cash_sessions')
           .update({
             total_sales: updatedSession.totalSales,
@@ -769,18 +816,56 @@ export const cashSessionService = {
             updated_at: updatedSession.updatedAt,
           })
           .eq('id', sessionId)
-      }
 
-      // Atualiza no localStorage
-      const local = getLocalStorageSessions(organizationId).map((s) =>
-        s.id === sessionId ? updatedSession : s,
-      )
-      saveLocalStorageSessions(organizationId, local)
+      if (error) {
+        logger.error('Erro ao atualizar venda na sessão de caixa no Supabase', error)
+        return { success: false, error: 'Erro ao sincronizar venda com a sessão do caixa.' }
+      }
 
       return { success: true, data: updatedSession }
     } catch (err) {
       logger.error('Exceção ao registrar venda na sessão de caixa', err)
       return { success: false, error: 'Erro ao sincronizar venda com a sessão do caixa.' }
+    }
+  },
+
+  /**
+   * Faz upload de nota de compra ou comprovante para uma movimentação manual de caixa
+   */
+  async uploadMovementAttachment(
+    organizationId: UUID,
+    file: File,
+  ): Promise<ServiceResult<{ url: string; fileName: string }>> {
+    try {
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${organizationId}/${Date.now()}_${sanitizedName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('cash-attachments')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        })
+
+      if (uploadError) {
+        logger.error('Erro ao fazer upload do comprovante no Supabase Storage', uploadError)
+        return { success: false, error: 'Falha ao enviar comprovante/nota. Tente novamente.' }
+      }
+
+      const { data: publicData } = supabase.storage
+        .from('cash-attachments')
+        .getPublicUrl(filePath)
+
+      return {
+        success: true,
+        data: {
+          url: publicData.publicUrl,
+          fileName: file.name,
+        },
+      }
+    } catch (err) {
+      logger.error('Exceção ao fazer upload de anexo do caixa', err)
+      return { success: false, error: 'Erro inesperado ao anexar o comprovante.' }
     }
   },
 
@@ -792,58 +877,87 @@ export const cashSessionService = {
     sessionId: string,
   ): Promise<ServiceResult<CashSessionMovement[]>> {
     try {
-      const localMovements = getLocalStorageMovements(organizationId, sessionId)
-
-      if (!sessionId.startsWith('local-')) {
-        const { data, error } = await supabase
+      const { data, error } = await supabase
           .from('cash_session_movements')
           .select('*')
           .eq('organization_id', organizationId)
           .eq('session_id', sessionId)
           .order('created_at', { ascending: false })
 
-        if (!error && Array.isArray(data)) {
-          const remote: CashSessionMovement[] = data.map((row: Record<string, unknown>) => ({
-            id: String(row.id),
-            sessionId: String(row.session_id),
-            type: (row.type === 'supply' ? 'supply' : 'bleed') as 'supply' | 'bleed',
-            amount: String(row.amount ?? '0.00'),
-            reason: String(row.reason ?? ''),
-            createdBy: row.created_by ? String(row.created_by) : null,
-            createdAt: String(row.created_at ?? new Date().toISOString()),
-          }))
-
-          const mergedMap = new Map<string, CashSessionMovement>()
-          for (const item of [...remote, ...localMovements]) {
-            const key = `${item.type}_${item.amount}_${item.reason}_${item.createdAt.slice(0, 16)}`
-            if (!mergedMap.has(key)) {
-              mergedMap.set(key, item)
-            }
-          }
-
-          return {
-            success: true,
-            data: Array.from(mergedMap.values()).sort(
-              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-            ),
-          }
-        }
+      if (error) {
+        logger.error('Erro ao listar movimentações no Supabase', error)
+        return { success: false, error: 'Não foi possível carregar as movimentações do caixa.' }
       }
 
       return {
         success: true,
-        data: [...localMovements].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        ),
+        data: (data ?? []).map((row: Record<string, unknown>) => ({
+          id: String(row.id),
+          sessionId: String(row.session_id),
+          type: (row.type === 'supply' ? 'supply' : 'bleed') as 'supply' | 'bleed',
+          amount: String(row.amount ?? '0.00'),
+          reason: String(row.reason ?? ''),
+          category: row.category ? String(row.category) : null,
+          referenceId: row.reference_id ? String(row.reference_id) : null,
+          attachmentUrl: row.attachment_url ? String(row.attachment_url) : null,
+          attachmentName: row.attachment_name ? String(row.attachment_name) : null,
+          moveToAccount: Boolean(
+            row.move_to_account ||
+            String(row.category || '').includes('Conta') ||
+            String(row.reason || '').includes('[Transferido para Conta]') ||
+            String(row.reason || '').includes('Mover para Conta')
+          ),
+          createdBy: row.created_by ? String(row.created_by) : null,
+          createdAt: String(row.created_at ?? new Date().toISOString()),
+        })),
       }
-    } catch {
-      const localMovements = getLocalStorageMovements(organizationId, sessionId)
+    } catch (error) {
+      logger.error('Exceção ao listar movimentações no Supabase', error)
+      return { success: false, error: 'Não foi possível carregar as movimentações do caixa.' }
+    }
+  },
+
+  /**
+   * Lista todas as movimentações manuais de caixa da organização (todas as sessões)
+   */
+  async listAllMovements(organizationId: UUID): Promise<ServiceResult<CashSessionMovement[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('cash_session_movements')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        logger.error('Erro ao listar todas as movimentações no Supabase', error)
+        return { success: false, error: 'Não foi possível carregar as movimentações do caixa.' }
+      }
+
       return {
         success: true,
-        data: [...localMovements].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        ),
+        data: (data ?? []).map((row: Record<string, unknown>) => ({
+          id: String(row.id),
+          sessionId: String(row.session_id),
+          type: (row.type === 'supply' ? 'supply' : 'bleed') as 'supply' | 'bleed',
+          amount: String(row.amount ?? '0.00'),
+          reason: String(row.reason ?? ''),
+          category: row.category ? String(row.category) : null,
+          referenceId: row.reference_id ? String(row.reference_id) : null,
+          attachmentUrl: row.attachment_url ? String(row.attachment_url) : null,
+          attachmentName: row.attachment_name ? String(row.attachment_name) : null,
+          moveToAccount: Boolean(
+            row.move_to_account ||
+            String(row.category || '').includes('Conta') ||
+            String(row.reason || '').includes('[Transferido para Conta]') ||
+            String(row.reason || '').includes('Mover para Conta')
+          ),
+          createdBy: row.created_by ? String(row.created_by) : null,
+          createdAt: String(row.created_at ?? new Date().toISOString()),
+        })),
       }
+    } catch (error) {
+      logger.error('Exceção ao listar todas as movimentações no Supabase', error)
+      return { success: false, error: 'Não foi possível carregar as movimentações do caixa.' }
     }
   },
 
@@ -899,22 +1013,26 @@ export const cashSessionService = {
         updatedAt: new Date().toISOString(),
       }
 
+      let finalCategory = params.category || (params.type === 'supply' ? 'Suprimento' : 'Sangria')
+      if (params.moveToAccount && !finalCategory.includes('Conta')) {
+        finalCategory = `${finalCategory} (Mover para Conta)`
+      }
+
       const movementItem: CashSessionMovement = {
         id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         sessionId,
         type: params.type,
         amount: toMoneyString(movementCents),
         reason: cleanReason,
-        category: params.category || (params.type === 'supply' ? 'Suprimento' : 'Sangria'),
+        category: finalCategory,
         referenceId: params.referenceId || null,
+        moveToAccount: Boolean(params.moveToAccount),
         operatorName: params.operatorName || session.operatorName,
         createdBy: params.userId || null,
         createdAt: new Date().toISOString(),
       }
 
-      // Persiste no Supabase se possível
-      if (!sessionId.startsWith('local-')) {
-        await supabase
+      const { error: updateError } = await supabase
           .from('cash_sessions')
           .update({
             total_additional_entries: updatedSession.totalAdditionalEntries,
@@ -924,26 +1042,36 @@ export const cashSessionService = {
           })
           .eq('id', sessionId)
 
-        try {
-          await supabase.from('cash_session_movements').insert({
-            organization_id: organizationId,
-            session_id: sessionId,
-            type: params.type,
-            amount: movementItem.amount,
-            reason: movementItem.reason,
-            created_by: params.userId || null,
-          })
-        } catch (e) {
-          logger.warn('Falha ao gravar movimentação no banco remoto', e as Record<string, unknown>)
-        }
+      if (updateError) {
+        logger.error('Erro ao atualizar sessão do caixa no Supabase', updateError)
+        return { success: false, error: 'Não foi possível atualizar a sessão do caixa.' }
       }
 
-      // Salva localmente
-      saveLocalStorageMovement(organizationId, sessionId, movementItem)
-      const local = getLocalStorageSessions(organizationId).map((s) =>
-        s.id === sessionId ? updatedSession : s,
-      )
-      saveLocalStorageSessions(organizationId, local)
+      const insertPayload: Record<string, unknown> = {
+        organization_id: organizationId,
+        session_id: sessionId,
+        type: params.type,
+        amount: movementItem.amount,
+        reason: movementItem.reason,
+        category: movementItem.category || null,
+        attachment_url: params.attachmentUrl || null,
+        attachment_name: params.attachmentName || null,
+        created_by: params.userId || null,
+        move_to_account: Boolean(params.moveToAccount),
+      }
+
+      let { error: movementError } = await supabase.from('cash_session_movements').insert(insertPayload)
+
+      if (movementError && (movementError.message?.includes('move_to_account') || movementError.code === '42703')) {
+        delete insertPayload.move_to_account
+        const retryRes = await supabase.from('cash_session_movements').insert(insertPayload)
+        movementError = retryRes.error
+      }
+
+      if (movementError) {
+        logger.error('Erro ao salvar movimentação no Supabase', movementError)
+        return { success: false, error: 'Não foi possível salvar a movimentação do caixa.' }
+      }
 
       return { success: true, data: updatedSession }
     } catch (err) {
@@ -1024,15 +1152,16 @@ export const cashSessionService = {
         updatedAt: nowIso,
       }
 
-      // Atualiza no Supabase se possível
-      if (!sessionId.startsWith('local-')) {
-        const { error } = await supabase
+      const { error } = await supabase
           .from('cash_sessions')
           .update({
             status: 'closed',
             closed_by: params.closedBy,
             closed_at: nowIso,
             counted_money: closedSession.countedMoney,
+            counted_pix: closedSession.countedPix,
+            counted_credit_card: closedSession.countedCreditCard,
+            counted_debit_card: closedSession.countedDebitCard,
             difference: closedSession.difference,
             conference_attempts: attempts,
             discrepancy_justification: closedSession.discrepancyJustification,
@@ -1041,16 +1170,10 @@ export const cashSessionService = {
           })
           .eq('id', sessionId)
 
-        if (error) {
-          logger.warn('Erro ao atualizar fechamento no banco, persistindo localmente', error as unknown as Record<string, unknown>)
-        }
+      if (error) {
+        logger.error('Erro ao fechar sessão de caixa no Supabase', error)
+        return { success: false, error: 'Não foi possível salvar o fechamento da sessão no Supabase.' }
       }
-
-      // Atualiza lista local
-      const local = getLocalStorageSessions(organizationId).map((s) =>
-        s.id === sessionId ? closedSession : s,
-      )
-      saveLocalStorageSessions(organizationId, local)
 
       return { success: true, data: closedSession }
     } catch (err) {
@@ -1062,42 +1185,34 @@ export const cashSessionService = {
   /**
    * Retorna o histórico de todas as sessões de caixa (abertas e fechadas)
    */
-  async listHistory(organizationId: UUID): Promise<ServiceResult<CashSession[]>> {
+  async listHistory(
+    organizationId: UUID,
+    sessionType?: CashSessionType,
+  ): Promise<ServiceResult<CashSession[]>> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cash_sessions')
         .select('*')
         .eq('organization_id', organizationId)
-        .order('opened_at', { ascending: false })
 
-      const local = getLocalStorageSessions(organizationId)
+      if (sessionType) {
+        query = query.eq('session_type', sessionType)
+      }
 
-      if (!error && Array.isArray(data)) {
-        const remote = (data as CashSessionRow[]).map(mapSessionRow)
-        const byId = new Map<string, CashSession>()
-        for (const s of [...remote, ...local]) {
-          if (!byId.has(s.id)) {
-            byId.set(s.id, s)
-          }
-        }
-        return {
-          success: true,
-          data: Array.from(byId.values()).sort(
-            (a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime(),
-          ),
-        }
+      const { data, error } = await query.order('opened_at', { ascending: false })
+
+      if (error) {
+        logger.error('Erro ao listar histórico de sessões no Supabase', error)
+        return { success: false, error: 'Não foi possível carregar o histórico de sessões.' }
       }
 
       return {
         success: true,
-        data: local.sort(
-          (a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime(),
-        ),
+        data: ((data ?? []) as CashSessionRow[]).map(mapSessionRow),
       }
     } catch (err) {
-      logger.warn('Erro ao listar histórico de sessões do banco', err as Record<string, unknown>)
-      const local = getLocalStorageSessions(organizationId)
-      return { success: true, data: local }
+      logger.error('Erro ao listar histórico de sessões no Supabase', err)
+      return { success: false, error: 'Não foi possível carregar o histórico de sessões.' }
     }
   },
 }

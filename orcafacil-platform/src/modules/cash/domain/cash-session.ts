@@ -1,4 +1,5 @@
 export type CashSessionStatus = 'open' | 'closed'
+export type CashSessionType = 'pdv' | 'cash_management'
 export type DiscrepancyType = 'correct' | 'surplus' | 'shortage'
 
 export interface CashRegister {
@@ -18,6 +19,9 @@ export interface CashSessionMovement {
   reason: string
   category?: string | null // ex: "Troco", "Sangria", "Pagamento de Boleto", "Pagamento Fornecedor"
   referenceId?: string | null
+  attachmentUrl?: string | null
+  attachmentName?: string | null
+  moveToAccount?: boolean
   operatorName?: string | null
   createdBy?: string | null
   createdAt: string
@@ -33,6 +37,7 @@ export interface CashSession {
   closedBy?: string | null
   operatorName: string
   status: CashSessionStatus
+  sessionType?: CashSessionType
   openingBalance: string // Saldo inicial / fundo de troco
   openedAt: string
   closedAt?: string | null

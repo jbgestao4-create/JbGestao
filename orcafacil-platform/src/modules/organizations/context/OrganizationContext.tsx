@@ -15,6 +15,7 @@ interface OrganizationContextType {
   setCurrentOrganization: (org: Organization) => void
   reloadOrganizations: () => Promise<void>
   createOrganization: (name: string, slug: string) => Promise<ServiceResult<UUID>>
+  updatePdvBackground: (backgroundUrl: string | null) => Promise<ServiceResult<void>>
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined)
@@ -35,11 +36,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     }
 
     const role = await organizationService.getUserRole(orgId, userId)
-    if (role) {
-      setUserRole(role)
-    } else {
-      setUserRole('admin')
-    }
+    setUserRole(role)
   }
 
   const setCurrentOrganization = (org: Organization) => {
@@ -125,6 +122,24 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     return result
   }
 
+  const handleUpdatePdvBackground = async (
+    backgroundUrl: string | null,
+  ): Promise<ServiceResult<void>> => {
+    if (!currentOrganization) return { success: false, error: 'Organização não selecionada.' }
+    const result = await organizationService.updatePdvBackground(currentOrganization.id, backgroundUrl)
+    if (result.success) {
+      setCurrentOrganizationState((prev) =>
+        prev ? { ...prev, pdvBackgroundUrl: backgroundUrl } : prev,
+      )
+      setOrganizations((prev) =>
+        prev.map((o) =>
+          o.id === currentOrganization.id ? { ...o, pdvBackgroundUrl: backgroundUrl } : o,
+        ),
+      )
+    }
+    return result
+  }
+
   return (
     <OrganizationContext.Provider
       value={{
@@ -135,6 +150,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         setCurrentOrganization,
         reloadOrganizations: loadOrganizations,
         createOrganization: handleCreateOrganization,
+        updatePdvBackground: handleUpdatePdvBackground,
       }}
     >
       {children}

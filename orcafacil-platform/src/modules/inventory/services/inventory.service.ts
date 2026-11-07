@@ -245,29 +245,6 @@ function getInventoryError(
   return `Não foi possível ${operation} o material. Verifique sua conexão e tente novamente.`
 }
 
-const DELETED_ITEMS_KEY_PREFIX = 'orcafacil_deleted_inventory_items_'
-
-function getLocalDeletedItemIds(orgId: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(`${DELETED_ITEMS_KEY_PREFIX}${orgId}`)
-    if (!raw) return new Set()
-    const parsed = JSON.parse(raw) as string[]
-    return new Set(Array.isArray(parsed) ? parsed : [])
-  } catch {
-    return new Set()
-  }
-}
-
-function saveLocalDeletedItemId(orgId: string, itemId: string) {
-  try {
-    const set = getLocalDeletedItemIds(orgId)
-    set.add(itemId)
-    localStorage.setItem(`${DELETED_ITEMS_KEY_PREFIX}${orgId}`, JSON.stringify([...set]))
-  } catch {
-    // ignorar falha ao gravar em storage
-  }
-}
-
 export const inventoryService = {
   async list(organizationId: UUID): Promise<ServiceResult<InventoryItem[]>> {
     try {
@@ -285,9 +262,8 @@ export const inventoryService = {
         return { success: false, error: getInventoryError(error, 'consultar') }
       }
 
-      const localDeleted = getLocalDeletedItemIds(organizationId)
       const activeItems = data
-        .filter((row) => !row.deleted_at && !localDeleted.has(row.id))
+        .filter((row) => !row.deleted_at)
         .map(mapInventoryItem)
 
       return { success: true, data: activeItems }
@@ -617,7 +593,6 @@ export const inventoryService = {
           p_reason: trimmedReason,
         })
         if (!rpcError) {
-          saveLocalDeletedItemId(organizationId, inventoryItemId)
           return { success: true, data: undefined }
         }
       } catch {
@@ -637,7 +612,6 @@ export const inventoryService = {
         .eq('id', inventoryItemId)
 
       if (!updateError) {
-        saveLocalDeletedItemId(organizationId, inventoryItemId)
         return { success: true, data: undefined }
       }
 
@@ -656,7 +630,6 @@ export const inventoryService = {
         return { success: false, error: 'Não foi possível excluir o produto do estoque.' }
       }
 
-      saveLocalDeletedItemId(organizationId, inventoryItemId)
       return { success: true, data: undefined }
     } catch (error) {
       logger.error('Exceção ao excluir produto do estoque', error)

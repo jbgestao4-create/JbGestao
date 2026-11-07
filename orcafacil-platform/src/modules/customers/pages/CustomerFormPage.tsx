@@ -5,12 +5,6 @@ import { customerService } from '../services/customer.service'
 import { formatCustomerDocument } from '../utils/customer-document'
 import { formatPostalAddress, formatPostalCode, lookupPostalAddress } from '../utils/postal-code'
 import { formatPhoneNumber } from '@shared/utils/phone'
-import {
-  clearFormDraft,
-  getFormDraftKey,
-  readFormDraft,
-  writeFormDraft,
-} from '@shared/utils/form-draft'
 import type { CustomerType } from '@shared/types/common'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
@@ -52,69 +46,6 @@ export function CustomerFormPage() {
   const customerKey =
     customerId && currentOrganization ? `${currentOrganization.id}:${customerId}` : null
   const isLoading = customerKey !== null && loadedCustomerKey !== customerKey
-  const [draftRestoredKey, setDraftRestoredKey] = useState<string | null>(null)
-  const draftKey = currentOrganization
-    ? getFormDraftKey('customer', currentOrganization.id, customerId)
-    : null
-
-  useEffect(() => {
-    if (!draftKey || isEditing || draftRestoredKey === draftKey) return
-    const saved = readFormDraft<{
-      personType?: CustomerType
-      name?: string
-      document?: string
-      skipDocument?: boolean
-      phone?: string
-      postalCode?: string
-      skipPostalCode?: boolean
-      address?: string
-      addressNumber?: string
-      notes?: string
-    }>(draftKey)
-    if (saved) {
-      if (saved.personType) setPersonType(saved.personType)
-      if (saved.name !== undefined) setName(saved.name)
-      if (saved.document !== undefined) setDocument(saved.document)
-      if (saved.skipDocument !== undefined) setSkipDocument(saved.skipDocument)
-      if (saved.phone !== undefined) setPhone(saved.phone)
-      if (saved.postalCode !== undefined) setPostalCode(saved.postalCode)
-      if (saved.skipPostalCode !== undefined) setSkipPostalCode(saved.skipPostalCode)
-      if (saved.address !== undefined) setAddress(saved.address)
-      if (saved.addressNumber !== undefined) setAddressNumber(saved.addressNumber)
-      if (saved.notes !== undefined) setNotes(saved.notes)
-    }
-    setDraftRestoredKey(draftKey)
-  }, [draftKey, isEditing, draftRestoredKey])
-
-  useEffect(() => {
-    if (!draftKey || isEditing || draftRestoredKey !== draftKey) return
-    writeFormDraft(draftKey, {
-      personType,
-      name,
-      document,
-      skipDocument,
-      phone,
-      postalCode,
-      skipPostalCode,
-      address,
-      addressNumber,
-      notes,
-    })
-  }, [
-    draftKey,
-    isEditing,
-    draftRestoredKey,
-    personType,
-    name,
-    document,
-    skipDocument,
-    phone,
-    postalCode,
-    skipPostalCode,
-    address,
-    addressNumber,
-    notes,
-  ])
 
   const handleCancel = () => {
     if (quoteReturnPath && returnState?.quoteDraft) {
@@ -239,7 +170,6 @@ export function CustomerFormPage() {
     if (isEditing) {
       const result = await customerService.update(currentOrganization.id, customerId, params)
       if (result.success) {
-        if (draftKey) clearFormDraft(draftKey)
         void navigate('/orcafacil/customers/search')
       } else {
         setFormError(result.error)
@@ -247,7 +177,6 @@ export function CustomerFormPage() {
     } else {
       const result = await customerService.create(currentOrganization.id, params)
       if (result.success) {
-        if (draftKey) clearFormDraft(draftKey)
         if (quoteReturnPath && returnState?.quoteDraft) {
           void navigate(quoteReturnPath, {
             state: {

@@ -156,3 +156,9 @@ export const CompanyManagementPage = lazy(() =>
     default: module.CompanyManagementPage,
   })),
 )
+
+export const SuggestionsAdminPage = lazy(() =>
+  import('@modules/suggestions/pages/SuggestionsAdminPage').then((module) => ({
+    default: module.SuggestionsAdminPage,
+  })),
+)
