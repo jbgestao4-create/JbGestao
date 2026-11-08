@@ -303,6 +303,20 @@ export const ALL_PLATFORM_DASHBOARD_MODULES: PlatformDashboardModule[] = [
       },
     ],
   },
+  {
+    code: 'MOD-11',
+    name: 'Migração',
+    description: 'Importação e migração em massa de dados via planilhas',
+    path: '/migration',
+    subFeatures: [
+      {
+        code: 'MOD-11_EXECUTE',
+        name: 'Executar Migração',
+        description: 'Habilita a importação em massa de planilhas Excel e CSV',
+        path: '/migration',
+      },
+    ],
+  },
 ]
 
 /** Retorna todos os códigos da plataforma (módulos e sub-recursos) */

@@ -162,3 +162,9 @@ export const SuggestionsAdminPage = lazy(() =>
     default: module.SuggestionsAdminPage,
   })),
 )
+
+export const MigrationHubPage = lazy(() =>
+  import('@modules/import-export/pages/MigrationHubPage').then((module) => ({
+    default: module.MigrationHubPage,
+  })),
+)

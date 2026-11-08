@@ -44,6 +44,11 @@ export const DASHBOARD_MODULES: {
     name: 'Ordem de Serviço',
     description: 'Abertura de O.S., fotos do equipamento, avarias, peças, serviços e fechamento de venda.',
   },
+  {
+    code: 'MOD-11',
+    name: 'Migração',
+    description: 'Importação e migração em massa de dados via planilhas Excel e CSV.',
+  },
 ]
 
 /** Catálogo estático e documentado dos módulos da plataforma */

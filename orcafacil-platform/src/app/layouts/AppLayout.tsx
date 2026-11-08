@@ -25,6 +25,7 @@ import {
   ClipboardList,
   ChevronLeft,
   ChevronRight,
+  Database,
   Menu,
   X,
   Lightbulb,
@@ -95,6 +96,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const canAccessReports = canAccessDashboardModule('MOD-08')
   const canAccessServices = canAccessDashboardModule('MOD-09')
   const canAccessServiceOrders = canAccessDashboardModule('MOD-10')
+  const canAccessMigration = canAccessDashboardModule('MOD-11')
 
   const navItem = (to: string, label: string, icon: ReactNode) => {
     const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
@@ -269,6 +271,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                         '/services',
                         'Serviços',
                         <Wrench className="w-4 h-4" />,
+                      )}
+                    {canAccessMigration &&
+                      navItem(
+                        '/migration',
+                        'Migração',
+                        <Database className="w-4 h-4" />,
                       )}
                   </div>
                 </div>

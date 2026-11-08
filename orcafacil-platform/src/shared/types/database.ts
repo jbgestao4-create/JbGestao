@@ -27,6 +27,7 @@ export type DashboardModuleCode =
   | 'MOD-08'
   | 'MOD-09'
   | 'MOD-10'
+  | 'MOD-11'
   | (string & {})
 
 /** Estado de uma concessão de módulo a uma organização */

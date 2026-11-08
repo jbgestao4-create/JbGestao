@@ -60,6 +60,7 @@ const DEFAULT_MODULE_IDS = [
   'MOD-07',
   'MOD-08',
   'MOD-09',
+  'MOD-11',
 ]
 
 export function DashboardPage() {
@@ -268,6 +269,18 @@ export function DashboardPage() {
         isAvailable: hasOrcafacil,
         accessModule: 'MOD-10',
         path: '/service-orders',
+      },
+      {
+        id: 'MOD-11',
+        title: 'Migração',
+        description:
+          'Módulo de importação e migração em massa de dados: Clientes, Estoque, Fornecedores, Vendas e Orçamentos.',
+        action: 'Acessar Migração',
+        icon: Database,
+        iconStyle: 'bg-emerald-50 text-emerald-700',
+        isAvailable: hasOrcafacil,
+        accessModule: 'MOD-11',
+        path: '/migration',
       },
     ],
     [hasOrcafacil, userRole],

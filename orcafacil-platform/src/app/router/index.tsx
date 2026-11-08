@@ -38,6 +38,7 @@ import {
   CashManagementPage,
   CompanyManagementPage,
   SuggestionsAdminPage,
+  MigrationHubPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -495,6 +496,18 @@ export const router = createBrowserRouter([
   {
     path: '/orcafacil/cash',
     element: <Navigate to="/cash" replace />,
+  },
+
+  // Módulo de Migração de Dados (MOD-11)
+  {
+    path: '/migration',
+    element: (
+      <ProtectedRoute>
+        <RequireDashboardModule moduleCode="MOD-11">
+          <MigrationHubPage />
+        </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
   },
 
   // Redirecionamento padrão para rotas não encontradas

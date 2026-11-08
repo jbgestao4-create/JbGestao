@@ -3,6 +3,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { checkEnvironment } from '@app/config/env'
 import { ConfigMissingScreen } from '@shared/components/ConfigMissingScreen'
+import { registerServiceWorker } from '@shared/offline/registerServiceWorker'
+import { syncEngine } from '@shared/offline/sync.engine'
+
+// Inicializa capacidades Offline-First e Sync Engine
+registerServiceWorker()
+syncEngine.init()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

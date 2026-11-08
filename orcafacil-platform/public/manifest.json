@@ -1,0 +1,18 @@
+{
+  "short_name": "JB Gestão",
+  "name": "JB Gestão & PDV Offline",
+  "description": "Sistema de Gestão de Estoque e Vendas com Ponto de Venda Offline-First",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/orcafacil/sales/pdv",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "any"
+}
