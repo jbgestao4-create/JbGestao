@@ -50,7 +50,7 @@ export function InventoryHomePage() {
             Nenhuma funcionalidade de Estoque está liberada para a sua empresa.
           </p>
           <p className="text-xs text-amber-700/80 dark:text-amber-400 mt-1">
-            Entre em contato com o suporte da JB Software para liberação de páginas e recursos.
+            Entre em contato com o suporte da ControleSoft para liberação de páginas e recursos.
           </p>
         </div>
       ) : (

@@ -162,7 +162,8 @@ export function CashClosureModal({
 
           <div className="cash-closure-print mx-auto mt-4 w-full space-y-4 rounded-xl border border-dashed border-gray-300 bg-white p-5 font-mono text-xs text-gray-800 print:mt-0 print:space-y-3 print:border-0 print:p-0 print:text-black">
             <div className="border-b border-gray-200 pb-3 text-center">
-              <p className="text-sm font-bold uppercase tracking-wider">JB SOFTWARE GESTÃO</p>
+              <img src="/controlesoft-logo.png" alt="ControleSoft" className="mx-auto mb-2 h-14 object-contain" />
+              <p className="text-sm font-bold uppercase tracking-wider">CONTROLESOFT</p>
               <p className="mt-0.5 text-[11px] text-gray-500">COMPROVANTE DE FECHAMENTO DE CAIXA</p>
               <p className="mt-1 text-[10px] text-gray-500">
                 {new Intl.DateTimeFormat('pt-BR', {

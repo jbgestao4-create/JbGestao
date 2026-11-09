@@ -215,7 +215,7 @@ export function LoginPage() {
           </div>
         </div>
 
-        <p className="relative text-xs text-slate-400">JB Software de Gestão</p>
+        <p className="relative text-xs text-slate-400">ControleSoft</p>
       </section>
 
       <section className="flex min-h-screen w-full flex-col items-center bg-[#F8FAFC] px-5 py-8 sm:px-8 lg:w-1/2 lg:px-12">
@@ -225,7 +225,7 @@ export function LoginPage() {
               <BrandLogo size="lg" showName={false} className="mx-auto mb-6 lg:hidden" />
               <h2 className="text-3xl font-semibold text-slate-900">Acesse sua conta</h2>
               <p className="mt-3 text-sm leading-6 text-slate-500">
-                JB Software de Gestão — Potencialize a administração da sua empresa
+                ControleSoft — Potencialize a administração da sua empresa
               </p>
             </header>
 
@@ -269,7 +269,7 @@ export function LoginPage() {
                         Acesso da Empresa Desativado
                       </h3>
                       <p className="mt-1 text-xs text-rose-800 leading-relaxed">
-                        O acesso {deactivatedOrgName ? `da empresa "${deactivatedOrgName}"` : 'da sua empresa'} está temporariamente desativado. Entre em contato com a equipe de Suporte do JB Software para regularizar ou reativar seu acesso.
+                        O acesso {deactivatedOrgName ? `da empresa "${deactivatedOrgName}"` : 'da sua empresa'} está temporariamente desativado. Entre em contato com a equipe de Suporte do ControleSoft para regularizar ou reativar seu acesso.
                       </p>
                       <div className="mt-3">
                         <a
@@ -302,7 +302,7 @@ export function LoginPage() {
                         Tempo de teste expirado
                       </h3>
                       <p className="mt-1 text-xs font-semibold text-amber-900 leading-relaxed">
-                        Tempo de teste expirado, entre em contato com a JB Software
+                        Tempo de teste expirado, entre em contato com a ControleSoft
                       </p>
                       <p className="mt-0.5 text-xs text-amber-800 leading-relaxed">
                         O período de teste {expiredOrgName ? `da empresa "${expiredOrgName}"` : 'da sua empresa'} encerrou. Entre em contato com nossa equipe para regularizar e continuar utilizando todos os recursos.
@@ -312,8 +312,8 @@ export function LoginPage() {
                           href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20tempo%20de%20teste%20da%20minha%20empresa%20expirou.%20Gostaria%20de%20renovar%20o%20acesso%20com%20a%20JB%20Software."
                           target="_blank"
                           rel="noreferrer"
-                          title="Falar com a JB Software no WhatsApp"
-                          aria-label="Falar com a JB Software no WhatsApp"
+                          title="Falar com a ControleSoft no WhatsApp"
+                          aria-label="Falar com a ControleSoft no WhatsApp"
                           className="inline-flex items-center justify-center rounded-xl bg-emerald-600 p-2.5 text-white hover:bg-emerald-700 transition-colors shadow-xs hover:scale-105 active:scale-95"
                         >
                           <WhatsAppIcon className="h-5 w-5" />
@@ -382,7 +382,7 @@ export function LoginPage() {
         </div>
 
         <footer className="w-full max-w-[600px] pt-6 text-center text-xs leading-5 text-slate-500">
-          <span>© 2026 JB Software de Gestão. Todos os direitos reservados.</span>
+          <span>© 2026 ControleSoft. Todos os direitos reservados.</span>
           <span className="mx-2 hidden sm:inline">|</span>
           <span className="block sm:inline">Termos de Uso</span>
           <span className="mx-2 hidden sm:inline">|</span>

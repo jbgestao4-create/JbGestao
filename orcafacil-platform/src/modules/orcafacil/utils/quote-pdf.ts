@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { formatCurrency } from '@shared/utils/monetary'
+import { CONTROLESOFT_MARK_DATA_URL } from '@shared/assets/controlesoft-mark'
 import type { QuoteDetail } from '../services/quote.service'
 
 export interface GeneratePdfOptions {
@@ -19,7 +20,7 @@ export function generateQuotePdf(
     format: 'a4',
   })
 
-  const orgName = options?.organizationName || 'JB Gestão Comercial'
+  const orgName = options?.organizationName || 'ControleSoft'
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 14
@@ -31,15 +32,21 @@ export function generateQuotePdf(
   doc.setFillColor(15, 23, 42) // Slate 900
   doc.rect(margin, currentY, contentWidth, 22, 'F')
 
+  // Logomarca ControleSoft sobre fundo claro
+  doc.setFillColor(248, 247, 243)
+  doc.roundedRect(margin + 3, currentY + 3, 16, 16, 2, 2, 'F')
+  doc.addImage(CONTROLESOFT_MARK_DATA_URL, 'PNG', margin + 3.5, currentY + 3.5, 15, 15)
+  const textX = margin + 24
+
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text(orgName, margin + 6, currentY + 9)
+  doc.text(orgName, textX, currentY + 9)
 
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(203, 213, 225) // Slate 300
-  doc.text('ORÇAMENTO / PROPOSTA COMERCIAL', margin + 6, currentY + 16)
+  doc.text('ORÇAMENTO / PROPOSTA COMERCIAL', textX, currentY + 16)
 
   // Número do orçamento no canto direito do cabeçalho
   doc.setFontSize(12)

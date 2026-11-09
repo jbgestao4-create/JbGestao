@@ -18,6 +18,7 @@ import {
   type FeedbackSuggestion,
   type FeedbackMessage,
 } from '../types/suggestion.types'
+import { supportAiService } from '../services/support-ai.service'
 import { Headset, X, ImagePlus, MessageSquare, Send, ArrowLeft } from 'lucide-react'
 
 const EMPTY_FORM = {
@@ -52,6 +53,7 @@ export function FeedbackWidget() {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [replyText, setReplyText] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
+  const [isAiProcessing, setIsAiProcessing] = useState(false)
 
   const orgId = currentOrganization?.id
 
@@ -80,7 +82,19 @@ export function FeedbackWidget() {
           table: 'feedback_messages',
           filter: `organization_id=eq.${orgId}`,
         },
-        () => {
+        (payload) => {
+          if (payload.eventType === 'INSERT' && selectedSuggestion) {
+            const newMsg = payload.new as FeedbackMessage
+            if (newMsg.suggestion_id === selectedSuggestion.id) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === newMsg.id)) return prev
+                return [...prev, newMsg]
+              })
+              if (newMsg.sender_role === 'owner') {
+                void suggestionService.markMessagesReadByUser(orgId, selectedSuggestion.id)
+              }
+            }
+          }
           void refreshUnreadReplies()
         },
       )
@@ -89,7 +103,7 @@ export function FeedbackWidget() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [orgId, refreshUnreadReplies])
+  }, [orgId, refreshUnreadReplies, selectedSuggestion])
 
   // Carrega sugestões enviadas pelo usuário
   const loadMySuggestions = useCallback(async () => {
@@ -139,13 +153,14 @@ export function FeedbackWidget() {
     e.preventDefault()
     if (!orgId || !selectedSuggestion || !replyText.trim() || !user) return
 
+    const messageToSend = replyText.trim()
     setSendingReply(true)
     const senderName = profile?.displayName || user.email?.split('@')[0] || 'Você'
     const res = await suggestionService.sendMessage(
       orgId,
       selectedSuggestion.id,
       senderName,
-      replyText,
+      messageToSend,
       'user',
     )
     setSendingReply(false)
@@ -153,11 +168,30 @@ export function FeedbackWidget() {
     if (res.success) {
       setMessages((prev) => [...prev, res.data])
       setReplyText('')
+
+      // Aciona o assistente virtual de suporte integrado para processar e responder
+      setIsAiProcessing(true)
+      try {
+        await supportAiService.processUserMessage({
+          organizationId: orgId,
+          suggestionId: selectedSuggestion.id,
+          userMessage: messageToSend,
+          previousMessages: messages.map((m) => ({
+            senderRole: m.sender_role,
+            message: m.message,
+          })),
+          title: selectedSuggestion.title,
+          moduleOrigin: selectedSuggestion.module_origin,
+          originRoute: selectedSuggestion.origin_route,
+        })
+      } finally {
+        setIsAiProcessing(false)
+      }
     }
   }
 
   const close = () => {
-    if (isSubmitting || sendingReply) return
+    if (isSubmitting || sendingReply || isAiProcessing) return
     setIsOpen(false)
     setSelectedSuggestion(null)
     setError('')
@@ -192,6 +226,7 @@ export function FeedbackWidget() {
       moduleOrigin: getSuggestionModuleLabel(location.pathname),
       originRoute: `${location.pathname}${location.search}`.slice(0, 500),
       attachment,
+      userName: profile?.displayName || user?.email || 'Usuário',
     })
     setIsSubmitting(false)
 
@@ -362,20 +397,44 @@ export function FeedbackWidget() {
                     <div className="space-y-2.5 max-h-64 overflow-y-auto p-1">
                       {messages.map((msg) => {
                         const isOwner = msg.sender_role === 'owner'
+                        const isAi =
+                          isOwner &&
+                          (msg.sender_name.includes('Assistente') ||
+                            msg.sender_name.includes('IA') ||
+                            msg.sender_name.includes('Suporte'))
                         return (
                           <div
                             key={msg.id}
                             className={`flex flex-col rounded-xl p-3 text-xs sm:text-sm ${
                               isOwner
-                                ? 'mr-auto max-w-[88%] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-900 shadow-2xs'
+                                ? isAi
+                                  ? 'mr-auto max-w-[88%] bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 shadow-2xs'
+                                  : 'mr-auto max-w-[88%] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-900 shadow-2xs'
                                 : 'ml-auto max-w-[88%] bg-blue-600 text-white shadow-xs'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-3 mb-1">
-                              <span className={`text-[11px] font-bold ${isOwner ? 'text-indigo-700 dark:text-indigo-300' : 'text-blue-100'}`}>
-                                {isOwner ? 'Resposta do Proprietário' : 'Você'}
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${
+                                  isOwner
+                                    ? isAi
+                                      ? 'text-blue-700 dark:text-blue-300'
+                                      : 'text-indigo-700 dark:text-indigo-300'
+                                    : 'text-blue-100'
+                                }`}
+                              >
+                                {isOwner ? (
+                                  <>
+                                    <Headset className="h-3.5 w-3.5" />
+                                    <span>Suporte ControleSoft</span>
+                                  </>
+                                ) : (
+                                  'Você'
+                                )}
                               </span>
-                              <span className={`text-[10px] ${isOwner ? 'text-indigo-500' : 'text-blue-200'}`}>
+                              <span
+                                className={`text-[10px] ${isOwner ? 'text-slate-400' : 'text-blue-200'}`}
+                              >
                                 {new Date(msg.created_at).toLocaleString('pt-BR', {
                                   day: '2-digit',
                                   month: '2-digit',
@@ -388,6 +447,12 @@ export function FeedbackWidget() {
                           </div>
                         )
                       })}
+                      {isAiProcessing && (
+                        <div className="mr-auto max-w-[88%] flex items-center gap-2 rounded-xl p-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-dashed border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 animate-pulse">
+                          <Headset className="h-4 w-4 shrink-0" />
+                          <span>Processando atendimento do suporte...</span>
+                        </div>
+                      )}
                     </div>
                   )}
 

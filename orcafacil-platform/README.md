@@ -1,4 +1,4 @@
-# JB Software de Gestão
+# ControleSoft
 
 Fundação técnica funcional da plataforma SaaS multi-tenant, modular e extensível voltada para profissionais autônomos, prestadores de serviços e pequenos negócios.
 
@@ -28,7 +28,7 @@ orcafacil-platform/
 │   │   ├── customers/          # Clientes compartilhados entre módulos
 │   │   ├── orcafacil/          # Módulo funcional de orçamentos e propostas
 │   │   ├── agendapro/          # Contrato de expansão futura (agendamentos)
-│   │   ├── inventory/          # Produtos, fornecedores, movimentações e estoque do JB Software
+│   │   ├── inventory/          # Produtos, fornecedores, movimentações e estoque do ControleSoft
 │   │   └── estoqueleve/        # Contrato para uma futura experiência independente de estoque
 │   ├── shared/                 # Componentes UI, lib, utils monetários e validações
 │   └── styles/                 # Estilos globais Tailwind CSS

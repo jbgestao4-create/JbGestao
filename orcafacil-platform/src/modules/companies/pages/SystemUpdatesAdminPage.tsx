@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Rocket,
   ShieldAlert,
-  Sparkles,
+  History,
   Trash2,
   User,
   Wrench,
@@ -210,7 +210,7 @@ export function SystemUpdatesAdminPage() {
         }
       case 'improvement':
         return {
-          icon: Sparkles,
+          icon: History,
           label: 'Melhoria / Otimização',
           badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300',
         }
@@ -262,7 +262,7 @@ export function SystemUpdatesAdminPage() {
                   Atualização do Sistema
                 </h1>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
-                  <Sparkles className="w-3 h-3" /> Histórico &amp; Changelog
+                  <History className="w-3 h-3" /> Histórico &amp; Changelog
                 </span>
               </div>
               <p className="mt-1 text-sm text-gray-500 dark:text-slate-400 max-w-2xl">

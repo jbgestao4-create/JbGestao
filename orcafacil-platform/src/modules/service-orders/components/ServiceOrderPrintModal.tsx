@@ -62,13 +62,16 @@ export function ServiceOrderPrintModal({
         <div className="p-6 space-y-5 overflow-y-auto text-xs leading-relaxed print:overflow-visible print:p-2">
           {/* Cabeçalho */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b-2 border-gray-900 pb-4 gap-2">
-            <div>
-              <h1 className="text-lg font-extrabold uppercase tracking-wide text-gray-900">
-                {organizationName || 'Assistência Técnica & Serviços'}
-              </h1>
-              <p className="text-xs text-gray-600 font-medium">
-                Comprovante Oficial de Ordem de Serviço (O.S.)
-              </p>
+            <div className="flex items-center gap-3">
+              <img src="/controlesoft-mark.png" alt="ControleSoft" className="h-12 w-12 object-contain" />
+              <div>
+                <h1 className="text-lg font-extrabold uppercase tracking-wide text-gray-900">
+                  {organizationName || 'Assistência Técnica & Serviços'}
+                </h1>
+                <p className="text-xs text-gray-600 font-medium">
+                  Comprovante Oficial de Ordem de Serviço (O.S.)
+                </p>
+              </div>
             </div>
             <div className="sm:text-right">
               <div className="text-base font-extrabold text-blue-700">{order.orderNumber}</div>

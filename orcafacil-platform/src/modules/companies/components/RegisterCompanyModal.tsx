@@ -5,7 +5,7 @@ import {
   EyeOff,
   FileText,
   ShieldAlert,
-  Sparkles,
+  Check,
   UserCheck,
   X,
 } from 'lucide-react'
@@ -299,7 +299,7 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
                   </label>
                   {adminEmail && !isEmailManuallyEdited && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                      <Sparkles className="h-3 w-3" /> Puxado automaticamente
+                      <Check className="h-3 w-3" /> Puxado automaticamente
                     </span>
                   )}
                 </div>

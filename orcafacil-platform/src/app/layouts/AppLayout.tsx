@@ -295,14 +295,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <div>
                   {!sidebarCollapsed && organizations.length > 0 && (
                     <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
-                      JB Software
+                      ControleSoft
                     </span>
                   )}
                   <div className="mt-1 space-y-0.5">
                     {canAccessCash &&
                       navItem(
                         '/cash',
-                        'Caixa & Boletos',
+                        'Gerenciamento de Caixa',
                         <DollarSign className="w-4 h-4" />,
                       )}
                     {canAccessSales &&
@@ -484,7 +484,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button>
               <Building2 className="hidden h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500 md:block" />
               <span className="truncate font-semibold text-gray-900 dark:text-white">
-                {currentOrganization?.name || 'JB Software'}
+                {currentOrganization?.name || 'ControleSoft'}
               </span>
             </div>
 

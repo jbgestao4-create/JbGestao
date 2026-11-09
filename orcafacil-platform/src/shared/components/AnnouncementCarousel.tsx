@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, ChevronLeft, ChevronRight, Image as ImageIcon, Settings, ExternalLink } from 'lucide-react'
+import { LayoutDashboard, ChevronLeft, ChevronRight, Image as ImageIcon, Settings, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { announcementService, type SystemAnnouncement } from '../services/announcement.service'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -213,7 +213,7 @@ export function AnnouncementCarousel({
       <div>
         <div className="flex items-center justify-between">
           <span className="inline-flex items-center gap-2 rounded-md border border-blue-200 dark:border-blue-300/20 bg-blue-50 dark:bg-blue-300/10 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-100">
-            <Sparkles aria-hidden="true" className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
+            <LayoutDashboard aria-hidden="true" className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
             Painel Principal do Sistema
           </span>
 
@@ -238,7 +238,7 @@ export function AnnouncementCarousel({
       </div>
 
       <div className="mt-6 flex items-center justify-between border-t border-slate-100 dark:border-white/10 pt-3 text-xs text-slate-500 dark:text-slate-400">
-        <span>JB Gestão Comercial • Solução Empresarial Completa</span>
+        <span>ControleSoft • Solução Empresarial Completa</span>
         {isDev && (
           <Link
             to="/admin/announcements"

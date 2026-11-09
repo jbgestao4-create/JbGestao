@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { supabase } from '@app/config/supabase'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { Button } from '@shared/components/ui/Button'
@@ -17,15 +18,20 @@ import {
 } from '../types/suggestion.types'
 import { getSuggestionStatusTone } from '../utils/suggestion.utils'
 import {
+  AlertTriangle,
   Check,
+  CheckCircle2,
   ChevronRight,
   Clock3,
   Eye,
   FileImage,
+  Headset,
   Loader2,
   MessageSquareText,
+  RefreshCw,
   Search,
   Send,
+  Wrench,
   X,
 } from 'lucide-react'
 
@@ -74,6 +80,7 @@ export function SuggestionsAdminPage() {
   const [savingNote, setSavingNote] = useState(false)
   const [replyDraft, setReplyDraft] = useState('')
   const [savingReply, setSavingReply] = useState(false)
+  const [generatingAiDiag, setGeneratingAiDiag] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [suggestionsOrganizationId, setSuggestionsOrganizationId] = useState<string | null>(null)
   const organizationId = currentOrganization?.id
@@ -115,6 +122,44 @@ export function SuggestionsAdminPage() {
       active = false
     }
   }, [organizationId])
+
+  useEffect(() => {
+    if (!organizationId) return
+
+    const channel = supabase
+      .channel(`suggestions-admin-realtime-${organizationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'feedback_suggestions',
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        () => {
+          void loadSuggestions()
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'feedback_messages',
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        () => {
+          if (selected) {
+            void refreshSelectedDetails()
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [organizationId, loadSuggestions, selected])
 
   const scopedSuggestions = useMemo(
     () => (suggestionsOrganizationId === organizationId ? suggestions : []),
@@ -259,6 +304,19 @@ export function SuggestionsAdminPage() {
       return
     }
     setReplyDraft('')
+    await refreshSelectedDetails()
+  }
+
+  const handleReanalyzeAi = async () => {
+    if (!selected || !organizationId) return
+    setGeneratingAiDiag(true)
+    setDetailError('')
+    const result = await suggestionService.generateAiDiagnosticForSuggestion(organizationId, selected)
+    setGeneratingAiDiag(false)
+    if (!result.success) {
+      setDetailError(result.error)
+      return
+    }
     await refreshSelectedDetails()
   }
 
@@ -460,6 +518,99 @@ export function SuggestionsAdminPage() {
                   </div>
                 </div>
 
+                {/* DIAGNÓSTICO TÉCNICO DA IA PARA O DESENVOLVEDOR */}
+                <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 dark:border-violet-900/60 dark:bg-violet-950/20 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Wrench className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                      <h3 className="text-sm font-bold text-violet-950 dark:text-violet-200">
+                        Diagnóstico Técnico Automatizado do Sistema
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {details?.aiDiagnostic?.requer_analise_dev ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                          <AlertTriangle className="h-3 w-3" /> Requer Análise Dev
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          <CheckCircle2 className="h-3 w-3" /> Atendimento Operacional
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="text-xs h-7 px-2.5"
+                        isLoading={generatingAiDiag}
+                        onClick={() => void handleReanalyzeAi()}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5 mr-1" /> Reavaliar Diagnóstico
+                      </Button>
+                    </div>
+                  </div>
+
+                  {details?.aiDiagnostic?.requer_analise_dev ? (
+                    <div className="space-y-3.5 text-xs sm:text-sm">
+                      {details.aiDiagnostic.resumo_problema && (
+                        <div>
+                          <p className="font-semibold text-violet-900 dark:text-violet-300">1. Resumo do Problema:</p>
+                          <p className="mt-1 text-slate-700 dark:text-slate-300 leading-relaxed bg-white/70 dark:bg-slate-900/50 p-2.5 rounded-lg border border-violet-100 dark:border-violet-950">
+                            {details.aiDiagnostic.resumo_problema}
+                          </p>
+                        </div>
+                      )}
+
+                      {details.aiDiagnostic.causa_provavel && (
+                        <div>
+                          <p className="font-semibold text-violet-900 dark:text-violet-300">2. Causa Provável:</p>
+                          <p className="mt-1 text-slate-700 dark:text-slate-300 leading-relaxed bg-white/70 dark:bg-slate-900/50 p-2.5 rounded-lg border border-violet-100 dark:border-violet-950">
+                            {details.aiDiagnostic.causa_provavel}
+                          </p>
+                        </div>
+                      )}
+
+                      {details.aiDiagnostic.componentes_afetados && details.aiDiagnostic.componentes_afetados.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-violet-900 dark:text-violet-300">3. Componentes Afetados:</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {details.aiDiagnostic.componentes_afetados.map((comp, idx) => (
+                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200 text-xs font-mono">
+                                {comp}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {details.aiDiagnostic.passos_reproducao && details.aiDiagnostic.passos_reproducao.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-violet-900 dark:text-violet-300">4. Passos para Reprodução:</p>
+                          <ol className="mt-1 list-decimal list-inside space-y-1 bg-white/70 dark:bg-slate-900/50 p-2.5 rounded-lg border border-violet-100 dark:border-violet-950 text-slate-700 dark:text-slate-300">
+                            {details.aiDiagnostic.passos_reproducao.map((passo, idx) => (
+                              <li key={idx} className="leading-relaxed">{passo}</li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+
+                      {details.aiDiagnostic.sugestao_tecnica_ponto_a_ponto && details.aiDiagnostic.sugestao_tecnica_ponto_a_ponto.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-violet-900 dark:text-violet-300">5. Sugestão Técnica Ponto a Ponto:</p>
+                          <ul className="mt-1 list-disc list-inside space-y-1 bg-white/70 dark:bg-slate-900/50 p-2.5 rounded-lg border border-violet-100 dark:border-violet-950 text-slate-700 dark:text-slate-300">
+                            {details.aiDiagnostic.sugestao_tecnica_ponto_a_ponto.map((sug, idx) => (
+                              <li key={idx} className="leading-relaxed">{sug}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 italic bg-white/60 dark:bg-slate-900/40 p-3 rounded-lg border border-dashed border-violet-200 dark:border-violet-950">
+                      Este chamado foi classificado como dúvida operacional ou solicitação de uso sem falhas técnicas impeditivas. Caso queira que a IA realize uma nova análise de código/bugs, clique em "Reavaliar com IA".
+                    </p>
+                  )}
+                </div>
+
                 {/* CONVERSA / RESPOSTA DIRETA AO USUÁRIO */}
                 <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/20 space-y-4">
                   <div className="flex items-center justify-between">
@@ -478,20 +629,48 @@ export function SuggestionsAdminPage() {
                     <div className="space-y-2.5 max-h-72 overflow-y-auto p-1">
                       {details.messages.map((msg) => {
                         const isFromOwner = msg.sender_role === 'owner'
+                        const isAi =
+                          isFromOwner &&
+                          (msg.sender_name.includes('Assistente') ||
+                            msg.sender_name.includes('IA') ||
+                            msg.sender_name.includes('Suporte'))
                         return (
                           <div
                             key={msg.id}
                             className={`flex flex-col rounded-xl p-3 text-xs sm:text-sm ${
                               isFromOwner
-                                ? 'ml-auto max-w-[85%] bg-blue-600 text-white shadow-xs'
+                                ? isAi
+                                  ? 'ml-auto max-w-[85%] bg-slate-700 text-white shadow-xs'
+                                  : 'ml-auto max-w-[85%] bg-blue-600 text-white shadow-xs'
                                 : 'mr-auto max-w-[85%] bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 shadow-2xs'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className={`text-[11px] font-bold ${isFromOwner ? 'text-blue-100' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                                {isFromOwner ? 'Você (Proprietário)' : msg.sender_name}
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${
+                                  isFromOwner
+                                    ? isAi
+                                      ? 'text-cyan-200'
+                                      : 'text-blue-100'
+                                    : 'text-indigo-600 dark:text-indigo-400'
+                                }`}
+                              >
+                                {isFromOwner ? (
+                                  isAi ? (
+                                    <>
+                                      <Headset className="h-3.5 w-3.5" />
+                                      <span>Suporte ControleSoft</span>
+                                    </>
+                                  ) : (
+                                    'Você (Proprietário)'
+                                  )
+                                ) : (
+                                  msg.sender_name
+                                )}
                               </span>
-                              <span className={`text-[10px] ${isFromOwner ? 'text-blue-200' : 'text-slate-400'}`}>
+                              <span
+                                className={`text-[10px] ${isFromOwner ? 'text-blue-200' : 'text-slate-400'}`}
+                              >
                                 {formatDate(msg.created_at)}
                               </span>
                             </div>

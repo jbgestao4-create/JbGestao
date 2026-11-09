@@ -20,7 +20,7 @@ export function getSuggestionModuleLabel(pathname: string): string {
   if (pathname.startsWith('/orcafacil/reports')) return 'Relatórios'
   if (pathname.startsWith('/settings')) return 'Configurações'
   if (pathname === '/') return 'Página inicial'
-  return 'OrçaFácil'
+  return 'ControleSoft'
 }
 
 export function validateSuggestionImage(file: File): string | null {

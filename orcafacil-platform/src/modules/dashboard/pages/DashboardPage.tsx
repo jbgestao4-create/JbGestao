@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Building2,
   Calendar,
-  ChartNoAxesCombined,
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
@@ -384,12 +383,12 @@ export function DashboardPage() {
       <header className="border-b border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827]">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 sm:px-7 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
-              <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5 shadow-xs ring-1 ring-slate-200/70">
+              <img src="/controlesoft-mark.png" alt="ControleSoft" className="h-full w-full object-contain" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900 dark:text-white">JB Gestão Comercial</h1>
+                <h1 className="text-base font-bold text-slate-900 dark:text-white">ControleSoft</h1>
                 <span
                   title={`Versão atual do sistema: ${systemVersion}`}
                   className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
@@ -626,7 +625,7 @@ export function DashboardPage() {
 
         <footer className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-slate-200 dark:border-slate-800 pt-5 text-xs text-slate-400 dark:text-slate-500">
           <CircleDollarSign aria-hidden="true" className="h-3.5 w-3.5" />
-          JB Gestão Comercial
+          ControleSoft
           <span>•</span>
           <span>{currentOrganization?.name ?? 'Organização'}</span>
           <span>•</span>

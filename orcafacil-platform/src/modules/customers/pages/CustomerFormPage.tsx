@@ -30,7 +30,6 @@ export function CustomerFormPage() {
   const [personType, setPersonType] = useState<CustomerType>('individual')
   const [name, setName] = useState('')
   const [document, setDocument] = useState('')
-  const [skipDocument, setSkipDocument] = useState(false)
   const [phone, setPhone] = useState('')
   const [postalCode, setPostalCode] = useState('')
   const [skipPostalCode, setSkipPostalCode] = useState(false)
@@ -78,7 +77,6 @@ export function CustomerFormPage() {
             ? formatCustomerDocument(result.data.document, result.data.personType)
             : '',
         )
-        setSkipDocument(!result.data.document)
         setPhone(formatPhoneNumber(result.data.phone ?? ''))
         setPostalCode(result.data.postalCode ? formatPostalCode(result.data.postalCode) : '')
         setSkipPostalCode(!result.data.postalCode)
@@ -136,11 +134,11 @@ export function CustomerFormPage() {
     }
 
     const requiredDocumentLength = personType === 'individual' ? 11 : 14
-    if (!skipDocument && document.replace(/\D/g, '').length !== requiredDocumentLength) {
+    if (document.replace(/\D/g, '').length !== requiredDocumentLength) {
       setFormError(
         personType === 'individual'
-          ? 'Informe o CPF com 11 dígitos.'
-          : 'Informe o CNPJ com 14 dígitos.',
+          ? 'Informe o CPF completo com 11 dígitos.'
+          : 'Informe o CNPJ completo com 14 dígitos.',
       )
       return
     }
@@ -160,7 +158,7 @@ export function CustomerFormPage() {
     const params = {
       personType,
       name: name.trim(),
-      document: skipDocument ? null : document,
+      document: document.trim(),
       phone: phone.trim(),
       postalCode: skipPostalCode ? null : postalCode.replace(/\D/g, ''),
       address: address.trim(),
@@ -296,35 +294,19 @@ export function CustomerFormPage() {
                 required
                 minLength={2}
               />
-              <div>
-                <Input
-                  label={personType === 'individual' ? 'CPF' : 'CNPJ'}
-                  placeholder={
-                    personType === 'individual' ? '000.000.000-00' : '00.000.000/0000-00'
-                  }
-                  value={document}
-                  onChange={(event) => {
-                    setDocument(formatCustomerDocument(event.target.value, personType))
-                  }}
-                  inputMode="numeric"
-                  maxLength={personType === 'individual' ? 14 : 18}
-                  disabled={skipDocument}
-                  required={!skipDocument}
-                />
-                <label className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                  <input
-                    type="checkbox"
-                    checked={skipDocument}
-                    onChange={(event) => {
-                      const shouldSkip = event.target.checked
-                      setSkipDocument(shouldSkip)
-                      if (shouldSkip) setDocument('')
-                    }}
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
-                  />
-                  Cadastrar sem {personType === 'individual' ? 'CPF' : 'CNPJ'}
-                </label>
-              </div>
+              <Input
+                label={`${personType === 'individual' ? 'CPF' : 'CNPJ'} *`}
+                placeholder={
+                  personType === 'individual' ? '000.000.000-00' : '00.000.000/0000-00'
+                }
+                value={document}
+                onChange={(event) => {
+                  setDocument(formatCustomerDocument(event.target.value, personType))
+                }}
+                inputMode="numeric"
+                maxLength={personType === 'individual' ? 14 : 18}
+                required
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-x-4 gap-y-5 md:grid-cols-3">

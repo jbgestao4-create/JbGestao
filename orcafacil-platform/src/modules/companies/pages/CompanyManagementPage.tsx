@@ -638,7 +638,7 @@ export function CompanyManagementPage() {
                     Atenção: o acesso será bloqueado para todos os usuários!
                   </p>
                   <p>
-                    Caso selecione desativado, <strong>ninguém da organização</strong> terá acesso ao sistema. Ao tentarem fazer login, será exibida uma mensagem orientando entrar em contato com o suporte do JB Software via WhatsApp no número <strong>31 986848490</strong>.
+                    Caso selecione desativado, <strong>ninguém da organização</strong> terá acesso ao sistema. Ao tentarem fazer login, será exibida uma mensagem orientando entrar em contato com o suporte do ControleSoft via WhatsApp no número <strong>31 986848490</strong>.
                   </p>
                 </>
               ) : (

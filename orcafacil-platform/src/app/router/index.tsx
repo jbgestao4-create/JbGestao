@@ -194,7 +194,7 @@ export const router = createBrowserRouter([
     element: <Navigate to="/settings/organization?tab=customization" replace />,
   },
 
-  // Rotas do módulo JB Software (protegidas por autenticação e concessão de módulo)
+  // Rotas do módulo ControleSoft (protegidas por autenticação e concessão de módulo)
   {
     path: '/orcafacil/sales/pdv',
     element: (

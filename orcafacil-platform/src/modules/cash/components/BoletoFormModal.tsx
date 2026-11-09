@@ -25,7 +25,7 @@ import {
   FileText,
   FileUp,
   Loader2,
-  Sparkles,
+  ScanLine,
   Tag,
   Truck,
   X,
@@ -294,12 +294,12 @@ export function BoletoFormModal({
                   ) : attachmentFile ? (
                     <FileCheck2 className="h-5 w-5" />
                   ) : (
-                    <Sparkles className="h-5 w-5" />
+                    <ScanLine className="h-5 w-5" />
                   )}
                 </div>
                 <div>
                   <h3 className="text-xs font-extrabold uppercase tracking-wide text-cyan-900 dark:text-cyan-300">
-                    Importação Inteligente de Boleto (PDF)
+                    Leitura e Importação de Boleto (PDF)
                   </h3>
                   <p className="text-xs text-gray-600 dark:text-slate-300 mt-0.5">
                     {attachmentFile

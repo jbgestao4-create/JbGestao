@@ -49,7 +49,7 @@ export function buildQuoteWhatsAppMessage(
   }
 
   msg += `Qualquer dúvida, estamos à inteira disposição!\n`
-  msg += `*${organizationName || 'JB Gestão Comercial'}*`
+  msg += `*${organizationName || 'ControleSoft'}*`
 
   return msg
 }

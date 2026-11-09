@@ -5,7 +5,9 @@ import {
   ArrowRight,
   Calendar,
   CheckCircle2,
+  Clock,
   Download,
+  FileSpreadsheet,
   FileText,
   Lock,
   MessageCircle,
@@ -13,7 +15,6 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   User,
   XCircle,
 } from 'lucide-react'
@@ -576,7 +577,7 @@ export function CustomerQuotesPortalPage() {
         <div className="rounded-3xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-900 text-white p-6 sm:p-8 shadow-xl relative overflow-hidden">
           <div className="relative z-10 space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-1.5 bg-white/15 px-3 py-1 rounded-full text-xs font-medium backdrop-blur-xs">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-300" />
               Histórico Completo de Propostas
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
@@ -703,7 +704,7 @@ export function CustomerQuotesPortalPage() {
                   {/* Badge de Orçamento Recente / Destacado */}
                   {isHighlighted && (
                     <div className="bg-emerald-600 text-white px-4 py-1 text-[11px] font-bold flex items-center gap-1.5 tracking-wide uppercase">
-                      <Sparkles className="h-3 w-3" /> Proposta Recente Encaminhada
+                      <Clock className="h-3 w-3" /> Proposta Recente Encaminhada
                     </div>
                   )}
 

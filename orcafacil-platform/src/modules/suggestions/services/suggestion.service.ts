@@ -3,6 +3,7 @@ import { logger } from '@shared/lib/logger'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import type { ServiceResult, UUID } from '@shared/types/common'
 import type {
+  FeedbackAiDiagnostic,
   FeedbackAttachment,
   FeedbackHistory,
   FeedbackInternalNote,
@@ -12,6 +13,7 @@ import type {
   SuggestionType,
 } from '../types/suggestion.types'
 import { validateSuggestionImage } from '../utils/suggestion.utils'
+import { supportAiService } from './support-ai.service'
 
 const ATTACHMENTS_BUCKET = 'feedback-attachments'
 
@@ -24,6 +26,7 @@ export interface SubmitSuggestionInput {
   moduleOrigin: string
   originRoute: string
   attachment?: File
+  userName?: string
 }
 
 export interface SuggestionDetails {
@@ -31,6 +34,7 @@ export interface SuggestionDetails {
   history: FeedbackHistory[]
   notes: FeedbackInternalNote[]
   messages: FeedbackMessage[]
+  aiDiagnostic?: FeedbackAiDiagnostic | null
 }
 
 export interface FeedbackAttachmentWithUrl extends FeedbackAttachment {
@@ -92,6 +96,18 @@ export const suggestionService = {
         logger.error('Falha ao registrar sugestão', error)
         return { success: false, error: 'Não foi possível registrar sua sugestão. Tente novamente.' }
       }
+
+      // Dispara o atendimento inicial do assistente virtual de suporte integrado
+      void supportAiService.processTicket({
+        organizationId: input.organizationId,
+        suggestionId,
+        title: input.title,
+        description: input.description,
+        additionalInfo: input.additionalInfo,
+        moduleOrigin: input.moduleOrigin,
+        originRoute: input.originRoute,
+        userName: input.userName || 'Usuário',
+      })
 
       if (!input.attachment) return { success: true, data: { id: suggestionId } }
 
@@ -200,7 +216,7 @@ export const suggestionService = {
     suggestionId: UUID,
   ): Promise<ServiceResult<SuggestionDetails>> {
     try {
-      const [attachmentResult, historyResult, noteResult, messageResult] = await Promise.all([
+      const [attachmentResult, historyResult, noteResult, messageResult, aiDiagResult] = await Promise.all([
         supabase
           .from('feedback_attachments')
           .select('*')
@@ -225,6 +241,14 @@ export const suggestionService = {
           .eq('organization_id', organizationId)
           .eq('suggestion_id', suggestionId)
           .order('created_at', { ascending: true }),
+        supabase
+          .from('feedback_ai_diagnostics')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .eq('suggestion_id', suggestionId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ])
 
       const error = attachmentResult.error ?? historyResult.error ?? noteResult.error ?? messageResult.error
@@ -240,6 +264,7 @@ export const suggestionService = {
           history: (historyResult.data ?? []) as FeedbackHistory[],
           notes: (noteResult.data ?? []) as FeedbackInternalNote[],
           messages: (messageResult.data ?? []) as FeedbackMessage[],
+          aiDiagnostic: (aiDiagResult.data as FeedbackAiDiagnostic | null) ?? null,
         },
       }
     } catch (error) {
@@ -482,6 +507,35 @@ export const suggestionService = {
       return { success: true, data: undefined }
     } catch {
       return { success: true, data: undefined }
+    }
+  },
+
+  async generateAiDiagnosticForSuggestion(
+    organizationId: UUID,
+    suggestion: FeedbackSuggestion,
+  ): Promise<ServiceResult<FeedbackAiDiagnostic>> {
+    try {
+      const res = await supportAiService.processTicket({
+        organizationId,
+        suggestionId: suggestion.id,
+        title: suggestion.title,
+        description: suggestion.description,
+        additionalInfo: suggestion.additional_info,
+        moduleOrigin: suggestion.module_origin,
+        originRoute: suggestion.origin_route,
+        userName: suggestion.submitted_by_name || 'Usuário',
+      })
+      if (!res.success) {
+        return { success: false, error: res.error }
+      }
+      const diags = await supportAiService.getAiDiagnostics(organizationId, suggestion.id)
+      if (diags.success && diags.data.length > 0) {
+        return { success: true, data: diags.data[0] }
+      }
+      return { success: false, error: 'Diagnóstico não gerado.' }
+    } catch (err) {
+      logger.error('Erro ao gerar diagnóstico sob demanda', err)
+      return { success: false, error: 'Erro ao gerar diagnóstico.' }
     }
   },
 }

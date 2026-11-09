@@ -108,7 +108,7 @@ export function SystemMaintenanceScreen({
       </div>
 
       <div className="mt-8 text-xs text-slate-400 text-center relative z-10">
-        JB Software Platform &bull; Todos os direitos reservados.
+        ControleSoft Platform &bull; Todos os direitos reservados.
       </div>
     </div>
   )

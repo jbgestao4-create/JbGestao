@@ -136,7 +136,7 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Acesso da Empresa Desativado</h2>
           <p className="text-sm text-gray-600 dark:text-slate-300 mb-6 leading-relaxed">
-            O acesso para a empresa <strong>{currentOrganization.name}</strong> (Identificador: <span className="font-mono text-xs text-blue-600 dark:text-blue-400">{currentOrganization.slug}</span>) foi desativado. Entre em contato com a equipe de Suporte do JB Software para reativar seu acesso.
+            O acesso para a empresa <strong>{currentOrganization.name}</strong> (Identificador: <span className="font-mono text-xs text-blue-600 dark:text-blue-400">{currentOrganization.slug}</span>) foi desativado. Entre em contato com a equipe de Suporte do ControleSoft para reativar seu acesso.
           </p>
           <div className="space-y-3">
             <a
@@ -180,7 +180,7 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Tempo de teste expirado</h2>
           <p className="text-sm text-gray-700 dark:text-slate-200 mb-2 leading-relaxed font-semibold">
-            Tempo de teste expirado, entre em contato com a JB Software
+            Tempo de teste expirado, entre em contato com a ControleSoft
           </p>
           <p className="text-xs text-gray-500 dark:text-slate-400 mb-6">
             O período de avaliação da empresa <strong>{currentOrganization.name}</strong> encerrou-se em {expiredDateFormatted}. O acesso às funcionalidades do sistema está suspenso até a regularização.
@@ -190,8 +190,8 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
               href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20tempo%20de%20teste%20da%20minha%20empresa%20expirou.%20Gostaria%20de%20renovar%20o%20acesso%20com%20a%20JB%20Software."
               target="_blank"
               rel="noreferrer"
-              title="Falar com a JB Software no WhatsApp"
-              aria-label="Falar com a JB Software no WhatsApp"
+              title="Falar com a ControleSoft no WhatsApp"
+              aria-label="Falar com a ControleSoft no WhatsApp"
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 shadow-sm transition-colors"
             >
               <WhatsAppIcon className="h-5 w-5" />

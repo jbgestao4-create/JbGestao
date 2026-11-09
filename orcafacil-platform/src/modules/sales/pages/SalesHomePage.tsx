@@ -231,8 +231,8 @@ export function SalesHomePage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Vendas &amp; Balcão</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Vendas &amp; Balcão</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
             Terminal de frente de caixa PDV, pedidos faturados e notas fiscais (NF-e / NFC-e).
           </p>
         </div>
@@ -247,7 +247,7 @@ export function SalesHomePage() {
             Nenhuma funcionalidade de Vendas está liberada para a sua empresa.
           </p>
           <p className="text-xs text-amber-700/80 dark:text-amber-400 mt-1">
-            Entre em contato com o suporte da JB Software para liberação de páginas e recursos.
+            Entre em contato com o suporte da ControleSoft para liberação de páginas e recursos.
           </p>
         </div>
       ) : (
@@ -255,19 +255,19 @@ export function SalesHomePage() {
           {/* CARD 1: VENDAS & PDV (NOVA VENDA & PDV) */}
           {(canAccessQuickSale || canAccessPdv) && (
             <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="flex h-full flex-col p-6">
+              <CardContent className="flex h-full flex-col p-6 sm:p-8">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-xl bg-blue-50 p-3 text-blue-700">
+                  <div className="rounded-xl bg-blue-50 p-3 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
                     <ShoppingCart className="h-6 w-6" aria-hidden="true" />
                   </div>
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-800">
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
                     EMISSÃO &amp; BALCÃO
                   </span>
                 </div>
-                <h2 className="mt-4 text-base font-bold tracking-wide text-gray-900">
+                <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
                   VENDAS &amp; PDV
                 </h2>
-                <p className="mt-2 flex-1 text-xs leading-5 text-gray-600">
+                <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
                   {canAccessQuickSale && canAccessPdv
                     ? 'Inicie uma nova venda rápida com seleção de itens e pagamento, ou acesse o terminal de frente de caixa PDV em tela cheia.'
                     : canAccessQuickSale
@@ -275,10 +275,10 @@ export function SalesHomePage() {
                       : 'Acesse o terminal de frente de caixa PDV para vendas rápidas em balcão.'}
                 </p>
 
-                <div className="mt-5 flex flex-col gap-2">
+                <div className="mt-6 flex flex-col gap-2.5">
                   {canAccessQuickSale && (
                     <Button
-                      size="sm"
+                      size="lg"
                       onClick={() => {
                         void navigate('/orcafacil/sales/new')
                       }}
@@ -294,7 +294,7 @@ export function SalesHomePage() {
                   {canAccessPdv && (
                     <>
                       <Button
-                        size="sm"
+                        size="lg"
                         onClick={handleAccessPdv}
                         className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700"
                       >
@@ -306,7 +306,7 @@ export function SalesHomePage() {
                       </Button>
                       {canManagePdvRegisters && (
                         <Button
-                          size="sm"
+                          size="lg"
                           variant="outline"
                           onClick={() => {
                             setRegisterModalError(null)
@@ -332,28 +332,28 @@ export function SalesHomePage() {
           {/* CARD 2: CONSULTAR VENDAS & FATURAMENTO */}
           {canAccessSearchSales && (
             <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="flex h-full flex-col p-6">
+              <CardContent className="flex h-full flex-col p-6 sm:p-8">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-xl bg-emerald-50 p-3 text-emerald-700">
+                  <div className="rounded-xl bg-emerald-50 p-3 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                     <Receipt className="h-6 w-6" aria-hidden="true" />
                   </div>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-800">
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                     CONSULTA &amp; HISTÓRICO
                   </span>
                 </div>
-                <h2 className="mt-4 text-base font-bold tracking-wide text-gray-900">
+                <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
                   CONSULTAR VENDAS
                 </h2>
-                <p className="mt-2 flex-1 text-xs leading-5 text-gray-600">
+                <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
                   Acompanhe vendas faturadas, cupons emitidos, formas de pagamento praticadas e histórico detalhado por cliente ou data.
                 </p>
-                <div className="mt-5 flex flex-col justify-end gap-2">
+                <div className="mt-6 flex flex-col justify-end gap-2.5">
                   <Button
-                    size="sm"
+                    size="lg"
                     onClick={() => {
                       void navigate('/orcafacil/sales/search')
                     }}
-                    className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                    className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700 focus-visible:outline-emerald-600"
                   >
                     <span className="inline-flex items-center gap-2">
                       <Search className="h-4 w-4" aria-hidden="true" />
@@ -369,28 +369,28 @@ export function SalesHomePage() {
           {/* CARD 3: EMISSÃO DE NOTAS FISCAIS (NF-e / NFC-e) */}
           {canAccessInvoices && (
             <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="flex h-full flex-col p-6">
+              <CardContent className="flex h-full flex-col p-6 sm:p-8">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-xl bg-purple-50 p-3 text-purple-700">
+                  <div className="rounded-xl bg-purple-50 p-3 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
                     <FileText className="h-6 w-6" aria-hidden="true" />
                   </div>
-                  <span className="rounded-full bg-purple-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-purple-800">
+                  <span className="rounded-full bg-purple-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
                     CENTRAL FISCAL
                   </span>
                 </div>
-                <h2 className="mt-4 text-base font-bold tracking-wide text-gray-900">
+                <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
                   NOTAS FISCAIS (NF-e / NFC-e)
                 </h2>
-                <p className="mt-2 flex-1 text-xs leading-5 text-gray-600">
+                <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
                   Emissão eletrônica de Cupom Fiscal do Consumidor (NFC-e) e Nota Fiscal Eletrônica (NF-e) com autorização SEFAZ, DANFE e chave de 44 dígitos.
                 </p>
-                <div className="mt-5 flex flex-col justify-end gap-2">
+                <div className="mt-6 flex flex-col justify-end gap-2.5">
                   <Button
-                    size="sm"
+                    size="lg"
                     onClick={() => {
                       void navigate('/orcafacil/sales/invoices')
                     }}
-                    className="w-full justify-between rounded-xl bg-purple-600 hover:bg-purple-700"
+                    className="w-full justify-between rounded-xl bg-purple-600 hover:bg-purple-700 focus-visible:outline-purple-600"
                   >
                     <span className="inline-flex items-center gap-2">
                       <FileText className="h-4 w-4" aria-hidden="true" />

@@ -99,3 +99,32 @@ export interface FeedbackMessage {
   read_by_owner: boolean
   created_at: string
 }
+
+export interface DeveloperTechnicalAnalysis {
+  resumo_problema: string
+  causa_provavel: string
+  componentes_afetados: string[]
+  passos_reproducao: string[]
+  sugestao_tecnica_ponto_a_ponto: string[]
+}
+
+export interface SupportAiToolCallPayload {
+  resposta_cliente: string
+  requer_analise_dev: boolean
+  analise_desenvolvedor?: DeveloperTechnicalAnalysis
+}
+
+export interface FeedbackAiDiagnostic {
+  id: UUID
+  organization_id: UUID
+  suggestion_id: UUID
+  requer_analise_dev: boolean
+  resumo_problema: string | null
+  causa_provavel: string | null
+  componentes_afetados: string[]
+  passos_reproducao: string[]
+  sugestao_tecnica_ponto_a_ponto: string[]
+  raw_payload?: SupportAiToolCallPayload | null
+  created_at: string
+}
+

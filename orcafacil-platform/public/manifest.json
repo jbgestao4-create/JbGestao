@@ -1,14 +1,10 @@
 {
-  "short_name": "JB Gestão",
-  "name": "JB Gestão & PDV Offline",
+  "short_name": "ControleSoft",
+  "name": "ControleSoft - Gestão & PDV",
   "description": "Sistema de Gestão de Estoque e Vendas com Ponto de Venda Offline-First",
   "icons": [
-    {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" }
   ],
   "start_url": "/orcafacil/sales/pdv",
   "background_color": "#0f172a",

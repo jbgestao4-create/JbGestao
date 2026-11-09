@@ -11,7 +11,7 @@ import {
   Users,
   Power,
   RefreshCw,
-  Sparkles,
+  Bell,
   ShieldAlert,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -281,7 +281,7 @@ export function SystemNotificationsAdminPage() {
                   Notificação do Sistema e Manutenção
                 </h1>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                  <Sparkles className="w-3 h-3" /> Painel de Controle
+                  <Bell className="w-3 h-3" /> Painel de Controle
                 </span>
               </div>
               <p className="mt-1 text-sm text-gray-500 dark:text-slate-400 max-w-2xl">

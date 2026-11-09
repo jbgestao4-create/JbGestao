@@ -16,7 +16,7 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
+  Info,
   LayoutDashboard,
   ShoppingCart,
   TrendingUp,
@@ -315,7 +315,7 @@ export function SystemCustomizationSection() {
                 </Badge>
               </div>
               <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                Escolha entre o Modo Claro e o Modo Noturno para a interface de trabalho do JB Software.
+                Escolha entre o Modo Claro e o Modo Noturno para a interface de trabalho do ControleSoft.
               </p>
             </div>
           </div>
@@ -472,7 +472,7 @@ export function SystemCustomizationSection() {
               {/* Informações de Usabilidade */}
               <div className="rounded-xl bg-slate-50 dark:bg-slate-900/60 p-3.5 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-1.5">
                 <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <Info className="w-3.5 h-3.5 text-blue-500" />
                   Como a imagem é exibida no PDV:
                 </p>
                 <ul className="list-disc list-inside space-y-0.5 pl-1 text-[11px]">
@@ -617,7 +617,7 @@ export function SystemCustomizationSection() {
                 )}
               </div>
               <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                Escolha a cor principal que deseja utilizar na interface do JB Software. A alteração será aplicada em todos os módulos.
+                Escolha a cor principal que deseja utilizar na interface do ControleSoft. A alteração será aplicada em todos os módulos.
               </p>
             </div>
           </div>
@@ -646,7 +646,7 @@ export function SystemCustomizationSection() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-slate-300 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" style={{ color: currentColor }} />
+                <Palette className="w-3.5 h-3.5" style={{ color: currentColor }} />
                 Cores Pré-definidas
               </label>
               <span className="text-[11px] text-gray-500 dark:text-slate-400">
@@ -797,7 +797,7 @@ export function SystemCustomizationSection() {
                     color: currentColor,
                   }}
                 >
-                  <Sparkles className="w-3 h-3" />
+                  <Check className="w-3 h-3" />
                   Destaque Ativo
                 </span>
 

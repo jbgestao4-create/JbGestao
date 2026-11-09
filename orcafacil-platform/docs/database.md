@@ -119,7 +119,7 @@ Histórico imutável de entradas, saídas, ajustes, saldo inicial e alterações
 
 ### `quotes`
 
-Orçamentos comerciais gerados no módulo JB Software.
+Orçamentos comerciais gerados no módulo ControleSoft.
 
 - `id` (UUID, PK)
 - `organization_id` (UUID, FK -> `organizations.id` ON DELETE CASCADE)

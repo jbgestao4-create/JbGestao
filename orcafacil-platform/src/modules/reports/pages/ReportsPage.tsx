@@ -591,7 +591,8 @@ export function ReportsPage() {
         {selectedSession && (
           <div className="pdv-receipt-print hidden print:block font-mono text-[11px] text-black leading-tight p-2">
             <div style={{ textAlign: 'center', borderBottom: '1px dashed #000', paddingBottom: '8px', marginBottom: '8px' }}>
-              <p style={{ fontWeight: 'bold', fontSize: '13px' }}>{currentOrganization?.name || 'JB SOFTWARE'}</p>
+              <img src="/controlesoft-logo.png" alt="ControleSoft" style={{ display: 'block', margin: '0 auto 6px', height: '48px', objectFit: 'contain' }} />
+              <p style={{ fontWeight: 'bold', fontSize: '13px' }}>{currentOrganization?.name || 'CONTROLESOFT'}</p>
               <p style={{ fontSize: '11px' }}>FECHAMENTO DE CAIXA — PDV</p>
               <p style={{ fontSize: '9px' }}>RELATÓRIO DE ENCERRAMENTO DE TURNO</p>
             </div>
@@ -657,7 +658,7 @@ export function ReportsPage() {
                 Assinatura do Operador ({selectedSession.operatorName})
               </p>
               <p style={{ fontSize: '8px', color: '#555' }}>
-                Reimpresso em: {new Date().toLocaleString('pt-BR')} • JB Software Relatórios
+                Reimpresso em: {new Date().toLocaleString('pt-BR')} • ControleSoft Relatórios
               </p>
             </div>
           </div>

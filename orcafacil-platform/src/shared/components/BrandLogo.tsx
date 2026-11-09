@@ -23,15 +23,15 @@ export function BrandLogo({
     <div className={cn('inline-flex items-center gap-3', className)}>
       <span
         className={cn(
-          'inline-flex shrink-0 items-center justify-center overflow-hidden',
+          'inline-flex shrink-0 items-center justify-center overflow-hidden bg-white p-0.5 shadow-xs ring-1 ring-slate-200/70',
           markSizes[size],
         )}
       >
-        <img src="/jb-software-mark.svg" alt="" className="h-full w-full" />
+        <img src="/controlesoft-mark.png" alt="ControleSoft" className="h-full w-full object-contain" />
       </span>
       {showName && (
         <span className={cn('font-semibold', dark ? 'text-white' : 'text-gray-900 dark:text-white')}>
-          JB Software
+          ControleSoft
         </span>
       )}
     </div>

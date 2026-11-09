@@ -999,9 +999,9 @@ export function QuotesListPage() {
           <section className="quote-print-sheet">
             <header className="mb-8 flex items-center justify-between border-b border-gray-300 pb-5">
               <div className="flex items-center gap-3">
-                <img src="/jb-software-mark.svg" alt="Logo JB Software" className="h-14 w-14" />
+                <img src="/controlesoft-mark.png" alt="Logo ControleSoft" className="h-14 w-14 object-contain" />
                 <div>
-                  <p className="text-lg font-bold text-gray-900">JB Gestão Comercial</p>
+                  <p className="text-lg font-bold text-gray-900">ControleSoft</p>
                   <p className="text-sm text-gray-500">Comprovante de pagamento</p>
                 </div>
               </div>

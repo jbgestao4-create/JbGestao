@@ -36,7 +36,7 @@ describe('quote-pdf', () => {
       ],
     }
 
-    const doc = generateQuotePdf(mockQuote, { organizationName: 'JB Gestão' })
+    const doc = generateQuotePdf(mockQuote, { organizationName: 'ControleSoft' })
     expect(doc).toBeDefined()
     expect(doc.getNumberOfPages()).toBeGreaterThanOrEqual(1)
   })

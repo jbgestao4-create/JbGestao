@@ -1,5 +1,5 @@
 /**
- * Utilitários para gestão centralizada de temas e cores dinâmicas no sistema JB Software.
+ * Utilitários para gestão centralizada de temas e cores dinâmicas no sistema ControleSoft.
  */
 
 export interface ThemeColorPreset {

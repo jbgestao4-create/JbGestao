@@ -42,7 +42,7 @@ describe('quote-whatsapp', () => {
         discount: '0.00',
         total: '100.00',
       },
-      'JB Software',
+      'ControleSoft',
       'https://jbgestao.com/portal/orcamentos/abc123xyz',
     )
 

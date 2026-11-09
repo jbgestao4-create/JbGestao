@@ -2,7 +2,7 @@ import type { QuoteStatus } from '@shared/types/database'
 import type { OrganizationRole } from '@shared/types/common'
 
 /**
- * Máquina de estados finita (FSM) dos orçamentos da plataforma JB Software.
+ * Máquina de estados finita (FSM) dos orçamentos da plataforma ControleSoft.
  *
  * Transições permitidas:
  * - draft: sent, rejected

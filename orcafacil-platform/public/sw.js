@@ -1,11 +1,11 @@
 /* sw.js - Service Worker para PWA Offline-First */
-const CACHE_NAME = 'jb-gestao-offline-v1';
+const CACHE_NAME = 'controlesoft-offline-v1';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/favicon.svg',
-  '/jb-software-mark.svg'
+  '/icon-192.png',
+  '/controlesoft-mark.png'
 ];
 
 self.addEventListener('install', (event) => {

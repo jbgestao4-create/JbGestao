@@ -1409,7 +1409,7 @@ export function PdvTerminalPage() {
             </div>
             <div>
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                JB SOFTWARE
+                CONTROLESOFT
               </span>
               <h1 className="text-sm font-bold tracking-tight text-white">
                 PONTO DE VENDA (PDV)
@@ -2984,8 +2984,9 @@ export function PdvTerminalPage() {
 
           <div className="pdv-closure-receipt-print" style={{ display: 'none' }}>
             <div style={{ textAlign: 'center', borderBottom: '1px dashed #000', paddingBottom: '8px', marginBottom: '8px' }}>
+              <img src="/controlesoft-logo.png" alt="ControleSoft" style={{ display: 'block', margin: '0 auto 6px', height: '48px', objectFit: 'contain' }} />
               <p style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase' }}>
-                {currentOrganization?.name || 'JB GESTÃO COMERCIAL'}
+                {currentOrganization?.name || 'CONTROLESOFT'}
               </p>
               <p style={{ fontWeight: 'bold', fontSize: '11px', marginTop: '2px' }}>
                 COMPROVANTE DE FECHAMENTO DE CAIXA
@@ -3100,7 +3101,7 @@ export function PdvTerminalPage() {
                 Visto da Supervisão / Gerência
               </p>
               <p style={{ fontSize: '8px', color: '#555' }}>
-                Impresso em: {new Date().toLocaleString('pt-BR')} • PDV JB Software
+                Impresso em: {new Date().toLocaleString('pt-BR')} • PDV ControleSoft
               </p>
             </div>
           </div>

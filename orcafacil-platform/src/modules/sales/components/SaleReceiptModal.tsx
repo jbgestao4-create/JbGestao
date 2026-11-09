@@ -94,7 +94,8 @@ export function SaleReceiptModal({ open, sale, onClose }: SaleReceiptModalProps)
           >
             {/* Cabeçalho do Cupom */}
             <div className="text-center border-b border-gray-200 pb-3">
-              <p className="font-bold text-sm tracking-wider uppercase">JB SOFTWARE GESTÃO</p>
+              <img src="/controlesoft-logo.png" alt="ControleSoft" className="mx-auto mb-2 h-14 object-contain" />
+              <p className="font-bold text-sm tracking-wider uppercase">CONTROLESOFT</p>
               <p className="text-[11px] text-gray-500 mt-0.5">COMPROVANTE DE VENDA NÃO FISCAL</p>
               <p className="text-[10px] text-gray-400 mt-1">{fullYearDate}</p>
               <p className="text-xs font-semibold text-gray-900 mt-1">Pedido: {sale.saleNumber}</p>

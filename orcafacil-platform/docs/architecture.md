@@ -1,8 +1,8 @@
-# Arquitetura da Plataforma OrçaFácil
+# Arquitetura da Plataforma ControleSoft
 
 ## 1. Visão Geral
 
-A **OrçaFácil Platform** foi arquitetada como um **Monólito Modular** centrado no frontend em React/TypeScript, utilizando o **Supabase** como infraestrutura gerenciada de backend (PostgreSQL, Supabase Auth, Row Level Security e RPCs).
+A **ControleSoft Platform** foi arquitetada como um **Monólito Modular** centrado no frontend em React/TypeScript, utilizando o **Supabase** como infraestrutura gerenciada de backend (PostgreSQL, Supabase Auth, Row Level Security e RPCs).
 
 ```mermaid
 graph TD
@@ -16,7 +16,7 @@ graph TD
   subgraph Modules [Módulos da Plataforma]
     Core[Núcleo: Auth / Org / AccessControl]
     Customers[Módulo Compartilhado: Clientes]
-    OrcaFacil[Módulo OrçaFácil: Orçamentos]
+    OrcaFacil[Módulo ControleSoft: Orçamentos]
     AgendaPro[Módulo AgendaPro: Contrato Futuro]
     EstoqueLeve[Módulo EstoqueLeve: Contrato Futuro]
   end
@@ -47,7 +47,7 @@ graph TD
 
 ## 3. Regras de Dependência e Desacoplamento
 
-- **Núcleo Compartilhado Independente:** O núcleo (`auth`, `organizations`, `access-control`) desconhece entidades específicas do OrçaFácil (`quotes`, `quote_items`).
+- **Núcleo Compartilhado Independente:** O núcleo (`auth`, `organizations`, `access-control`) desconhece entidades específicas do ControleSoft (`quotes`, `quote_items`).
 - **Autenticação Centralizada:** Nenhum módulo cria autenticação própria.
 - **Isolamento entre Módulos:** Os módulos de negócio não acessam tabelas internas de outros módulos. Integrações futuras (ex: AgendaPro precisando de orçamentos) utilizarão contratos públicos ou serviços compartilhados.
 - **Base de Clientes Compartilhada:** O cadastro de clientes (`customers`) é transversal dentro da organização e reaproveitado por todos os módulos.

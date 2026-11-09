@@ -159,7 +159,7 @@ export const organizationService = {
 
   /**
    * Cria uma organização de forma atômica e segura.
-   * Concede a propriedade ao criador e ativa o módulo JB Software.
+   * Concede a propriedade ao criador e ativa o módulo ControleSoft.
    */
   async createOrganization(
     name: string,

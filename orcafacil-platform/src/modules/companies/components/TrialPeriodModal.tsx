@@ -251,7 +251,7 @@ export function TrialPeriodModal({
                     />
                   </div>
                   <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-normal">
-                    Após as 23:59 desta data, se a empresa tentar acessar, verá a mensagem de bloqueio: <em>"Tempo de teste expirado, entre em contato com a JB Software"</em>.
+                    Após as 23:59 desta data, se a empresa tentar acessar, verá a mensagem de bloqueio: <em>"Tempo de teste expirado, entre em contato com a ControleSoft"</em>.
                   </p>
                 </div>
               )}

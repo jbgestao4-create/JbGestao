@@ -47,7 +47,7 @@ export function buildServiceOrderReadyWhatsAppMessage(
   }
   msg += `\nVocê já pode comparecer ao nosso estabelecimento para retirar o seu equipamento.\n\n`
   msg += `Qualquer dúvida, estamos à inteira disposição!\n`
-  msg += `*${organizationName || 'JB Gestão Comercial'}*`
+  msg += `*${organizationName || 'ControleSoft'}*`
 
   return msg
 }
