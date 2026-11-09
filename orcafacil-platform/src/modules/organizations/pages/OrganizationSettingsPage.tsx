@@ -15,6 +15,11 @@ import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { SystemCustomizationSection } from '../components/SystemCustomizationSection'
 import {
+  formatScreenTime,
+  formatLastAccess,
+  screenTimeService,
+} from '@shared/services/screen-time.service'
+import {
   ShieldCheck,
   User,
   UserPlus,
@@ -26,6 +31,8 @@ import {
   Square,
   Building2,
   Palette,
+  Clock,
+  Calendar,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -139,8 +146,9 @@ function InventoryLevelSelector({
 
 export function OrganizationSettingsPage() {
   const { currentOrganization, userRole, organizations, setCurrentOrganization } = useOrganization()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const { refreshAccess, orgAllowedDashboardModules, canAccessDashboardModule } = useModuleAccess()
+  const isDeveloper = isSystemOwner(user)
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab =
     searchParams.get('tab') === 'customization' || searchParams.get('tab') === 'personalizacao'
@@ -158,6 +166,24 @@ export function OrganizationSettingsPage() {
   const [manageableOrganizations, setManageableOrganizations] = useState<Organization[]>([])
   const [isLoadingManageableOrganizations, setIsLoadingManageableOrganizations] = useState(true)
   const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
+  const [livePendingSeconds, setLivePendingSeconds] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    const handleTick = (event: Event) => {
+      const customEvent = event as CustomEvent<{ userId: string; pendingSeconds: number }>
+      if (customEvent.detail?.userId) {
+        setLivePendingSeconds((prev) => ({
+          ...prev,
+          [customEvent.detail.userId]: customEvent.detail.pendingSeconds,
+        }))
+      }
+    }
+
+    window.addEventListener('screen-time-tick', handleTick)
+    return () => {
+      window.removeEventListener('screen-time-tick', handleTick)
+    }
+  }, [])
 
   // Módulos liberados para a empresa ativa ou selecionada
   const [selectedOrgModules, setSelectedOrgModules] = useState<DashboardModuleCode[]>([])
@@ -287,43 +313,54 @@ export function OrganizationSettingsPage() {
     void loadMembers()
   }, [currentOrganization])
 
-  // Oculta o Proprietário e exibe exclusivamente o administrador logado e os funcionários cadastrados
+  // Atualiza periodicamente as métricas de tempo de tela e último acesso quando visualizado pelo desenvolvedor
+  useEffect(() => {
+    if (!isDeveloper || !currentOrganization) return
+
+    const intervalId = window.setInterval(() => {
+      void organizationService.getMembersWithDetails(currentOrganization.id).then((res) => {
+        if (res.success) {
+          setMembers(res.data)
+        }
+      })
+    }, 15000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [isDeveloper, currentOrganization?.id])
+
+  // Lista dos membros e funcionários visíveis para gestão e métricas de tempo de tela
   const visibleMembers = useMemo(() => {
-    return members.filter((member) => {
-      // 1. Oculta sempre o Proprietário do sistema
-      if (member.role === 'owner' || isSystemOwner(member.email)) {
+    const list = members.filter((member) => {
+      // Oculta contas de outros superadmins que não sejam a do próprio usuário logado
+      if (isSystemOwner(member.email) && member.userId !== user?.id) {
         return false
       }
-
-      // 2. Sempre exibe os funcionários cadastrados (membros operacionais)
-      if (member.role === 'member') {
-        return true
-      }
-
-      // 3. Exibe o administrador logado
-      if (member.role === 'admin') {
-        const isCurrentAdmin =
-          member.userId === user?.id ||
-          (!!user?.email && member.email?.toLowerCase() === user?.email?.toLowerCase())
-
-        if (isCurrentAdmin) {
-          return true
-        }
-
-        // Se o usuário logado não for este admin (ex: Proprietário mestre visualizando a tela da empresa), exibe o admin da empresa
-        const hasCurrentAdminInList = members.some(
-          (m) =>
-            m.role === 'admin' &&
-            (m.userId === user?.id ||
-              (!!user?.email && m.email?.toLowerCase() === user?.email?.toLowerCase())),
-        )
-
-        return !hasCurrentAdminInList
-      }
-
-      return false
+      return true
     })
-  }, [members, user?.id, user?.email])
+
+    // Se o desenvolvedor logado não estiver na lista de membros (isolamento da migration 00066),
+    // inclui o próprio desenvolvedor para visualização e monitoramento de tempo de tela
+    if (isDeveloper && user && !list.some((m) => m.userId === user.id)) {
+      const local = screenTimeService.getLocalActivity(user.id)
+      list.unshift({
+        userId: user.id,
+        organizationId: currentOrganization?.id || '',
+        role: 'owner',
+        displayName: profile?.displayName || user.email?.split('@')[0] || 'Desenvolvedor',
+        email: user.email || '',
+        jobTitle: 'Desenvolvedor do Sistema',
+        modules: [],
+        dashboardModules: [],
+        createdAt: new Date().toISOString(),
+        screenTimeSeconds: local?.screenTimeSeconds ?? 0,
+        lastAccessAt: local?.lastAccessAt ?? new Date().toISOString(),
+      })
+    }
+
+    return list
+  }, [members, user, profile, isDeveloper, currentOrganization?.id])
 
   const handleToggleDashboardModule = (modCode: DashboardModuleCode) => {
     setSelectedDashboardModules((prev) =>
@@ -777,6 +814,34 @@ export function OrganizationSettingsPage() {
                             </span>
                           )}
                         </div>
+
+                        {/* PAINEL DE ATIVIDADE DO USUÁRIO (EXCLUSIVO PERFIL DESENVOLVEDOR) */}
+                        {isDeveloper && (() => {
+                          const localAct = screenTimeService.getLocalActivity(member.userId)
+                          const baseSec = Math.max(member.screenTimeSeconds ?? 0, localAct?.screenTimeSeconds ?? 0)
+                          const totalScreenSeconds = baseSec + (livePendingSeconds[member.userId] ?? 0)
+                          const lastAccessDisplay = localAct?.lastAccessAt || member.lastAccessAt
+
+                          return (
+                            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-indigo-200/90 bg-indigo-50/60 dark:border-indigo-900/60 dark:bg-indigo-950/40 px-3.5 py-2 text-xs">
+                              <div className="flex items-center gap-2 text-indigo-950 dark:text-indigo-200">
+                                <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                <span className="font-medium text-slate-700 dark:text-slate-300">Tempo de tela total:</span>
+                                <span className="font-mono font-bold text-sm text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                                  {formatScreenTime(totalScreenSeconds)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                <Calendar className="w-4 h-4 text-indigo-500/80 dark:text-indigo-400 shrink-0" />
+                                <span className="font-medium">Último acesso:</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                  {formatLastAccess(lastAccessDisplay)}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
 

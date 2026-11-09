@@ -1,15 +1,16 @@
 import { UpcomingBillsAlertModal } from '@modules/cash/components/UpcomingBillsAlertModal'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { supabase } from '@app/config/supabase'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { isSystemOwner } from '@shared/utils/system-owner'
-import { ListBox } from '@shared/components/ui/ListBox'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
+import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
 import {
   LayoutDashboard,
   FileSpreadsheet,
@@ -33,8 +34,7 @@ import {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, profile, signOut } = useAuth()
-  const { currentOrganization, organizations, setCurrentOrganization } =
-    useOrganization()
+  const { currentOrganization, organizations } = useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const location = useLocation()
   const navigate = useNavigate()
@@ -52,9 +52,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const suggestionOwnerKey =
     ownerUserId && ownerOrganizationId ? `${ownerUserId}:${ownerOrganizationId}` : null
 
+  const isDeveloper = isSystemOwner(user)
+  const [unreadSuggestionsCount, setUnreadSuggestionsCount] = useState(0)
+
   useEffect(() => {
     let active = true
-    if (ownerUserId && ownerOrganizationId) {
+    if (ownerUserId && ownerOrganizationId && !isDeveloper) {
       void suggestionService
         .isOrganizationOwner(ownerOrganizationId, ownerUserId)
         .then((isOwner) => {
@@ -69,12 +72,72 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return () => {
       active = false
     }
-  }, [ownerUserId, ownerOrganizationId])
+  }, [ownerUserId, ownerOrganizationId, isDeveloper])
 
   const canManageSuggestions =
-    suggestionOwnerKey !== null &&
-    suggestionOwnerCheck?.key === suggestionOwnerKey &&
-    suggestionOwnerCheck.isOwner
+    isDeveloper ||
+    (suggestionOwnerKey !== null &&
+      suggestionOwnerCheck?.key === suggestionOwnerKey &&
+      suggestionOwnerCheck.isOwner)
+
+  // Apenas o desenvolvedor recebe a notificação de sugestões pendentes no menu lateral
+  useEffect(() => {
+    if (!isDeveloper || !currentOrganization?.id) {
+      setUnreadSuggestionsCount(0)
+      return
+    }
+
+    const orgId = currentOrganization.id
+
+    const refreshUnread = async () => {
+      const res = await suggestionService.getUnreadCount(orgId)
+      if (res.success) {
+        setUnreadSuggestionsCount(res.data)
+      }
+    }
+
+    void refreshUnread()
+
+    const handleFocus = () => {
+      void refreshUnread()
+    }
+    const handleReadCountChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ organizationId: string; count: number }>).detail
+      if (detail.organizationId === orgId) {
+        setUnreadSuggestionsCount(detail.count)
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('feedback-unread-count-changed', handleReadCountChange)
+
+    const channel = supabase
+      .channel(`sidebar-feedback-suggestions-${orgId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'feedback_suggestions',
+          filter: `organization_id=eq.${orgId}`,
+        },
+        () => {
+          void refreshUnread()
+        },
+      )
+      .subscribe()
+
+    const interval = window.setInterval(() => {
+      void refreshUnread()
+    }, 30000)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('feedback-unread-count-changed', handleReadCountChange)
+      window.clearInterval(interval)
+      void supabase.removeChannel(channel)
+    }
+  }, [isDeveloper, currentOrganization?.id])
 
 
   const handleSignOut = async () => {
@@ -98,7 +161,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const canAccessServiceOrders = canAccessDashboardModule('MOD-10')
   const canAccessMigration = canAccessDashboardModule('MOD-11')
 
-  const navItem = (to: string, label: string, icon: ReactNode) => {
+  const navItem = (to: string, label: string, icon: ReactNode, badge?: ReactNode) => {
     const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
     return (
       <Link
@@ -113,8 +176,30 @@ export function AppLayout({ children }: { children: ReactNode }) {
             : 'text-slate-700 hover:bg-white/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white'
         } ${sidebarCollapsed ? 'justify-center' : ''}`}
       >
-        <span className={`shrink-0 ${isActive ? 'text-[var(--theme-primary,#2563eb)] dark:text-[var(--theme-primary-dark-text,#60a5fa)]' : 'text-slate-500 dark:text-slate-400'}`}>{icon}</span>
-        {!sidebarCollapsed && label}
+        <span
+          className={`relative shrink-0 ${
+            isActive
+              ? 'text-[var(--theme-primary,#2563eb)] dark:text-[var(--theme-primary-dark-text,#60a5fa)]'
+              : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          {icon}
+          {sidebarCollapsed && badge && (
+            <span className="absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white shadow-xs">
+              {badge}
+            </span>
+          )}
+        </span>
+        {!sidebarCollapsed && (
+          <span className="flex flex-1 items-center justify-between gap-2 min-w-0">
+            <span className="truncate">{label}</span>
+            {badge && (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white shadow-xs">
+                {badge}
+              </span>
+            )}
+          </span>
+        )}
       </Link>
     )
   }
@@ -157,9 +242,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
             )}
           </button>
 
-          {/* LOGO & ORG SELECTOR */}
+          {/* LOGO */}
           <div className="p-4 border-b border-sky-200/60 dark:border-slate-800">
-            <div className={`mb-3 flex items-center justify-between ${sidebarCollapsed ? 'md:justify-center' : ''}`}>
+            <div className={`flex items-center justify-between ${sidebarCollapsed ? 'md:justify-center' : ''}`}>
               <BrandLogo size="sm" showName={!sidebarCollapsed} />
               <button
                 type="button"
@@ -172,25 +257,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <X aria-hidden="true" className="h-5 w-5" />
               </button>
             </div>
-
-            {/* Seletor de Organização */}
-            {!sidebarCollapsed && organizations.length > 0 && (
-              <div className="relative">
-                <ListBox
-                  searchable={organizations.length > 4}
-                  searchPlaceholder="Buscar empresa..."
-                  value={currentOrganization?.id ?? ''}
-                  onChange={(val) => {
-                    const org = organizations.find((o) => o.id === val)
-                    if (org) setCurrentOrganization(org)
-                  }}
-                  options={organizations.map((org) => ({
-                    value: org.id,
-                    label: org.name,
-                  }))}
-                />
-              </div>
-            )}
           </div>
 
           {/* NAVEGAÇÃO MODULAR */}
@@ -297,7 +363,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       </span>
                     )}
                     <div className="mt-1 space-y-0.5">
-                      {navItem('/suggestions', 'Sugestões', <Lightbulb className="h-4 w-4" />)}
+                      {navItem(
+                        '/suggestions',
+                        'Sugestões',
+                        <Lightbulb className="h-4 w-4" />,
+                        isDeveloper && unreadSuggestionsCount > 0
+                          ? formatUnreadSuggestionCount(unreadSuggestionsCount)
+                          : undefined,
+                      )}
                     </div>
                   </div>
                 )}

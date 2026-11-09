@@ -4,6 +4,7 @@ import { Loader2, ShieldAlert } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
+import { isSystemOwner } from '@shared/utils/system-owner'
 
 export function RequireFeedbackOwner({ children }: { children: ReactNode }) {
   const { user } = useAuth()
@@ -27,8 +28,9 @@ export function RequireFeedbackOwner({ children }: { children: ReactNode }) {
     }
   }, [userId, organizationId])
 
-  const isChecking = accessKey !== null && ownerCheck?.key !== accessKey
-  const isOwner = accessKey !== null && ownerCheck?.key === accessKey && ownerCheck.isOwner
+  const isDev = isSystemOwner(user)
+  const isChecking = !isDev && accessKey !== null && ownerCheck?.key !== accessKey
+  const isOwner = isDev || (accessKey !== null && ownerCheck?.key === accessKey && ownerCheck.isOwner)
 
   if (isLoading || isChecking) {
     return (

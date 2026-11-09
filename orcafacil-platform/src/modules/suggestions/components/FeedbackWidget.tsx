@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
+import { useRef, useState, type SyntheticEvent } from 'react'
 import { useLocation } from 'react-router-dom'
-import { supabase } from '@app/config/supabase'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { Button } from '@shared/components/ui/Button'
 import { suggestionService } from '../services/suggestion.service'
 import {
   ALLOWED_SUGGESTION_IMAGE_TYPES,
-  formatUnreadSuggestionCount,
   getSuggestionModuleLabel,
   validateSuggestionImage,
 } from '../utils/suggestion.utils'
@@ -36,69 +34,6 @@ export function FeedbackWidget() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [unreadState, setUnreadState] = useState<{ key: string; count: number } | null>(null)
-  const userId = user?.id
-  const organizationId = currentOrganization?.id
-  const unreadKey = userId && organizationId ? `${userId}:${organizationId}` : null
-
-  useEffect(() => {
-    const refreshUnreadCount = async () => {
-      if (!userId || !organizationId) return
-      const isOwner = await suggestionService.isOrganizationOwner(organizationId, userId)
-      if (!isOwner) {
-        setUnreadState({ key: `${userId}:${organizationId}`, count: 0 })
-        return
-      }
-
-      const result = await suggestionService.getUnreadCount(organizationId)
-      if (result.success) {
-        setUnreadState({ key: `${userId}:${organizationId}`, count: result.data })
-      }
-    }
-
-    const handleReadCountChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ organizationId: string; count: number }>).detail
-      if (detail.organizationId === organizationId && userId) {
-        setUnreadState({ key: `${userId}:${organizationId}`, count: detail.count })
-      }
-    }
-
-    void refreshUnreadCount()
-    const handleFocus = () => {
-      void refreshUnreadCount()
-    }
-    window.addEventListener('focus', handleFocus)
-    window.addEventListener('feedback-unread-count-changed', handleReadCountChange)
-    const subscription =
-      userId && organizationId
-        ? supabase
-            .channel(`feedback-suggestions-${organizationId}-${userId}`)
-            .on(
-              'postgres_changes',
-              {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'feedback_suggestions',
-                filter: `organization_id=eq.${organizationId}`,
-              },
-              () => {
-                void refreshUnreadCount()
-              },
-            )
-            .subscribe()
-        : null
-    const refreshInterval = window.setInterval(() => {
-      void refreshUnreadCount()
-    }, 30000)
-    return () => {
-      window.removeEventListener('focus', handleFocus)
-      window.removeEventListener('feedback-unread-count-changed', handleReadCountChange)
-      window.clearInterval(refreshInterval)
-      if (subscription) {
-        void supabase.removeChannel(subscription)
-      }
-    }
-  }, [userId, organizationId])
 
   const close = () => {
     if (isSubmitting) return
@@ -154,8 +89,6 @@ export function FeedbackWidget() {
   }
 
   if (!user) return null
-  const unreadCount =
-    unreadKey && unreadState?.key === unreadKey ? unreadState.count : 0
 
   return (
     <>
@@ -173,20 +106,9 @@ export function FeedbackWidget() {
           setIsOpen(true)
         }}
         className="fixed bottom-4 right-4 z-[60] inline-flex min-h-12 items-center gap-2 rounded-full bg-blue-700 px-4 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-        aria-label={
-          unreadCount > 0
-            ? `Sugestões, ${String(unreadCount)} novas para visualizar`
-            : 'Enviar sugestão'
-        }
+        aria-label="Enviar sugestão"
       >
-        <span className="relative inline-flex">
-          <Lightbulb aria-hidden="true" className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <span className="absolute -right-2.5 -top-2.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-blue-700 bg-red-600 px-1 text-[11px] font-bold leading-none text-white shadow-sm">
-              {formatUnreadSuggestionCount(unreadCount)}
-            </span>
-          )}
-        </span>
+        <Lightbulb aria-hidden="true" className="h-5 w-5" />
         <span>Sugestões</span>
       </button>
 

@@ -10,6 +10,7 @@ import { AppLayout } from '@app/layouts/AppLayout'
 import { Loader2 } from 'lucide-react'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
+import { useScreenTimeTracker } from '@shared/hooks/useScreenTimeTracker'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -22,6 +23,8 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
   const navigate = useNavigate()
   const { setInsideSystem } = useTheme()
   const location = useLocation()
+
+  useScreenTimeTracker(user?.id)
 
   useEffect(() => {
     if (user) {

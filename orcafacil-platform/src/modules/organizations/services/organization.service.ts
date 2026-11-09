@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@app/config/supabase'
 import { env } from '@app/config/env'
 import { logger } from '@shared/lib/logger'
+import { screenTimeService } from '@shared/services/screen-time.service'
 import { DASHBOARD_MODULES } from '@modules/access-control/services/module-access.service'
 import type {
   ModuleCode,
@@ -311,9 +312,14 @@ export const organizationService = {
         (membersExtraData ?? []).map((member: any) => [member.user_id, member.job_title]),
       )
 
+      // Consulta métricas de atividade (tempo de tela e último acesso) de cada membro
+      const activityMap = await screenTimeService.getOrganizationMembersActivity(orgId)
+
       return {
         success: true,
-        data: (memberRows ?? []).map((row: any) => ({
+        data: (memberRows ?? []).map((row: any) => {
+          const activity = activityMap.get(row.user_id)
+          return {
             userId: row.user_id,
             organizationId: row.organization_id,
             role: row.role as OrganizationRole,
@@ -332,7 +338,10 @@ export const organizationService = {
             inventoryAccessLevel:
               inventoryLevelByUserId.get(row.user_id) || 3,
             createdAt: row.created_at,
-          })),
+            screenTimeSeconds: activity?.screenTimeSeconds ?? 0,
+            lastAccessAt: activity?.lastAccessAt ?? null,
+          }
+        }),
       }
     } catch (err) {
       logger.error('Exceção ao listar detalhes dos membros', err)

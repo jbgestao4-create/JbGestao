@@ -302,8 +302,8 @@ describe('companyManagementService', () => {
     expect(query.eq).toHaveBeenCalledWith('id', 'org-del-2')
   })
 
-  it('deve conter todos os 10 módulos da plataforma no catálogo completo', () => {
-    expect(ALL_PLATFORM_DASHBOARD_MODULES).toHaveLength(10)
+  it('deve conter todos os 11 módulos da plataforma no catálogo completo', () => {
+    expect(ALL_PLATFORM_DASHBOARD_MODULES).toHaveLength(11)
     const codes = ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code)
     expect(codes).toContain('MOD-01')
     expect(codes).toContain('MOD-02')
@@ -315,6 +315,7 @@ describe('companyManagementService', () => {
     expect(codes).toContain('MOD-08')
     expect(codes).toContain('MOD-09')
     expect(codes).toContain('MOD-10')
+    expect(codes).toContain('MOD-11')
   })
 
   it('deve atualizar os campos estendidos remotamente (cnpj, endereco, responsavel, observacoes)', async () => {

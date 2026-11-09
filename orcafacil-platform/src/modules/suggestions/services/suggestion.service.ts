@@ -1,5 +1,6 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import type { ServiceResult, UUID } from '@shared/types/common'
 import type {
   FeedbackAttachment,
@@ -35,8 +36,17 @@ export interface FeedbackAttachmentWithUrl extends FeedbackAttachment {
 }
 
 export const suggestionService = {
-  async isOrganizationOwner(organizationId: UUID, userId: UUID): Promise<boolean> {
+  async isOrganizationOwner(organizationId: UUID, userId: UUID, userEmail?: string | null): Promise<boolean> {
+    if (userEmail && isSystemOwner(userEmail)) {
+      return true
+    }
+
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user && isSystemOwner(user)) {
+        return true
+      }
+
       const { data, error } = await supabase
         .from('organization_members')
         .select('role')

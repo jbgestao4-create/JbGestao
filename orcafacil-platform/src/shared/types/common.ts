@@ -72,6 +72,8 @@ export interface OrganizationMemberDetail {
   dashboardModules: DashboardModuleCode[]
   inventoryAccessLevel?: InventoryAccessLevel
   createdAt: string
+  screenTimeSeconds?: number
+  lastAccessAt?: string | null
 }
 
 export interface Supplier {
