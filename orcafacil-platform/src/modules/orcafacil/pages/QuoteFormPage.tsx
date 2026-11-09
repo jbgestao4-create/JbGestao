@@ -25,6 +25,8 @@ import { ListBox } from '@shared/components/ui/ListBox'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import { Plus, Trash2, ArrowLeft, Search, UserRoundPlus } from 'lucide-react'
 import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
+import { appointmentService } from '@modules/agendapro/services/appointment.service'
+import { ForwardToScheduleCard } from '@modules/agendapro/components/ForwardToScheduleCard'
 
 function ProductCodeSearch({
   value,
@@ -331,6 +333,13 @@ export function QuoteFormPage() {
   const [notes, setNotes] = useState('')
   const [discount, setDiscount] = useState('0.00')
 
+  // Agendamento / Encaminhar para agenda
+  const [forwardToSchedule, setForwardToSchedule] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('09:00')
+  const [scheduleAssignedTo, setScheduleAssignedTo] = useState('')
+  const [scheduleNotes, setScheduleNotes] = useState('')
+
   const [items, setItems] = useState<FormItem[]>([])
 
   const [error, setError] = useState('')
@@ -411,6 +420,19 @@ export function QuoteFormPage() {
       setValidUntil(quote.validUntil?.slice(0, 10) ?? '')
       setNotes(quote.notes ?? '')
       setDiscount(quote.discount)
+      if (quoteId) {
+        void appointmentService
+          .getByReference(currentOrganization.id, 'quote', quoteId)
+          .then((apptRes) => {
+            if (apptRes.success && apptRes.data) {
+              setForwardToSchedule(true)
+              setScheduleDate(apptRes.data.appointmentDate)
+              setScheduleTime(apptRes.data.startTime || '09:00')
+              setScheduleAssignedTo(apptRes.data.assignedTo || '')
+              setScheduleNotes(apptRes.data.notes || apptRes.data.description || '')
+            }
+          })
+      }
       setItems(
         quote.items.map((item) => ({
           id: item.id,
@@ -620,6 +642,10 @@ export function QuoteFormPage() {
       setError('Informe um valor unitário válido e igual ou maior que zero para cada item.')
       return
     }
+    if (forwardToSchedule && !scheduleDate) {
+      setError('Informe o dia do agendamento para atribuição.')
+      return
+    }
 
     setIsSubmitting(true)
     setError('')
@@ -644,6 +670,26 @@ export function QuoteFormPage() {
       : await quoteService.createQuote(currentOrganization.id, params)
 
     if (res.success) {
+      const targetQuoteId = quoteId || (res.data as string)
+      if (targetQuoteId) {
+        const customerObj = customers.find((c) => c.id === selectedCustomerId)
+        await appointmentService.syncFromEntity(currentOrganization.id, {
+          referenceType: 'quote',
+          referenceId: targetQuoteId,
+          forwardToSchedule,
+          appointmentDate: scheduleDate,
+          startTime: scheduleTime,
+          customerName: customerObj?.name || 'Cliente',
+          customerPhone: customerObj?.phone || undefined,
+          customerId: selectedCustomerId || undefined,
+          title: `Orçamento #${targetQuoteId.slice(0, 8)} - ${customerObj?.name || 'Cliente'}`,
+          description: scheduleNotes || notes || 'Agendamento referente ao orçamento',
+          assignedTo: scheduleAssignedTo,
+          operatorName: profile?.displayName || user?.email?.split('@')[0],
+          userId: user?.id,
+        })
+      }
+
       const destinationStatus = quoteId && existingQuoteStatus ? existingQuoteStatus : 'draft'
       await navigate(`/orcafacil/quotes?status=${destinationStatus}`)
     } else {
@@ -1209,6 +1255,22 @@ export function QuoteFormPage() {
                 />
               </CardContent>
             </Card>
+
+            {/* ENCAMINHAR PARA AGENDA */}
+            <ForwardToScheduleCard
+              enabled={forwardToSchedule}
+              onChangeEnabled={setForwardToSchedule}
+              date={scheduleDate}
+              onChangeDate={setScheduleDate}
+              time={scheduleTime}
+              onChangeTime={setScheduleTime}
+              assignedTo={scheduleAssignedTo}
+              onChangeAssignedTo={setScheduleAssignedTo}
+              notes={scheduleNotes}
+              onChangeNotes={setScheduleNotes}
+              title="Encaminhar para agenda"
+              description="Quando marcada, gera um agendamento na Agenda para visita técnica, atendimento ou retorno com o cliente."
+            />
 
             <div className="flex justify-end gap-3">
               <Link to="/orcafacil/quotes">

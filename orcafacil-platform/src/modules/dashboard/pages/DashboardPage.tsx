@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   Building2,
+  Calendar,
   ChartNoAxesCombined,
   ChevronDown,
   ChevronUp,
@@ -13,12 +14,10 @@ import {
   FileSpreadsheet,
   GripVertical,
   Home,
-  LockKeyhole,
   Package,
   RotateCcw,
   Settings2,
   ShoppingCart,
-  Sparkles,
   Truck,
   Users,
   WalletCards,
@@ -31,6 +30,8 @@ import { useModuleAccess } from '@modules/access-control/context/ModuleAccessCon
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { quoteService } from '@modules/orcafacil/services/quote.service'
 import { customerService } from '@modules/customers/services/customer.service'
+import { AgendaHeroWidget } from '@modules/agendapro/components/AgendaHeroWidget'
+import { AnnouncementCarousel } from '@shared/components/AnnouncementCarousel'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { ThemeToggle } from '@shared/components/ThemeToggle'
 import type { DashboardModuleCode } from '@shared/types/database'
@@ -61,6 +62,7 @@ const DEFAULT_MODULE_IDS = [
   'MOD-08',
   'MOD-09',
   'MOD-11',
+  'MOD-12',
 ]
 
 export function DashboardPage() {
@@ -282,6 +284,18 @@ export function DashboardPage() {
         accessModule: 'MOD-11',
         path: '/migration',
       },
+      {
+        id: 'MOD-12',
+        title: 'Agenda',
+        description:
+          'Controle de agendamentos, compromissos, visitas técnicas e integração direta com orçamentos e ordens de serviço.',
+        action: 'Acessar Agenda',
+        icon: Calendar,
+        iconStyle: 'bg-blue-50 text-blue-700',
+        isAvailable: true,
+        accessModule: 'MOD-12',
+        path: '/agenda',
+      },
     ],
     [hasOrcafacil, userRole],
   )
@@ -432,44 +446,26 @@ export function DashboardPage() {
       </header>
 
       <main className="mx-auto w-full max-w-[1600px] space-y-8 px-4 py-6 sm:px-7 sm:py-8">
-        <section className="relative overflow-hidden rounded-xl bg-[#0F172A] px-6 py-7 text-white sm:px-9 sm:py-9 lg:px-11">
-          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[42%] border-l border-white/10 bg-white/[0.02] lg:block" />
-          <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-center">
-            <div>
-              <span className="inline-flex items-center gap-2 rounded-md border border-blue-300/20 bg-blue-300/10 px-3 py-1.5 text-xs font-medium text-blue-100">
-                <Sparkles aria-hidden="true" className="h-3.5 w-3.5 text-blue-300" />
-                Painel Principal do Sistema
-              </span>
-              <h2 className="mt-5 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
-                Bem-vindo ao Sistema JB, <span className="text-blue-300">{firstName}</span>!
-              </h2>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                Selecione uma das opções abaixo para gerenciar as rotinas comerciais, operacionais e
-                cadastrais da sua empresa.
-              </p>
+        <section className="relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-stretch">
+            {/* LADO ESQUERDO: ANÚNCIOS (Maior e rotativo de 3s) */}
+            <div className="lg:col-span-7 flex flex-col min-h-[310px] sm:min-h-[340px]">
+              <AnnouncementCarousel
+                firstName={firstName}
+                onManageAnnouncements={() => void navigate('/admin/announcements')}
+              />
             </div>
 
-            <div className="grid gap-3 rounded-lg border border-white/10 bg-slate-950/40 p-5 sm:grid-cols-2 lg:grid-cols-1">
-              <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-200">
-                  <LockKeyhole aria-hidden="true" className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase text-slate-400">Segurança</p>
-                  <p className="mt-1 text-sm font-medium text-white">Conexão HTTPS protegida</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 border-white/10 sm:border-l sm:pl-3 lg:border-l-0 lg:border-t lg:pt-3 lg:pl-0">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-emerald-300">
-                  <Database aria-hidden="true" className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase text-slate-400">
-                    Banco de Dados
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-white">{connectionLabel}</p>
-                </div>
-              </div>
+            {/* LADO DIREITO: AGENDA (Maior, branca no modo claro, escura no modo escuro) */}
+            <div className="lg:col-span-5 flex flex-col min-h-[310px] sm:min-h-[340px]">
+              <AgendaHeroWidget
+                organizationId={currentOrganization?.id}
+                userId={user?.id}
+                operatorName={accountName}
+                connectionLabel={connectionLabel}
+                connectionStatus={connectionStatus}
+                onOpenFullAgenda={() => void navigate('/agenda')}
+              />
             </div>
           </div>
         </section>

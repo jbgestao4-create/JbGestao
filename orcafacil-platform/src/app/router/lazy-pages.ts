@@ -168,3 +168,16 @@ export const MigrationHubPage = lazy(() =>
     default: module.MigrationHubPage,
   })),
 )
+
+export const AgendaPage = lazy(() =>
+  import('@modules/agendapro/pages/AgendaPage').then((module) => ({
+    default: module.AgendaPage,
+  })),
+)
+
+export const AnnouncementsAdminPage = lazy(() =>
+  import('@modules/companies/pages/AnnouncementsAdminPage').then((module) => ({
+    default: module.AnnouncementsAdminPage,
+  })),
+)
+

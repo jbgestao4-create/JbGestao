@@ -1,9 +1,12 @@
 import { useState, type SyntheticEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { authService } from '../services/auth.service'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { isSystemOwner } from '@shared/utils/system-owner'
+import { Image as ImageIcon, Sparkles, ArrowRight } from 'lucide-react'
 import type { FontSizePreference } from '../context/AuthContext'
 
 const FONT_SIZE_OPTIONS: { value: FontSizePreference; label: string; sample: string }[] = [
@@ -282,6 +285,33 @@ export function ProfilePage() {
           </fieldset>
         </CardContent>
       </Card>
+
+      {isSystemOwner(user) && (
+        <Card className="border-blue-300 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20">
+          <CardHeader>
+            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+              <Sparkles className="h-4 w-4" />
+              <h2 className="text-sm font-bold">Painel do Desenvolvedor: Banners & Anúncios</h2>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Configure as imagens de anúncios que serão exibidas na tela inicial do sistema no lado oposto à agenda.
+              Você pode importar várias imagens, que passarão a cada 3 segundos com pausa ao passar o mouse.
+            </p>
+            <div>
+              <Link
+                to="/admin/announcements"
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition"
+              >
+                <ImageIcon className="h-4 w-4" />
+                <span>Gerenciar Anúncios da Tela Inicial</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

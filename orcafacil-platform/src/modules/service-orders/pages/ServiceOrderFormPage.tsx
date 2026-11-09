@@ -33,6 +33,8 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
+import { appointmentService } from '@modules/agendapro/services/appointment.service'
+import { ForwardToScheduleCard } from '@modules/agendapro/components/ForwardToScheduleCard'
 import {
   DEFAULT_DAMAGE_CHECKLIST_OPTIONS,
   NO_DAMAGE_IDENTIFIED_OPTION,
@@ -138,6 +140,13 @@ export function ServiceOrderFormPage() {
   const [pendingModalInput, setPendingModalInput] = useState('')
   const [pendingModalError, setPendingModalError] = useState<string | null>(null)
   const [saveAfterPendingConfirm, setSaveAfterPendingConfirm] = useState(false)
+
+  // Agendamento / Encaminhar para agenda
+  const [forwardToSchedule, setForwardToSchedule] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('09:00')
+  const [scheduleAssignedTo, setScheduleAssignedTo] = useState(operatorName)
+  const [scheduleNotes, setScheduleNotes] = useState('')
   const FIXED_WARRANTY_TERMS =
     'Garantia legal referente exclusivamente aos serviços executados e peças substituídas descritas nesta Ordem de Serviço.'
 
@@ -248,6 +257,20 @@ export function ServiceOrderFormPage() {
         setTechnicianName(operatorName)
         setItems(d.items)
         setDiscount(d.discount || '0.00')
+
+        if (id) {
+          void appointmentService
+            .getByReference(currentOrganization.id, 'service_order', id)
+            .then((apptRes) => {
+              if (apptRes.success && apptRes.data) {
+                setForwardToSchedule(true)
+                setScheduleDate(apptRes.data.appointmentDate)
+                setScheduleTime(apptRes.data.startTime || '09:00')
+                setScheduleAssignedTo(apptRes.data.assignedTo || operatorName)
+                setScheduleNotes(apptRes.data.notes || apptRes.data.description || '')
+              }
+            })
+        }
       } else {
         setError(res.error)
       }
@@ -536,6 +559,10 @@ export function ServiceOrderFormPage() {
       setError('Descreva o problema / defeito relatado pelo cliente.')
       return
     }
+    if (forwardToSchedule && !scheduleDate) {
+      setError('Informe o dia do agendamento para atribuição.')
+      return
+    }
 
     const nextStatus: ServiceOrderStatus = !isEditing
       ? 'queue'
@@ -603,6 +630,26 @@ export function ServiceOrderFormPage() {
     setIsSaving(false)
 
     if (res.success) {
+      const osId = id || res.data.id
+      const osNumber = isEditing ? orderNumber : res.data.orderNumber
+      if (osId) {
+        await appointmentService.syncFromEntity(currentOrganization.id, {
+          referenceType: 'service_order',
+          referenceId: osId,
+          forwardToSchedule,
+          appointmentDate: scheduleDate,
+          startTime: scheduleTime,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim() || undefined,
+          customerId: selectedCustomerId || undefined,
+          title: `O.S. #${osNumber || osId.slice(0, 8)} - ${equipmentName.trim()}`,
+          description: scheduleNotes || reportedProblem.trim() || 'Atendimento / Diagnóstico da O.S.',
+          assignedTo: scheduleAssignedTo || operatorName,
+          operatorName,
+          userId: user?.id,
+        })
+      }
+
       if (!isEditing) {
         void navigate('/service-orders?status=queue')
       } else if (nextStatus === 'ready' && initialStatus !== 'ready') {
@@ -1488,6 +1535,22 @@ export function ServiceOrderFormPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ENCAMINHAR PARA AGENDA */}
+      <ForwardToScheduleCard
+        enabled={forwardToSchedule}
+        onChangeEnabled={setForwardToSchedule}
+        date={scheduleDate}
+        onChangeDate={setScheduleDate}
+        time={scheduleTime}
+        onChangeTime={setScheduleTime}
+        assignedTo={scheduleAssignedTo}
+        onChangeAssignedTo={setScheduleAssignedTo}
+        notes={scheduleNotes}
+        onChangeNotes={setScheduleNotes}
+        title="Encaminhar para agenda"
+        description="Quando marcada, gera um agendamento na Agenda para o diagnóstico, manutenção ou entrega do equipamento."
+      />
 
       {/* Barra de Ações Final */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">

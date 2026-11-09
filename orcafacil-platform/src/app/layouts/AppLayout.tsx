@@ -14,9 +14,11 @@ import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggesti
 import {
   LayoutDashboard,
   FileSpreadsheet,
+  Image as ImageIcon,
   Users,
   Settings,
   Building2,
+  Calendar,
   FileBarChart,
   Truck,
   Package,
@@ -160,6 +162,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const canAccessServices = canAccessDashboardModule('MOD-09')
   const canAccessServiceOrders = canAccessDashboardModule('MOD-10')
   const canAccessMigration = canAccessDashboardModule('MOD-11')
+  const canAccessAgenda = canAccessDashboardModule('MOD-12')
 
   const navItem = (to: string, label: string, icon: ReactNode, badge?: ReactNode) => {
     const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
@@ -304,6 +307,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                         'Vendas',
                         <ShoppingCart className="w-4 h-4" />,
                       )}
+                    {canAccessAgenda &&
+                      navItem(
+                        '/agenda',
+                        'Agenda',
+                        <Calendar className="w-4 h-4" />,
+                      )}
                     {canAccessServiceOrders &&
                       navItem(
                         '/service-orders',
@@ -380,6 +389,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       '/admin/companies',
                       'Empresas Cadastradas',
                       <Building2 className="w-4 h-4" />,
+                    )}
+                  {isSystemOwner(user) &&
+                    navItem(
+                      '/admin/announcements',
+                      'Anúncios (Tela Inicial)',
+                      <ImageIcon className="w-4 h-4" />,
                     )}
                   {navItem(
                     '/settings/organization',

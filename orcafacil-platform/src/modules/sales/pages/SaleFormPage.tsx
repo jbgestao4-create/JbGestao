@@ -34,6 +34,8 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react'
+import { appointmentService } from '@modules/agendapro/services/appointment.service'
+import { ForwardToScheduleCard } from '@modules/agendapro/components/ForwardToScheduleCard'
 import {
   salesService,
   type PaymentMethod,
@@ -104,6 +106,13 @@ export function SaleFormPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('money')
   const [emitFiscalNow, setEmitFiscalNow] = useState(true)
   const [notes, setNotes] = useState('')
+
+  // Agendamento / Encaminhar para agenda
+  const [forwardToSchedule, setForwardToSchedule] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('09:00')
+  const [scheduleAssignedTo, setScheduleAssignedTo] = useState('')
+  const [scheduleNotes, setScheduleNotes] = useState('')
 
   // Estado de envio e resultado
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -525,6 +534,11 @@ export function SaleFormPage() {
       return
     }
 
+    if (forwardToSchedule && !scheduleDate) {
+      setError('Informe o dia do agendamento para atribuição.')
+      return
+    }
+
     const isCashOpen = await checkCashStatus()
     if (!isCashOpen) {
       setError('Não é possível realizar uma venda com o caixa fechado. Por favor, abra o Caixa Geral ou o terminal PDV antes de continuar.')
@@ -573,6 +587,25 @@ export function SaleFormPage() {
       }
       // Carrega os detalhes para o recibo
       const detailRes = await salesService.getSaleById(currentOrganization.id, res.data.saleId)
+
+      if (forwardToSchedule) {
+        const foundCust = customers.find((c) => c.id === selectedCustomerId)
+        await appointmentService.create(currentOrganization.id, {
+          title: `Entrega / Venda #${detailRes.success ? detailRes.data.saleNumber : res.data.saleId.slice(0, 8)} - ${customerName}`,
+          appointmentDate: scheduleDate,
+          startTime: scheduleTime,
+          customerId: selectedCustomerId || undefined,
+          customerName,
+          customerPhone: foundCust?.phone || undefined,
+          type: 'sale',
+          referenceType: 'sale',
+          referenceId: res.data.saleId,
+          description: scheduleNotes || notes || 'Entrega/Instalação agendada na venda',
+          assignedTo: scheduleAssignedTo || sellerName,
+          creatorName: sellerName,
+          createdBy: user?.id,
+        })
+      }
       if (originServiceOrder?.id) {
         // Marca a Ordem de Serviço como 'closed' (O.S. Encerrada) vinculada à venda
         void serviceOrderService.markClosedWithSale(
@@ -1214,6 +1247,22 @@ export function SaleFormPage() {
                   className="w-full rounded-lg border border-gray-300 p-2 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
                 />
               </div>
+
+              {/* ENCAMINHAR PARA AGENDA */}
+              <ForwardToScheduleCard
+                enabled={forwardToSchedule}
+                onChangeEnabled={setForwardToSchedule}
+                date={scheduleDate}
+                onChangeDate={setScheduleDate}
+                time={scheduleTime}
+                onChangeTime={setScheduleTime}
+                assignedTo={scheduleAssignedTo}
+                onChangeAssignedTo={setScheduleAssignedTo}
+                notes={scheduleNotes}
+                onChangeNotes={setScheduleNotes}
+                title="Encaminhar para agenda"
+                description="Agendar data de entrega, instalação ou atendimento para esta venda."
+              />
 
               {/* Botão de Finalizar Venda */}
               <Button

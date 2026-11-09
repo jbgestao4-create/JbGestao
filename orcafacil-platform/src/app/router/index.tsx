@@ -39,6 +39,8 @@ import {
   CompanyManagementPage,
   SuggestionsAdminPage,
   MigrationHubPage,
+  AgendaPage,
+  AnnouncementsAdminPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -76,6 +78,16 @@ export const router = createBrowserRouter([
   {
     path: '/settings/companies',
     element: <Navigate to="/admin/companies" replace />,
+  },
+  {
+    path: '/admin/announcements',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <AnnouncementsAdminPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/suggestions',
@@ -506,6 +518,16 @@ export const router = createBrowserRouter([
         <RequireDashboardModule moduleCode="MOD-11">
           <MigrationHubPage />
         </RequireDashboardModule>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Módulo de Agenda & Compromissos
+  {
+    path: '/agenda',
+    element: (
+      <ProtectedRoute>
+        <AgendaPage />
       </ProtectedRoute>
     ),
   },

@@ -28,6 +28,7 @@ export type DashboardModuleCode =
   | 'MOD-09'
   | 'MOD-10'
   | 'MOD-11'
+  | 'MOD-12'
   | (string & {})
 
 /** Estado de uma concessão de módulo a uma organização */
@@ -532,6 +533,110 @@ export interface Database {
           created_at?: string
         }
         Update: never
+      }
+      appointments: {
+        Row: {
+          id: string
+          organization_id: string
+          title: string
+          description: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          customer_email: string | null
+          appointment_date: string
+          start_time: string | null
+          end_time: string | null
+          status: 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+          priority: 'low' | 'normal' | 'high' | 'urgent'
+          type: 'general' | 'quote' | 'service_order' | 'sale' | 'technical_visit' | 'delivery'
+          reference_id: string | null
+          reference_type: string | null
+          assigned_to: string | null
+          location: string | null
+          notes: string | null
+          created_by: string | null
+          creator_name: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          title: string
+          description?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          customer_email?: string | null
+          appointment_date: string
+          start_time?: string | null
+          end_time?: string | null
+          status?: 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+          priority?: 'low' | 'normal' | 'high' | 'urgent'
+          type?: 'general' | 'quote' | 'service_order' | 'sale' | 'technical_visit' | 'delivery'
+          reference_id?: string | null
+          reference_type?: string | null
+          assigned_to?: string | null
+          location?: string | null
+          notes?: string | null
+          created_by?: string | null
+          creator_name?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string
+          description?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          customer_email?: string | null
+          appointment_date?: string
+          start_time?: string | null
+          end_time?: string | null
+          status?: 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+          priority?: 'low' | 'normal' | 'high' | 'urgent'
+          type?: 'general' | 'quote' | 'service_order' | 'sale' | 'technical_visit' | 'delivery'
+          reference_id?: string | null
+          reference_type?: string | null
+          assigned_to?: string | null
+          location?: string | null
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+      system_announcements: {
+        Row: {
+          id: string
+          title: string | null
+          image_url: string
+          link_url: string | null
+          order_index: number
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title?: string | null
+          image_url: string
+          link_url?: string | null
+          order_index?: number
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string | null
+          image_url?: string
+          link_url?: string | null
+          order_index?: number
+          is_active?: boolean
+          updated_at?: string
+        }
       }
     }
     Views: Record<string, never>
