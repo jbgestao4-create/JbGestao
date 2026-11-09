@@ -20,6 +20,8 @@ import { Input } from '@shared/components/ui/Input'
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
 import { isSystemOwner } from '@shared/utils/system-owner'
+import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
+import { SystemMaintenanceScreen } from '@shared/components/SystemMaintenanceScreen'
 
 export function LoginPage() {
   const { signIn, signOut } = useAuth()
@@ -35,11 +37,21 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
+  const [maintenanceMessage, setMaintenanceMessage] = useState('')
+  const [isFullMaintenanceBlocked, setIsFullMaintenanceBlocked] = useState(false)
 
   useEffect(() => {
     // Garante que a tela de login seja sempre exibida em modo claro
     document.documentElement.classList.remove('dark')
     document.documentElement.removeAttribute('data-theme')
+
+    void systemMaintenanceService.getStatus().then((res) => {
+      if (res.success && res.data?.enabled) {
+        setIsMaintenanceActive(true)
+        setMaintenanceMessage(res.data.message)
+      }
+    })
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,6 +69,16 @@ export function LoginPage() {
       }
 
       const isOwner = isSystemOwner({ email })
+
+      // 0. Bloqueio estrito de Manutenção de Emergência: Apenas o Proprietário do Sistema tem acesso
+      const maintRes = await systemMaintenanceService.getStatus()
+      if (maintRes.success && maintRes.data?.enabled && !isOwner) {
+        await signOut()
+        setIsFullMaintenanceBlocked(true)
+        setMaintenanceMessage(maintRes.data.message)
+        setIsLoading(false)
+        return
+      }
 
       // Se não for o Proprietário do Sistema, valida se a empresa está desativada ou com teste expirado
       if (!isOwner) {
@@ -92,6 +114,21 @@ export function LoginPage() {
       setError(res.error)
     }
     setIsLoading(false)
+  }
+
+  if (isFullMaintenanceBlocked) {
+    return (
+      <SystemMaintenanceScreen
+        message={maintenanceMessage}
+        onRecheck={async () => {
+          const res = await systemMaintenanceService.getStatus()
+          if (res.success && !res.data?.enabled) {
+            setIsFullMaintenanceBlocked(false)
+            setIsMaintenanceActive(false)
+          }
+        }}
+      />
+    )
   }
 
   return (
@@ -193,6 +230,31 @@ export function LoginPage() {
             </header>
 
             <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+              {isMaintenanceActive && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-xs"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-amber-100 p-2 text-amber-700 shrink-0 mt-0.5">
+                      <ShieldAlert className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-amber-900">
+                        Sistema em Manutenção de Emergência Temporária
+                      </h3>
+                      <p className="mt-1 text-xs text-amber-800 leading-relaxed">
+                        {maintenanceMessage ||
+                          'O sistema encontra-se em manutenção temporária. Solicitamos que aguardem o retorno das operações em instantes.'}
+                      </p>
+                      <span className="block mt-2 text-[11px] font-semibold text-amber-700">
+                        * Acesso restrito a administradores e desenvolvedores autorizados.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {isOrgDeactivated && (
                 <div
                   role="alert"

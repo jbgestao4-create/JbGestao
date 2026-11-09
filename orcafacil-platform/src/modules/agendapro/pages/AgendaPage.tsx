@@ -17,6 +17,7 @@ import {
   APPOINTMENT_PRIORITY_CONFIG,
   APPOINTMENT_STATUS_CONFIG,
   APPOINTMENT_TYPE_CONFIG,
+  formatAppointmentTitle,
 } from '../domain/appointment'
 import { appointmentService } from '../services/appointment.service'
 import { AppointmentDetailsModal } from '../components/AppointmentDetailsModal'
@@ -298,7 +299,7 @@ export function AgendaPage() {
                     </div>
 
                     <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition leading-snug">
-                      {appt.title}
+                      {formatAppointmentTitle(appt.title)}
                     </h3>
 
                     <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">

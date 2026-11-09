@@ -9,12 +9,13 @@ import { isSystemOwner } from '@shared/utils/system-owner'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
+import { SystemNotificationModal } from '@shared/components/SystemNotificationModal'
+import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
 import {
   LayoutDashboard,
   FileSpreadsheet,
-  Image as ImageIcon,
   Users,
   Settings,
   Building2,
@@ -31,7 +32,9 @@ import {
   Database,
   Menu,
   X,
-  Lightbulb,
+  ShieldCheck,
+  ArrowLeft,
+  AlertTriangle,
 } from 'lucide-react'
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -44,43 +47,44 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null)
-  const [suggestionOwnerCheck, setSuggestionOwnerCheck] = useState<{
-    key: string
-    isOwner: boolean
-  } | null>(null)
   const isMobileMenuOpen = mobileMenuPath === location.pathname
-  const ownerUserId = user?.id
-  const ownerOrganizationId = currentOrganization?.id
-  const suggestionOwnerKey =
-    ownerUserId && ownerOrganizationId ? `${ownerUserId}:${ownerOrganizationId}` : null
 
   const isDeveloper = isSystemOwner(user)
   const [unreadSuggestionsCount, setUnreadSuggestionsCount] = useState(0)
+  const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
 
+  // Monitora status de manutenção para exibir banner ao desenvolvedor
   useEffect(() => {
-    let active = true
-    if (ownerUserId && ownerOrganizationId && !isDeveloper) {
-      void suggestionService
-        .isOrganizationOwner(ownerOrganizationId, ownerUserId)
-        .then((isOwner) => {
-          if (active) {
-            setSuggestionOwnerCheck({
-              key: `${ownerUserId}:${ownerOrganizationId}`,
-              isOwner,
-            })
-          }
-        })
+    let isMounted = true
+    const checkMaintenance = async () => {
+      const res = await systemMaintenanceService.getStatus()
+      if (isMounted && res.success && res.data) {
+        setIsMaintenanceActive(res.data.enabled)
+      }
     }
-    return () => {
-      active = false
-    }
-  }, [ownerUserId, ownerOrganizationId, isDeveloper])
+    void checkMaintenance()
 
-  const canManageSuggestions =
-    isDeveloper ||
-    (suggestionOwnerKey !== null &&
-      suggestionOwnerCheck?.key === suggestionOwnerKey &&
-      suggestionOwnerCheck.isOwner)
+    const channel = supabase
+      .channel('applayout-maintenance-tracker')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'system_settings',
+          filter: 'key=eq.maintenance_mode',
+        },
+        () => {
+          void checkMaintenance()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      isMounted = false
+      void supabase.removeChannel(channel)
+    }
+  }, [])
 
   // Apenas o desenvolvedor recebe a notificação de sugestões pendentes no menu lateral
   useEffect(() => {
@@ -364,42 +368,31 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     Administração
                   </span>
                 )}
-                {canManageSuggestions && (
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">
-                        Feedback
-                      </span>
-                    )}
-                    <div className="mt-1 space-y-0.5">
-                      {navItem(
-                        '/suggestions',
-                        'Sugestões',
-                        <Lightbulb className="h-4 w-4" />,
-                        isDeveloper && unreadSuggestionsCount > 0
-                          ? formatUnreadSuggestionCount(unreadSuggestionsCount)
-                          : undefined,
-                      )}
-                    </div>
-                  </div>
-                )}
                 <div className="mt-1 space-y-0.5">
-                  {isSystemOwner(user) &&
-                    navItem(
-                      '/admin/companies',
-                      'Empresas Cadastradas',
-                      <Building2 className="w-4 h-4" />,
-                    )}
-                  {isSystemOwner(user) &&
-                    navItem(
-                      '/admin/announcements',
-                      'Anúncios (Tela Inicial)',
-                      <ImageIcon className="w-4 h-4" />,
-                    )}
                   {navItem(
                     '/settings/organization',
                     'Organização',
                     <Settings className="w-4 h-4" />,
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isSystemOwner(user) && (
+              <div>
+                {!sidebarCollapsed && organizations.length > 0 && (
+                  <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                    Desenvolvedor
+                  </span>
+                )}
+                <div className="mt-1 space-y-0.5">
+                  {navItem(
+                    '/admin/developer-settings',
+                    'Configurações de Desenvolvedor',
+                    <ShieldCheck className="w-4 h-4" />,
+                    unreadSuggestionsCount > 0
+                      ? formatUnreadSuggestionCount(unreadSuggestionsCount)
+                      : undefined,
                   )}
                 </div>
               </div>
@@ -434,9 +427,44 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <main
         className={isDashboard ? 'min-h-screen bg-slate-50 dark:bg-[#0b0f19]' : 'flex-1 flex flex-col min-w-0 overflow-y-auto'}
       >
+        {/* BANNER DE MANUTENÇÃO ATIVA PARA O DESENVOLVEDOR */}
+        {isDeveloper && isMaintenanceActive && (
+          <div className="bg-rose-600 text-white px-4 py-2.5 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 shadow-md z-40 shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 animate-bounce" />
+              <span>MODO DE MANUTENÇÃO ATIVO: O acesso está bloqueado para clientes e colaboradores comuns.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void navigate('/admin/system-notifications')}
+              className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg transition text-xs shrink-0 cursor-pointer"
+            >
+              Gerenciar / Desativar
+            </button>
+          </div>
+        )}
+
         {!isDashboard && (
           <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] px-3 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+              {/* BOTÃO VOLTAR GLOBAL (EM TODAS AS PÁGINAS) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.history.length > 1) {
+                    navigate(-1)
+                  } else {
+                    navigate('/')
+                  }
+                }}
+                title="Voltar para a página anterior"
+                aria-label="Voltar para a página anterior"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer mr-1 shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <span className="hidden xs:inline">Voltar</span>
+              </button>
+
               <button
                 type="button"
                 aria-label="Abrir menu"
@@ -478,8 +506,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           }
         >
           {children}
-      <UpcomingBillsAlertModal />
+          <UpcomingBillsAlertModal />
           <FeedbackWidget />
+          <SystemNotificationModal />
         </div>
       </main>
     </div>

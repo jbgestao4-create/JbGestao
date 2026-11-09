@@ -15,6 +15,7 @@ import type { Appointment } from '../domain/appointment'
 import {
   APPOINTMENT_STATUS_CONFIG,
   APPOINTMENT_TYPE_CONFIG,
+  formatAppointmentTitle,
 } from '../domain/appointment'
 import { appointmentService } from '../services/appointment.service'
 import { AppointmentDetailsModal } from './AppointmentDetailsModal'
@@ -256,7 +257,7 @@ export function AgendaHeroWidget({
                           {typeCfg.label} •
                         </span>
                         <p className="truncate text-xs sm:text-sm font-semibold text-slate-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-300 transition">
-                          {appt.title}
+                          {formatAppointmentTitle(appt.title)}
                         </p>
                       </div>
                       {appt.customerName && (

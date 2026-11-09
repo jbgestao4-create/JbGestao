@@ -8,11 +8,25 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock,
+  Link as LinkIcon,
+  FileText,
+  Save,
+  ExternalLink,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { announcementService, type SystemAnnouncement } from '@shared/services/announcement.service'
 
 async function compressImageFile(file: File): Promise<string> {
+  // Suporte a GIF: não passa pelo canvas para preservar a animação dos quadros
+  if (file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target?.result as string)
+      reader.onerror = (err) => reject(err)
+      reader.readAsDataURL(file)
+    })
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (readerEvent) => {
@@ -54,6 +68,8 @@ export function AnnouncementsAdminPage() {
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [savedBannerId, setSavedBannerId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -137,6 +153,34 @@ export function AnnouncementsAdminPage() {
     )
   }
 
+  const handleFieldChange = (id: string, field: 'linkUrl' | 'summary' | 'title', value: string) => {
+    setAnnouncements((prev) =>
+      prev.map((ann) => (ann.id === id ? { ...ann, [field]: value } : ann))
+    )
+  }
+
+  const handleSaveBanner = async (ann: SystemAnnouncement) => {
+    setSavingId(ann.id)
+    setError('')
+    try {
+      const res = await announcementService.update(ann.id, {
+        title: ann.title,
+        linkUrl: ann.linkUrl,
+        summary: ann.summary,
+      })
+      if (res.success) {
+        setSavedBannerId(ann.id)
+        setTimeout(() => setSavedBannerId(null), 3000)
+      } else {
+        setError(res.error || 'Erro ao salvar alterações do banner.')
+      }
+    } catch {
+      setError('Erro ao salvar anúncio.')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Top Header */}
@@ -164,7 +208,7 @@ export function AnnouncementsAdminPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,.gif,.png,.jpg,.jpeg,.webp"
             multiple
             onChange={(e) => void handleFilesSelected(e)}
             className="hidden"
@@ -176,7 +220,7 @@ export function AnnouncementsAdminPage() {
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-xs font-bold text-white shadow-md transition disabled:opacity-50"
           >
             <Upload className="h-4 w-4" />
-            {isUploading ? 'Importando Imagens...' : 'Importar Imagens de Anúncio'}
+            {isUploading ? 'Importando Imagens/GIFs...' : 'Importar Imagens / GIFs de Anúncio'}
           </button>
         </div>
       </div>
@@ -239,65 +283,147 @@ export function AnnouncementsAdminPage() {
               Nenhuma imagem de anúncio importada ainda
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Clique aqui para selecionar e importar imagens (JPG, PNG, WebP)
+              Clique aqui para selecionar e importar imagens ou animações (GIF, JPG, PNG, WebP)
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {announcements.map((ann, idx) => (
-              <div
-                key={ann.id}
-                className="group relative rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs flex flex-col"
-              >
-                {/* Image */}
-                <div className="relative aspect-video w-full bg-slate-950 overflow-hidden">
-                  <img
-                    src={ann.imageUrl}
-                    alt={ann.title || `Anúncio ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute top-2 left-2 rounded-md bg-black/70 px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur-md">
-                    #{idx + 1}
-                  </span>
-                </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {announcements.map((ann, idx) => {
+              const isGif =
+                ann.imageUrl.startsWith('data:image/gif') ||
+                ann.imageUrl.toLowerCase().includes('.gif') ||
+                ann.title?.toLowerCase().endsWith('.gif')
 
-                {/* Info & Controls */}
-                <div className="p-3 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                  <span className="truncate font-semibold text-slate-700 dark:text-slate-300">
-                    {ann.title || `Banner ${idx + 1}`}
-                  </span>
+              const isSaving = savingId === ann.id
+              const isSaved = savedBannerId === ann.id
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() => void handleMove(idx, 'up')}
-                      title="Mover para antes"
-                      className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
-                    >
-                      <MoveUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === announcements.length - 1}
-                      onClick={() => void handleMove(idx, 'down')}
-                      title="Mover para depois"
-                      className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
-                    >
-                      <MoveDown className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete(ann.id)}
-                      title="Excluir imagem"
-                      className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+              return (
+                <div
+                  key={ann.id}
+                  className="group relative rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs flex flex-col"
+                >
+                  {/* Image */}
+                  <div className="relative aspect-video w-full bg-slate-950 overflow-hidden">
+                    <img
+                      src={ann.imageUrl}
+                      alt={ann.title || `Anúncio ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                      <span className="rounded-md bg-black/70 px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur-md">
+                        #{idx + 1}
+                      </span>
+                      {isGif && (
+                        <span className="rounded-md bg-purple-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white tracking-wider">
+                          GIF
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Header & Reorder Controls */}
+                  <div className="p-3 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 text-xs">
+                    <input
+                      type="text"
+                      value={ann.title || ''}
+                      onChange={(e) => handleFieldChange(ann.id, 'title', e.target.value)}
+                      placeholder={`Banner ${idx + 1}`}
+                      className="font-semibold text-slate-700 dark:text-slate-300 bg-transparent border-none p-0 focus:ring-0 truncate w-full"
+                    />
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => void handleMove(idx, 'up')}
+                        title="Mover para antes"
+                        className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                      >
+                        <MoveUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === announcements.length - 1}
+                        onClick={() => void handleMove(idx, 'down')}
+                        title="Mover para depois"
+                        className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                      >
+                        <MoveDown className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(ann.id)}
+                        title="Excluir banner"
+                        className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Edit Form: Link & Resumo */}
+                  <div className="p-3 space-y-2.5 text-xs flex-1 flex flex-col justify-between bg-slate-50/50 dark:bg-slate-900/30">
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1 mb-1">
+                          <LinkIcon className="h-3 w-3 text-blue-600" />
+                          Link de Destino (ao clicar no banner):
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="url"
+                            value={ann.linkUrl || ''}
+                            onChange={(e) => handleFieldChange(ann.id, 'linkUrl', e.target.value)}
+                            placeholder="https://exemplo.com.br"
+                            className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500 pr-7"
+                          />
+                          {ann.linkUrl && (
+                            <a
+                              href={ann.linkUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              title="Testar link"
+                              className="absolute right-2 top-2 text-slate-400 hover:text-blue-600"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1 mb-1">
+                          <FileText className="h-3 w-3 text-blue-600" />
+                          Resumo no Rodapé da Imagem:
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={ann.summary || ''}
+                          onChange={(e) => handleFieldChange(ann.id, 'summary', e.target.value)}
+                          placeholder="Digite aqui o texto que será exibido no rodapé do banner..."
+                          className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-between">
+                      <span className="text-[11px] text-emerald-600 font-semibold">
+                        {isSaved && '✓ Alterações salvas!'}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => void handleSaveBanner(ann)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs font-bold text-white transition shadow-2xs disabled:opacity-50 ml-auto"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

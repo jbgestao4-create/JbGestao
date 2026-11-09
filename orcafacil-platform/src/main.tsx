@@ -3,12 +3,15 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { checkEnvironment } from '@app/config/env'
 import { ConfigMissingScreen } from '@shared/components/ConfigMissingScreen'
-import { registerServiceWorker } from '@shared/offline/registerServiceWorker'
-import { syncEngine } from '@shared/offline/sync.engine'
 
-// Inicializa capacidades Offline-First e Sync Engine
-registerServiceWorker()
-syncEngine.init()
+// Garante que qualquer Service Worker legado seja desregistrado (operação 100% online)
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  void navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      void registration.unregister()
+    }
+  })
+}
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

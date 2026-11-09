@@ -15,11 +15,6 @@ import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { SystemCustomizationSection } from '../components/SystemCustomizationSection'
 import {
-  formatScreenTime,
-  formatLastAccess,
-  screenTimeService,
-} from '@shared/services/screen-time.service'
-import {
   ShieldCheck,
   User,
   UserPlus,
@@ -31,8 +26,6 @@ import {
   Square,
   Building2,
   Palette,
-  Clock,
-  Calendar,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -166,24 +159,6 @@ export function OrganizationSettingsPage() {
   const [manageableOrganizations, setManageableOrganizations] = useState<Organization[]>([])
   const [isLoadingManageableOrganizations, setIsLoadingManageableOrganizations] = useState(true)
   const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
-  const [livePendingSeconds, setLivePendingSeconds] = useState<Record<string, number>>({})
-
-  useEffect(() => {
-    const handleTick = (event: Event) => {
-      const customEvent = event as CustomEvent<{ userId: string; pendingSeconds: number }>
-      if (customEvent.detail?.userId) {
-        setLivePendingSeconds((prev) => ({
-          ...prev,
-          [customEvent.detail.userId]: customEvent.detail.pendingSeconds,
-        }))
-      }
-    }
-
-    window.addEventListener('screen-time-tick', handleTick)
-    return () => {
-      window.removeEventListener('screen-time-tick', handleTick)
-    }
-  }, [])
 
   // Módulos liberados para a empresa ativa ou selecionada
   const [selectedOrgModules, setSelectedOrgModules] = useState<DashboardModuleCode[]>([])
@@ -343,7 +318,6 @@ export function OrganizationSettingsPage() {
     // Se o desenvolvedor logado não estiver na lista de membros (isolamento da migration 00066),
     // inclui o próprio desenvolvedor para visualização e monitoramento de tempo de tela
     if (isDeveloper && user && !list.some((m) => m.userId === user.id)) {
-      const local = screenTimeService.getLocalActivity(user.id)
       list.unshift({
         userId: user.id,
         organizationId: currentOrganization?.id || '',
@@ -354,8 +328,6 @@ export function OrganizationSettingsPage() {
         modules: [],
         dashboardModules: [],
         createdAt: new Date().toISOString(),
-        screenTimeSeconds: local?.screenTimeSeconds ?? 0,
-        lastAccessAt: local?.lastAccessAt ?? new Date().toISOString(),
       })
     }
 
@@ -814,34 +786,6 @@ export function OrganizationSettingsPage() {
                             </span>
                           )}
                         </div>
-
-                        {/* PAINEL DE ATIVIDADE DO USUÁRIO (EXCLUSIVO PERFIL DESENVOLVEDOR) */}
-                        {isDeveloper && (() => {
-                          const localAct = screenTimeService.getLocalActivity(member.userId)
-                          const baseSec = Math.max(member.screenTimeSeconds ?? 0, localAct?.screenTimeSeconds ?? 0)
-                          const totalScreenSeconds = baseSec + (livePendingSeconds[member.userId] ?? 0)
-                          const lastAccessDisplay = localAct?.lastAccessAt || member.lastAccessAt
-
-                          return (
-                            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-indigo-200/90 bg-indigo-50/60 dark:border-indigo-900/60 dark:bg-indigo-950/40 px-3.5 py-2 text-xs">
-                              <div className="flex items-center gap-2 text-indigo-950 dark:text-indigo-200">
-                                <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                                <span className="font-medium text-slate-700 dark:text-slate-300">Tempo de tela total:</span>
-                                <span className="font-mono font-bold text-sm text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shadow-2xs">
-                                  {formatScreenTime(totalScreenSeconds)}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                                <Calendar className="w-4 h-4 text-indigo-500/80 dark:text-indigo-400 shrink-0" />
-                                <span className="font-medium">Último acesso:</span>
-                                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                  {formatLastAccess(lastAccessDisplay)}
-                                </span>
-                              </div>
-                            </div>
-                          )
-                        })()}
                       </div>
                     </div>
 

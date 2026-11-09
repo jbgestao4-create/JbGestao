@@ -20,6 +20,7 @@ import {
   APPOINTMENT_PRIORITY_CONFIG,
   APPOINTMENT_STATUS_CONFIG,
   APPOINTMENT_TYPE_CONFIG,
+  formatAppointmentTitle,
 } from '../domain/appointment'
 import { appointmentService } from '../services/appointment.service'
 
@@ -126,7 +127,7 @@ export function AppointmentDetailsModal({
               </span>
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-snug">
-              {appointment.title}
+              {formatAppointmentTitle(appointment.title)}
             </h3>
           </div>
           <button

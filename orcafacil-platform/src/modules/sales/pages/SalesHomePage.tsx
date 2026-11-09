@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   ChevronRight,
   FileText,
-  HardDriveDownload,
   Plus,
   Receipt,
   Search,
@@ -24,8 +23,6 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { OfflineStatusBadge } from '@shared/offline/components/OfflineStatusBadge'
-import { OfflineActivationModal } from '@shared/offline/components/OfflineActivationModal'
 
 export function SalesHomePage() {
   const navigate = useNavigate()
@@ -45,7 +42,6 @@ export function SalesHomePage() {
 
   // Modal de Abertura de Caixa
   const [showOpenModal, setShowOpenModal] = useState(false)
-  const [showOfflineModal, setShowOfflineModal] = useState(false)
   const [openingBalance, setOpeningBalance] = useState('0,00')
   const [openError, setOpenError] = useState<string | null>(null)
   const [isOpening, setIsOpening] = useState(false)
@@ -177,9 +173,14 @@ export function SalesHomePage() {
 
     cashSessionService.setSelectedRegisterName(currentOrganization.id, selectedRegister)
 
-    // Verifica se o mesmo usuário já possui outro caixa aberto
+    // Verifica se o mesmo usuário já possui outro caixa de PDV aberto (o Caixa Geral não bloqueia o PDV)
     const otherOpenByCurrentUser = openSessions.find(
-      (s) => s.openedBy === user.id && s.registerId !== selectedRegister,
+      (s) =>
+        s.sessionType === 'pdv' &&
+        s.registerId !== 'Caixa Geral' &&
+        s.openedBy === user.id &&
+        s.registerId !== selectedRegister &&
+        !(s.registerId === 'default-caixa-01' && selectedRegister === 'Caixa 01'),
     )
     if (otherOpenByCurrentUser) {
       setIsOpening(false)
@@ -234,9 +235,6 @@ export function SalesHomePage() {
           <p className="mt-1 text-sm text-gray-500">
             Terminal de frente de caixa PDV, pedidos faturados e notas fiscais (NF-e / NFC-e).
           </p>
-        </div>
-        <div>
-          <OfflineStatusBadge onOpenActivationModal={() => setShowOfflineModal(true)} />
         </div>
       </div>
 
@@ -324,18 +322,6 @@ export function SalesHomePage() {
                           <ChevronRight className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setShowOfflineModal(true)}
-                        className="w-full justify-between rounded-xl border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900/40 dark:text-blue-300"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <HardDriveDownload className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                          Baixar para Uso Offline
-                        </span>
-                        <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                      </Button>
                     </>
                   )}
                 </div>
@@ -454,7 +440,13 @@ export function SalesHomePage() {
                   openForSelected && user && openForSelected.openedBy === user.id,
                 )
                 const otherOpenByCurrentUser = openSessions.find(
-                  (s) => user && s.openedBy === user.id && s.registerId !== selectedRegister,
+                  (s) =>
+                    user &&
+                    s.sessionType === 'pdv' &&
+                    s.registerId !== 'Caixa Geral' &&
+                    s.openedBy === user.id &&
+                    s.registerId !== selectedRegister &&
+                    !(s.registerId === 'default-caixa-01' && selectedRegister === 'Caixa 01'),
                 )
                 const hasAnotherOpenByCurrentUser = Boolean(otherOpenByCurrentUser)
 
@@ -748,13 +740,6 @@ export function SalesHomePage() {
           </div>
         </div>
       )}
-
-      {/* Modal de Ativação e Download Offline */}
-      <OfflineActivationModal
-        isOpen={showOfflineModal}
-        onClose={() => setShowOfflineModal(false)}
-        organizationId={currentOrganization?.id || ''}
-      />
     </div>
   )
 }

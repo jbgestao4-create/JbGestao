@@ -52,7 +52,7 @@ function StatusBadge({ status }: { status: SuggestionStatus }) {
 }
 
 export function SuggestionsAdminPage() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const { currentOrganization } = useOrganization()
   const [suggestions, setSuggestions] = useState<FeedbackSuggestion[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -72,6 +72,8 @@ export function SuggestionsAdminPage() {
   const [statusDraft, setStatusDraft] = useState<SuggestionStatus>('received')
   const [noteDraft, setNoteDraft] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [replyDraft, setReplyDraft] = useState('')
+  const [savingReply, setSavingReply] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [suggestionsOrganizationId, setSuggestionsOrganizationId] = useState<string | null>(null)
   const organizationId = currentOrganization?.id
@@ -127,9 +129,10 @@ export function SuggestionsAdminPage() {
         item.title.toLocaleLowerCase('pt-BR').includes(search) ||
         item.description.toLocaleLowerCase('pt-BR').includes(search)
       const created = getLocalDate(item.created_at)
+      const matchesStatus = statusFilter ? item.status === statusFilter : item.status !== 'completed'
       return (
         matchesSearch &&
-        (!statusFilter || item.status === statusFilter) &&
+        matchesStatus &&
         (!typeFilter || item.type === typeFilter) &&
         (!userFilter || item.submitted_by_name === userFilter) &&
         (!moduleFilter || item.module_origin === moduleFilter) &&
@@ -238,14 +241,35 @@ export function SuggestionsAdminPage() {
     await refreshSelectedDetails()
   }
 
+  const sendReply = async () => {
+    if (!selected || !currentOrganization || !user || !replyDraft.trim()) return
+    setSavingReply(true)
+    setDetailError('')
+    const senderName = profile?.displayName || user.email?.split('@')[0] || 'Proprietário'
+    const result = await suggestionService.sendMessage(
+      currentOrganization.id,
+      selected.id,
+      senderName,
+      replyDraft,
+      'owner',
+    )
+    setSavingReply(false)
+    if (!result.success) {
+      setDetailError(result.error)
+      return
+    }
+    setReplyDraft('')
+    await refreshSelectedDetails()
+  }
+
   return (
     <div className="space-y-6 pb-20">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-blue-700">Administração</p>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Sugestões</h1>
+          <p className="text-sm font-semibold text-blue-700">Configurações de Desenvolvedor</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Suporte</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Acompanhe o feedback enviado pela equipe de {currentOrganization?.name ?? 'sua empresa'}.
+            Acompanhe os chamados, dúvidas e solicitações de suporte enviadas pela equipe de {currentOrganization?.name ?? 'sua empresa'}.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={() => { void loadSuggestions() }} isLoading={isSuggestionsLoading}>
@@ -433,6 +457,76 @@ export function SuggestionsAdminPage() {
                     <Button type="button" onClick={() => void saveStatus()} isLoading={savingStatus} disabled={statusDraft === selected.status}>
                       Atualizar status
                     </Button>
+                  </div>
+                </div>
+
+                {/* CONVERSA / RESPOSTA DIRETA AO USUÁRIO */}
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/20 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-indigo-950 dark:text-indigo-200">
+                        Conversa com o Usuário ({selected.submitted_by_name || 'Autor'})
+                      </h3>
+                      <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80">
+                        As respostas enviadas aqui notificam o usuário na tela dele em tempo real.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mensagens trocadas */}
+                  {details?.messages && details.messages.length > 0 ? (
+                    <div className="space-y-2.5 max-h-72 overflow-y-auto p-1">
+                      {details.messages.map((msg) => {
+                        const isFromOwner = msg.sender_role === 'owner'
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`flex flex-col rounded-xl p-3 text-xs sm:text-sm ${
+                              isFromOwner
+                                ? 'ml-auto max-w-[85%] bg-blue-600 text-white shadow-xs'
+                                : 'mr-auto max-w-[85%] bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 shadow-2xs'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className={`text-[11px] font-bold ${isFromOwner ? 'text-blue-100' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                                {isFromOwner ? 'Você (Proprietário)' : msg.sender_name}
+                              </span>
+                              <span className={`text-[10px] ${isFromOwner ? 'text-blue-200' : 'text-slate-400'}`}>
+                                {formatDate(msg.created_at)}
+                              </span>
+                            </div>
+                            <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic bg-white/70 dark:bg-slate-900/50 p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-800">
+                      Nenhuma resposta enviada ao usuário ainda. Envie uma mensagem abaixo para notificá-lo.
+                    </p>
+                  )}
+
+                  {/* Campo de resposta */}
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      rows={2}
+                      maxLength={5000}
+                      value={replyDraft}
+                      onChange={(e) => setReplyDraft(e.target.value)}
+                      placeholder={`Escreva sua resposta para ${selected.submitted_by_name || 'o usuário'}...`}
+                      className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm dark:border-indigo-900 dark:bg-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        onClick={() => void sendReply()}
+                        isLoading={savingReply}
+                        disabled={!replyDraft.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                      >
+                        <Send className="h-4 w-4" /> Responder ao Usuário
+                      </Button>
+                    </div>
                   </div>
                 </div>
 

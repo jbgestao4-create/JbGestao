@@ -53,6 +53,9 @@ export interface FeedbackSuggestion {
   status: SuggestionStatus
   created_at: string
   updated_at: string
+  has_unread_reply?: boolean
+  has_owner_reply?: boolean
+  owner_replies_count?: number
 }
 
 export interface FeedbackAttachment {
@@ -81,5 +84,18 @@ export interface FeedbackInternalNote {
   suggestion_id: UUID
   owner_id: UUID
   content: string
+  created_at: string
+}
+
+export interface FeedbackMessage {
+  id: UUID
+  organization_id: UUID
+  suggestion_id: UUID
+  sender_id: UUID
+  sender_name: string
+  sender_role: 'owner' | 'user'
+  message: string
+  read_by_user: boolean
+  read_by_owner: boolean
   created_at: string
 }

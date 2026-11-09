@@ -10,6 +10,7 @@ import {
   CustomersListPage,
   DashboardPage,
   ForgotPasswordPage,
+  ResetPasswordPage,
   InventoryFormPage,
   InventoryHomePage,
   InventoryListPage,
@@ -41,6 +42,9 @@ import {
   MigrationHubPage,
   AgendaPage,
   AnnouncementsAdminPage,
+  DeveloperSettingsPage,
+  SystemNotificationsAdminPage,
+  SystemUpdatesAdminPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -56,6 +60,10 @@ export const router = createBrowserRouter([
   {
     path: '/forgot-password',
     element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
   },
 
   // Portal Seguro de Orçamentos do Cliente (Acesso por Token único e validação de CPF)
@@ -88,6 +96,48 @@ export const router = createBrowserRouter([
         </RequireOwner>
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/admin/developer-settings',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <DeveloperSettingsPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/developer-settings',
+    element: <Navigate to="/admin/developer-settings" replace />,
+  },
+  {
+    path: '/admin/system-notifications',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <SystemNotificationsAdminPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/system-notifications',
+    element: <Navigate to="/admin/system-notifications" replace />,
+  },
+  {
+    path: '/admin/system-updates',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <SystemUpdatesAdminPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/system-updates',
+    element: <Navigate to="/admin/system-updates" replace />,
   },
   {
     path: '/suggestions',

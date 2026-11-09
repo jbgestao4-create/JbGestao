@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, ChevronLeft, ChevronRight, Image as ImageIcon, Settings } from 'lucide-react'
+import { Sparkles, ChevronLeft, ChevronRight, Image as ImageIcon, Settings, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { announcementService, type SystemAnnouncement } from '../services/announcement.service'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -69,27 +69,62 @@ export function AnnouncementCarousel({
   if (!isLoading && announcements.length > 0) {
     const current = announcements[currentIndex]
 
+    const handleBannerClick = () => {
+      if (current.linkUrl && current.linkUrl.trim()) {
+        let target = current.linkUrl.trim()
+        if (!/^https?:\/\//i.test(target)) {
+          target = `https://${target}`
+        }
+        window.open(target, '_blank', 'noopener,noreferrer')
+      }
+    }
+
     return (
       <div
-        className="group relative h-full w-full min-h-[310px] sm:min-h-[340px] rounded-2xl overflow-hidden border border-slate-200/90 dark:border-slate-800 bg-slate-950 flex flex-col justify-end shadow-sm select-none"
+        className={`group relative h-full w-full min-h-[310px] sm:min-h-[340px] rounded-2xl overflow-hidden border border-slate-200/90 dark:border-slate-800 bg-slate-950 flex flex-col justify-end shadow-sm select-none ${
+          current.linkUrl ? 'cursor-pointer' : ''
+        }`}
+        onClick={handleBannerClick}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
       >
         {/* Current Image */}
-        <div className="absolute inset-0 bg-slate-900 flex items-center justify-center">
+        <div className="absolute inset-0 bg-slate-950 flex items-center justify-center overflow-hidden">
+          {/* Fundo com leve desfoque para preenchimento de bordas sem cortes */}
+          <img
+            src={current.imageUrl}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover blur-xl opacity-25 scale-110 pointer-events-none"
+          />
+          {/* Imagem do anúncio ajustada automaticamente ao tamanho do card sem cortar a foto */}
           <img
             key={current.id}
             src={current.imageUrl}
             alt={current.title || `Anúncio ${currentIndex + 1}`}
-            className="w-full h-full object-cover transition-opacity duration-300"
+            className="relative z-10 max-h-full max-w-full w-auto h-auto object-contain transition-opacity duration-300"
           />
-          {/* Subtle dark gradient overlay at bottom for readability and indicators */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
+          {/* Sombra no rodapé para visibilidade do resumo e indicadores */}
+          <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none z-10" />
         </div>
+
+        {/* Link indicator */}
+        {current.linkUrl && (
+          <div
+            title={`Clique no banner para acessar: ${current.linkUrl}`}
+            className="absolute top-3 left-3 z-20 flex items-center gap-1.5 rounded-full bg-black/60 hover:bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md transition shadow-md border border-white/20"
+          >
+            <ExternalLink className="h-3 w-3" />
+            <span className="hidden sm:inline">Acessar link</span>
+          </div>
+        )}
 
         {/* Developer shortcut button */}
         {isDev && (
-          <div className="absolute top-3 right-3 z-20">
+          <div
+            className="absolute top-3 right-3 z-20"
+            onClick={(e) => e.stopPropagation()}
+          >
             {onManageAnnouncements ? (
               <button
                 type="button"
@@ -113,10 +148,10 @@ export function AnnouncementCarousel({
           </div>
         )}
 
-        {/* Title if present */}
-        {current.title && (
-          <div className="relative z-10 p-4">
-            <h3 className="text-sm font-bold text-white drop-shadow-md">{current.title}</h3>
+        {/* Resumo no rodapé do anúncio */}
+        {current.summary && (
+          <div className="relative z-10 mx-3 mb-2 rounded-xl bg-black/70 backdrop-blur-md px-3.5 py-2 text-xs text-slate-100 shadow-md border border-white/15">
+            <p className="line-clamp-2 leading-relaxed font-medium">{current.summary}</p>
           </div>
         )}
 
@@ -144,7 +179,10 @@ export function AnnouncementCarousel({
 
         {/* Indicators at bottom */}
         {announcements.length > 1 && (
-          <div className="relative z-10 flex items-center justify-center gap-1.5 pb-3">
+          <div
+            className="relative z-10 flex items-center justify-center gap-1.5 pb-2.5"
+            onClick={(e) => e.stopPropagation()}
+          >
             {announcements.map((_, idx) => (
               <button
                 key={idx}
@@ -160,7 +198,7 @@ export function AnnouncementCarousel({
         )}
 
         {/* Paused indicator tag */}
-        {isPaused && announcements.length > 1 && (
+        {isPaused && !current.linkUrl && announcements.length > 1 && (
           <div className="absolute top-3 left-3 z-20 rounded bg-black/60 px-2 py-0.5 text-[10px] font-medium text-slate-300 backdrop-blur-md">
             Pausado
           </div>

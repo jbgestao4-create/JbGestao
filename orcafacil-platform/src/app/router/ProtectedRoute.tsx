@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -11,6 +11,9 @@ import { Loader2 } from 'lucide-react'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { useScreenTimeTracker } from '@shared/hooks/useScreenTimeTracker'
+import { systemMaintenanceService, type MaintenanceStatus } from '@shared/services/system-maintenance.service'
+import { SystemMaintenanceScreen } from '@shared/components/SystemMaintenanceScreen'
+import { supabase } from '@app/config/supabase'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -24,7 +27,58 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
   const { setInsideSystem } = useTheme()
   const location = useLocation()
 
-  useScreenTimeTracker(user?.id)
+  useScreenTimeTracker(user?.id, currentOrganization?.id)
+
+  const [maintenance, setMaintenance] = useState<MaintenanceStatus>(() => {
+    try {
+      const raw = localStorage.getItem('jb_system_maintenance_status')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        return {
+          enabled: Boolean(parsed.enabled),
+          message: parsed.message || '',
+          updatedAt: parsed.updatedAt || '',
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return { enabled: false, message: '', updatedAt: '' }
+  })
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkMaintenance = async () => {
+      const res = await systemMaintenanceService.getStatus()
+      if (isMounted && res.success && res.data) {
+        setMaintenance(res.data)
+      }
+    }
+
+    void checkMaintenance()
+
+    const channel = supabase
+      .channel('maintenance-mode-tracker')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'system_settings',
+          filter: 'key=eq.maintenance_mode',
+        },
+        () => {
+          void checkMaintenance()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      isMounted = false
+      void supabase.removeChannel(channel)
+    }
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -55,6 +109,22 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
   }
 
   const isOwner = isSystemOwner(user)
+
+  // 0. Modo de Manutenção do Sistema (Emergência Temporária)
+  // Se o sistema estiver em manutenção e o usuário não for desenvolvedor/proprietário
+  if (maintenance.enabled && !isOwner) {
+    return (
+      <SystemMaintenanceScreen
+        message={maintenance.message}
+        onRecheck={async () => {
+          const res = await systemMaintenanceService.getStatus()
+          if (res.success && res.data) {
+            setMaintenance(res.data)
+          }
+        }}
+      />
+    )
+  }
 
   // 1. Se a organização do usuário foi desativada e o usuário não é o Proprietário do Sistema
   if (currentOrganization && currentOrganization.isActive === false && !isOwner) {

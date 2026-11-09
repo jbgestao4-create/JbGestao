@@ -11,6 +11,11 @@ export const ForgotPasswordPage = lazy(() =>
     default: module.ForgotPasswordPage,
   })),
 )
+export const ResetPasswordPage = lazy(() =>
+  import('@modules/auth/pages/ResetPasswordPage').then((module) => ({
+    default: module.ResetPasswordPage,
+  })),
+)
 export const ProfilePage = lazy(() =>
   import('@modules/auth/pages/ProfilePage').then((module) => ({ default: module.ProfilePage })),
 )
@@ -180,4 +185,24 @@ export const AnnouncementsAdminPage = lazy(() =>
     default: module.AnnouncementsAdminPage,
   })),
 )
+
+export const DeveloperSettingsPage = lazy(() =>
+  import('@modules/companies/pages/DeveloperSettingsPage').then((module) => ({
+    default: module.DeveloperSettingsPage,
+  })),
+)
+
+export const SystemNotificationsAdminPage = lazy(() =>
+  import('@modules/companies/pages/SystemNotificationsAdminPage').then((module) => ({
+    default: module.SystemNotificationsAdminPage,
+  })),
+)
+
+export const SystemUpdatesAdminPage = lazy(() =>
+  import('@modules/companies/pages/SystemUpdatesAdminPage').then((module) => ({
+    default: module.SystemUpdatesAdminPage,
+  })),
+)
+
+
 

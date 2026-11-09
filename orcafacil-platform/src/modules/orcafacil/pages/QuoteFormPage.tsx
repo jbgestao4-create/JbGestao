@@ -682,7 +682,7 @@ export function QuoteFormPage() {
           customerName: customerObj?.name || 'Cliente',
           customerPhone: customerObj?.phone || undefined,
           customerId: selectedCustomerId || undefined,
-          title: `Orçamento #${targetQuoteId.slice(0, 8)} - ${customerObj?.name || 'Cliente'}`,
+          title: `Orçamento - ${customerObj?.name || 'Cliente'}`,
           description: scheduleNotes || notes || 'Agendamento referente ao orçamento',
           assignedTo: scheduleAssignedTo,
           operatorName: profile?.displayName || user?.email?.split('@')[0],

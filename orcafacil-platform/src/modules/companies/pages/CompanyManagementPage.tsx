@@ -5,7 +5,6 @@ import {
   Building2,
   CheckCircle2,
   Clock,
-  Copy,
   Infinity,
   Layers,
   Lock,
@@ -33,6 +32,7 @@ import { ManageCompanyModulesModal } from '../components/ManageCompanyModulesMod
 import { EditCompanyModal } from '../components/EditCompanyModal'
 import { TrialPeriodModal } from '../components/TrialPeriodModal'
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
+import { formatLastAccess } from '@shared/services/screen-time.service'
 
 export function CompanyManagementPage() {
   const { user } = useAuth()
@@ -64,7 +64,6 @@ export function CompanyManagementPage() {
 
   // Toast / Mensagem de sucesso
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
-  const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
   const loadCompanies = async () => {
     setIsLoading(true)
@@ -97,12 +96,6 @@ export function CompanyManagementPage() {
   const totalCount = companies.length
   const activeCount = companies.filter((c) => c.isActive).length
   const inactiveCount = totalCount - activeCount
-
-  const handleCopySlug = (slug: string) => {
-    void navigator.clipboard.writeText(slug)
-    setCopiedSlug(slug)
-    setTimeout(() => setCopiedSlug(null), 2000)
-  }
 
   const handleConfirmToggleStatus = async () => {
     if (!confirmStatusCompany) return
@@ -187,7 +180,7 @@ export function CompanyManagementPage() {
             Gerenciamento de Empresas Cadastradas
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Gerencie o acesso de cada Identificador Único (SLUG), ative/desative empresas e controle as páginas e módulos disponíveis.
+            Gerencie as empresas cadastradas, acompanhe a data e hora do último acesso, ative/desative empresas e controle as páginas e módulos disponíveis.
           </p>
         </div>
 
@@ -271,7 +264,7 @@ export function CompanyManagementPage() {
           <Search className="absolute left-3.5 top-3 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por nome da empresa, identificador único (SLUG) ou e-mail..."
+            placeholder="Buscar por nome da empresa, e-mail ou CNPJ..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-800/60 pl-10 pr-4 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
@@ -336,7 +329,7 @@ export function CompanyManagementPage() {
               <thead className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-800/60 text-xs font-semibold uppercase text-gray-400 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-3.5">Empresa / Negócio</th>
-                  <th className="px-4 py-3.5">Identificador Único (SLUG)</th>
+                  <th className="px-4 py-3.5">Último Acesso</th>
                   <th className="px-4 py-3.5">Status de Acesso</th>
                   <th className="px-4 py-3.5">Período de Teste</th>
                   <th className="px-4 py-3.5">Páginas Liberadas</th>
@@ -403,23 +396,18 @@ export function CompanyManagementPage() {
                         </div>
                       </td>
 
-                      {/* SLUG */}
+                      {/* Último Acesso da Organização */}
                       <td className="px-4 py-4">
-                        <div className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 px-2.5 py-1 text-xs font-mono font-medium text-gray-800 dark:text-slate-200 border border-gray-200 dark:border-slate-700">
-                          <span>{comp.slug}</span>
-                          <button
-                            type="button"
-                            title="Copiar SLUG"
-                            onClick={() => handleCopySlug(comp.slug)}
-                            className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        {copiedSlug === comp.slug && (
-                          <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
-                            Copiado!
-                          </span>
+                        {comp.lastAccessAt ? (
+                          <div className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
+                            <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>{formatLastAccess(comp.lastAccessAt)}</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-gray-500 dark:text-slate-400 border border-gray-200 dark:border-slate-700">
+                            <Clock className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500 shrink-0" />
+                            <span>Nunca acessou</span>
+                          </div>
                         )}
                       </td>
 

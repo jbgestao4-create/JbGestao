@@ -439,7 +439,8 @@ export const cashSessionService = {
     organizationId: UUID,
     registerId = 'Caixa 01',
   ): Promise<ServiceResult<CashSession | null>> {
-    return this.getOpenSession(organizationId, registerId, 'pdv')
+    const normalizedReg = registerId === 'default-caixa-01' ? 'Caixa 01' : registerId
+    return this.getOpenSession(organizationId, normalizedReg, 'pdv')
   },
 
   /**
@@ -530,9 +531,13 @@ export const cashSessionService = {
   ): Promise<ServiceResult<CashSession>> {
     try {
       const sessionType = params.sessionType || 'pdv'
-      const registerId =
+      let registerId =
         params.registerId ||
         (sessionType === 'cash_management' ? 'Caixa Geral' : 'Caixa 01')
+
+      if (registerId === 'default-caixa-01') {
+        registerId = 'Caixa 01'
+      }
 
       if (sessionType === 'cash_management') {
         // 1. Gestão de Caixa (/cash): verifica se o Caixa Geral já está aberto
@@ -588,15 +593,18 @@ export const cashSessionService = {
           return { success: true, data: existing }
         }
 
-        // 2.2 Impede que o mesmo usuário abra dois caixas de PDV simultaneamente
+        // 2.2 Impede que o mesmo usuário abra dois caixas de PDV simultaneamente (Caixa Geral não bloqueia o PDV)
         const openListRes = await this.listOpenPdvSessions(organizationId)
         if (!openListRes.success) {
           return { success: false, error: openListRes.error }
         }
         const otherOpenByUser = openListRes.data.find(
           (s) =>
+            s.sessionType === 'pdv' &&
+            s.registerId !== 'Caixa Geral' &&
             s.openedBy === params.operatorId &&
             s.registerId !== registerId &&
+            !(s.registerId === 'default-caixa-01' && registerId === 'Caixa 01') &&
             s.status === 'open',
         )
         if (otherOpenByUser) {

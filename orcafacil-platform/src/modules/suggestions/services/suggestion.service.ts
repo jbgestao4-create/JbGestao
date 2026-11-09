@@ -6,6 +6,7 @@ import type {
   FeedbackAttachment,
   FeedbackHistory,
   FeedbackInternalNote,
+  FeedbackMessage,
   FeedbackSuggestion,
   SuggestionStatus,
   SuggestionType,
@@ -29,6 +30,7 @@ export interface SuggestionDetails {
   attachments: FeedbackAttachment[]
   history: FeedbackHistory[]
   notes: FeedbackInternalNote[]
+  messages: FeedbackMessage[]
 }
 
 export interface FeedbackAttachmentWithUrl extends FeedbackAttachment {
@@ -198,7 +200,7 @@ export const suggestionService = {
     suggestionId: UUID,
   ): Promise<ServiceResult<SuggestionDetails>> {
     try {
-      const [attachmentResult, historyResult, noteResult] = await Promise.all([
+      const [attachmentResult, historyResult, noteResult, messageResult] = await Promise.all([
         supabase
           .from('feedback_attachments')
           .select('*')
@@ -217,9 +219,15 @@ export const suggestionService = {
           .eq('organization_id', organizationId)
           .eq('suggestion_id', suggestionId)
           .order('created_at', { ascending: true }),
+        supabase
+          .from('feedback_messages')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .eq('suggestion_id', suggestionId)
+          .order('created_at', { ascending: true }),
       ])
 
-      const error = attachmentResult.error ?? historyResult.error ?? noteResult.error
+      const error = attachmentResult.error ?? historyResult.error ?? noteResult.error ?? messageResult.error
       if (error) {
         logger.error('Falha ao carregar detalhes da sugestão', error)
         return { success: false, error: 'Não foi possível carregar os detalhes.' }
@@ -231,6 +239,7 @@ export const suggestionService = {
           attachments: (attachmentResult.data ?? []) as FeedbackAttachment[],
           history: (historyResult.data ?? []) as FeedbackHistory[],
           notes: (noteResult.data ?? []) as FeedbackInternalNote[],
+          messages: (messageResult.data ?? []) as FeedbackMessage[],
         },
       }
     } catch (error) {
@@ -301,6 +310,178 @@ export const suggestionService = {
     } catch (error) {
       logger.error('Erro inesperado ao registrar observação interna da sugestão', error)
       return { success: false, error: 'Não foi possível salvar a observação.' }
+    }
+  },
+
+  async listUserSuggestions(organizationId: UUID): Promise<ServiceResult<FeedbackSuggestion[]>> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return { success: true, data: [] }
+
+      // Lista apenas chamados/sugestões ativas (exclui concluídos)
+      const { data, error } = await supabase
+        .from('feedback_suggestions')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('submitted_by', user.id)
+        .neq('status', 'completed')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        logger.error('Falha ao listar chamados do usuário', error)
+        return { success: false, error: 'Não foi possível carregar suas solicitações.' }
+      }
+
+      // Busca mensagens enviadas pelo proprietário para mapear respostas
+      const { data: ownerMsgs } = await supabase
+        .from('feedback_messages')
+        .select('suggestion_id, read_by_user')
+        .eq('organization_id', organizationId)
+        .eq('sender_role', 'owner')
+
+      const unreadMap = new Map<string, number>()
+      const totalOwnerReplies = new Map<string, number>()
+
+      for (const msg of ownerMsgs || []) {
+        totalOwnerReplies.set(msg.suggestion_id, (totalOwnerReplies.get(msg.suggestion_id) || 0) + 1)
+        if (!msg.read_by_user) {
+          unreadMap.set(msg.suggestion_id, (unreadMap.get(msg.suggestion_id) || 0) + 1)
+        }
+      }
+
+      const mapped: FeedbackSuggestion[] = (data ?? []).map((row) => ({
+        ...row,
+        has_unread_reply: (unreadMap.get(row.id) || 0) > 0,
+        has_owner_reply: (totalOwnerReplies.get(row.id) || 0) > 0,
+        owner_replies_count: totalOwnerReplies.get(row.id) || 0,
+      }))
+
+      return { success: true, data: mapped }
+    } catch (err) {
+      logger.error('Erro inesperado ao listar chamados do usuário', err)
+      return { success: false, error: 'Erro ao carregar solicitações.' }
+    }
+  },
+
+  async listMessages(organizationId: UUID, suggestionId: UUID): Promise<ServiceResult<FeedbackMessage[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('feedback_messages')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('suggestion_id', suggestionId)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        logger.error('Falha ao listar mensagens da sugestão', error)
+        return { success: false, error: 'Não foi possível carregar as respostas.' }
+      }
+
+      return { success: true, data: (data ?? []) as FeedbackMessage[] }
+    } catch (err) {
+      logger.error('Erro inesperado ao carregar mensagens da sugestão', err)
+      return { success: false, error: 'Erro ao carregar respostas.' }
+    }
+  },
+
+  async sendMessage(
+    organizationId: UUID,
+    suggestionId: UUID,
+    senderName: string,
+    message: string,
+    senderRole: 'owner' | 'user',
+  ): Promise<ServiceResult<FeedbackMessage>> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return { success: false, error: 'Usuário não autenticado' }
+
+      const cleanMsg = message.trim()
+      if (!cleanMsg) return { success: false, error: 'A mensagem não pode ser vazia.' }
+
+      const payload = {
+        organization_id: organizationId,
+        suggestion_id: suggestionId,
+        sender_id: user.id,
+        sender_name: senderName.trim(),
+        sender_role: senderRole,
+        message: cleanMsg,
+        read_by_user: senderRole === 'user',
+        read_by_owner: senderRole === 'owner',
+      }
+
+      const { data, error } = await supabase
+        .from('feedback_messages')
+        .insert(payload)
+        .select('*')
+        .single()
+
+      if (error) {
+        logger.error('Falha ao enviar resposta de sugestão', error)
+        return { success: false, error: 'Não foi possível enviar a resposta.' }
+      }
+
+      return { success: true, data: data as FeedbackMessage }
+    } catch (err) {
+      logger.error('Erro inesperado ao enviar resposta de sugestão', err)
+      return { success: false, error: 'Erro ao enviar resposta.' }
+    }
+  },
+
+  async getUnreadUserCount(organizationId: UUID): Promise<ServiceResult<number>> {
+    try {
+      const { data, error } = await supabase.rpc('get_unread_user_feedback_count', {
+        p_organization_id: organizationId,
+      })
+
+      if (error) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) return { success: true, data: 0 }
+
+        const { count, error: countErr } = await supabase
+          .from('feedback_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', organizationId)
+          .eq('sender_role', 'owner')
+          .eq('read_by_user', false)
+
+        if (countErr) {
+          return { success: true, data: 0 }
+        }
+        return { success: true, data: count || 0 }
+      }
+
+      return { success: true, data: Number(data || 0) }
+    } catch {
+      return { success: true, data: 0 }
+    }
+  },
+
+  async markMessagesReadByUser(organizationId: UUID, suggestionId: UUID): Promise<ServiceResult<void>> {
+    try {
+      // Atualização direta das mensagens do proprietário para lidas pelo usuário
+      try {
+        await supabase
+          .from('feedback_messages')
+          .update({ read_by_user: true })
+          .eq('suggestion_id', suggestionId)
+          .eq('sender_role', 'owner')
+      } catch {
+        // ignora se houver política RLS restritiva
+      }
+
+      await supabase.rpc('mark_feedback_messages_read_by_user', {
+        p_organization_id: organizationId,
+        p_suggestion_id: suggestionId,
+      })
+      return { success: true, data: undefined }
+    } catch {
+      return { success: true, data: undefined }
     }
   },
 }

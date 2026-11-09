@@ -23,6 +23,7 @@ export interface ManagedCompany {
   accessPlanDescription?: string | null
   membersCount: number
   modules: DashboardModuleCode[]
+  lastAccessAt?: string | null
 }
 
 export interface CompanyUserItem {
@@ -379,6 +380,7 @@ export const companyManagementService = {
           accessPlanDescription: row.access_plan_description ?? null,
           membersCount: Number(row.members_count) || 1,
           modules: (row.modules || []) as DashboardModuleCode[],
+          lastAccessAt: row.last_access_at ?? null,
         }))
         return { success: true, data: companies }
       }
@@ -432,6 +434,7 @@ export const companyManagementService = {
           accessPlanDescription: o.access_plan_description ?? null,
           membersCount: 1,
           modules: ALL_PLATFORM_DASHBOARD_MODULES.map((module) => module.code),
+          lastAccessAt: o.last_access_at ?? null,
         }))
 
       return { success: true, data: mapped }

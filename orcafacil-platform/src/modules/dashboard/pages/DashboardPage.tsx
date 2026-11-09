@@ -22,6 +22,7 @@ import {
   Users,
   WalletCards,
   Wrench,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -33,7 +34,7 @@ import { customerService } from '@modules/customers/services/customer.service'
 import { AgendaHeroWidget } from '@modules/agendapro/components/AgendaHeroWidget'
 import { AnnouncementCarousel } from '@shared/components/AnnouncementCarousel'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
-import { ThemeToggle } from '@shared/components/ThemeToggle'
+import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import type { DashboardModuleCode } from '@shared/types/database'
 
 type DashboardModule = {
@@ -54,7 +55,7 @@ const DEFAULT_MODULE_IDS = [
   'MOD-02',
   'MOD-03',
   'MOD-04',
-  'MOD-COMPANIES',
+  'MOD-DEV-SETTINGS',
   'MOD-10',
   'MOD-05',
   'MOD-06',
@@ -69,6 +70,7 @@ export function DashboardPage() {
   const { user, profile, signOut } = useAuth()
   const { currentOrganization, userRole } = useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
+  const { version: systemVersion } = useSystemVersion()
   const navigate = useNavigate()
 
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'offline'>(
@@ -138,16 +140,16 @@ export function DashboardPage() {
       ...(isSystemOwner(user)
         ? [
             {
-              id: 'MOD-COMPANIES',
-              title: 'Gerenciamento de empresas cadastradas',
+              id: 'MOD-DEV-SETTINGS',
+              title: 'Configurações de Desenvolvedor',
               description:
-                'Gerencie o acesso de cada Identificador Único (SLUG)/Empresa cadastrado, ative ou desative o acesso e controle as páginas e módulos liberados.',
-              action: 'Gerenciar Empresas',
-              icon: Building2,
+                'Acesse as opções de desenvolvedor: gerenciamento de Empresas Cadastradas, Anúncios (Tela Inicial) e Suporte.',
+              action: 'Abrir Configurações',
+              icon: ShieldCheck,
               iconStyle: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300',
               isAvailable: true,
               accessModule: 'MOD-07' as DashboardModuleCode,
-              path: '/admin/companies',
+              path: '/admin/developer-settings',
             },
           ]
         : []),
@@ -312,8 +314,8 @@ export function DashboardPage() {
   }, [defaultModules, orderedModuleIds])
 
   const visibleModules = useMemo(
-    () => sortedModules.filter((module) => module.id === 'MOD-COMPANIES' ? userRole === 'owner' : canAccessDashboardModule(module.accessModule)),
-    [sortedModules, canAccessDashboardModule, userRole],
+    () => sortedModules.filter((module) => module.id === 'MOD-DEV-SETTINGS' ? isSystemOwner(user) : canAccessDashboardModule(module.accessModule)),
+    [sortedModules, canAccessDashboardModule, user],
   )
 
   const isCustomOrder = useMemo(() => {
@@ -388,8 +390,11 @@ export function DashboardPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-bold text-slate-900 dark:text-white">JB Gestão Comercial</h1>
-                <span className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-                  v1.0
+                <span
+                  title={`Versão atual do sistema: ${systemVersion}`}
+                  className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
+                >
+                  {systemVersion}
                 </span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-400">Módulo de Gestão Empresarial</p>
@@ -431,8 +436,6 @@ export function DashboardPage() {
             >
               <Home aria-hidden="true" className="h-4 w-4" />
             </Link>
-
-            <ThemeToggle className="h-11 w-11 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] shadow-2xs" />
 
             <ProfileMenu
               variant="dashboard"

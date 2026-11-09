@@ -18,9 +18,6 @@ import {
 } from '../services/sales.service'
 import { SaleReceiptModal } from '../components/SaleReceiptModal'
 import { pdvSound } from '../utils/pdv-sound'
-import { OfflineStatusBadge } from '@shared/offline/components/OfflineStatusBadge'
-import { OfflineActivationModal } from '@shared/offline/components/OfflineActivationModal'
-import { offlineSalesService } from '@shared/offline/offline-sales.service'
 import type { InventoryItem } from '@shared/types/common'
 import {
   calculateItemTotal,
@@ -149,7 +146,6 @@ export function PdvTerminalPage() {
 
   // Modais do PDV
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [showActivationModal, setShowActivationModal] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('money')
   const [cardType, setCardType] = useState<'credit' | 'debit'>('credit')
   const [showCardTypeSelection, setShowCardTypeSelection] = useState(false)
@@ -399,7 +395,12 @@ export function PdvTerminalPage() {
       const otherOpenByCurrentUser =
         openListRes.success && user
           ? openListRes.data.find(
-              (s) => s.openedBy === user.id && s.registerId !== targetRegister,
+              (s) =>
+                s.sessionType === 'pdv' &&
+                s.registerId !== 'Caixa Geral' &&
+                s.openedBy === user.id &&
+                s.registerId !== targetRegister &&
+                !(s.registerId === 'default-caixa-01' && targetRegister === 'Caixa 01'),
             )
           : undefined
 
@@ -471,39 +472,30 @@ export function PdvTerminalPage() {
     void loadActiveSession()
   }, [loadActiveSession])
 
-  // Carrega Estoque e Clientes com suporte Offline-First
+  // Carrega Estoque e Clientes (Operação 100% Online)
   const reloadInventory = useCallback(async () => {
     if (!currentOrganization) return
     try {
-      if (typeof navigator !== 'undefined' && navigator.onLine) {
-        const [invRes, custRes] = await Promise.all([
-          inventoryService.list(currentOrganization.id),
-          customerService.list(currentOrganization.id),
-        ])
-        if (invRes.success && invRes.data.length > 0) {
-          setInventoryItems(
-            invRes.data.filter(
-              (item: InventoryItem) =>
-                item.isActive &&
-                item.canSell &&
-                item.registrationStatus !== 'awaiting_information' &&
-                Number(item.quantityOnHand) > 0,
-            ),
-          )
-        } else {
-          const locais = await offlineSalesService.loadOfflineInventory()
-          if (locais.length > 0) setInventoryItems(locais)
-        }
-        if (custRes.success) {
-          setCustomers(custRes.data)
-        }
-      } else {
-        const locais = await offlineSalesService.loadOfflineInventory()
-        if (locais.length > 0) setInventoryItems(locais)
+      const [invRes, custRes] = await Promise.all([
+        inventoryService.list(currentOrganization.id),
+        customerService.list(currentOrganization.id),
+      ])
+      if (invRes.success && invRes.data.length > 0) {
+        setInventoryItems(
+          invRes.data.filter(
+            (item: InventoryItem) =>
+              item.isActive &&
+              item.canSell &&
+              item.registrationStatus !== 'awaiting_information' &&
+              Number(item.quantityOnHand) > 0,
+          ),
+        )
+      }
+      if (custRes.success) {
+        setCustomers(custRes.data)
       }
     } catch {
-      const locais = await offlineSalesService.loadOfflineInventory()
-      if (locais.length > 0) setInventoryItems(locais)
+      // Ignora falhas temporárias de rede
     }
   }, [currentOrganization])
 
@@ -878,72 +870,17 @@ export function PdvTerminalPage() {
     let saleDetailData: SaleDetail | null = null
     let saleNumberStr = ''
 
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      try {
-        const res = await salesService.createSale(currentOrganization.id, {
-          customerId: selectedCustomerId || null,
-          customerName,
-          customerDocument: customerDocument || undefined,
-          items: cart.map((item) => ({
-            inventoryItemId: item.inventoryItemId || null,
-            description: item.description,
-            unit: item.unit,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          })),
-          discount: discountValue,
-          paymentMethod: finalMethod,
-          isPdv: true,
-          sessionId: session?.id,
-          amountReceived: selectedPaymentMethod === 'money' ? amountReceivedInput : grandTotal,
-          changeAmount: selectedPaymentMethod === 'money' ? cashChange.change.toFixed(2) : '0.00',
-          operatorId: user?.id,
-          operatorName: session?.operatorName ?? undefined,
-          sellerName: session?.operatorName || profile?.displayName || user?.email?.split('@')[0] || 'Operador',
-        })
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSaleError('Conexão com a internet necessária. O PDV opera exclusivamente em modo online.')
+      setIsSubmittingSale(false)
+      return
+    }
 
-        if (res.success) {
-          saleNumberStr = res.data.saleNumber
-          const saleDetailRes = await salesService.getSaleById(currentOrganization.id, res.data.saleId)
-          if (saleDetailRes.success) {
-            saleDetailData = saleDetailRes.data
-          }
-        } else {
-          throw new Error(res.error)
-        }
-      } catch (err: any) {
-        console.warn('[PDV] Erro ao gravar online, registrando venda no IndexedDB local...', err)
-        const offRes = await offlineSalesService.recordOfflineSale({
-          organizationId: currentOrganization.id,
-          userId: user?.id || 'offline_user',
-          operatorName: session?.operatorName || profile?.displayName || 'Operador',
-          customerName,
-          customerDocument: customerDocument || undefined,
-          paymentMethod: finalMethod,
-          items: cart.map((item) => ({
-            inventoryItemId: item.inventoryItemId || null,
-            description: item.description,
-            unit: item.unit,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          })),
-          discount: discountValue,
-          total: Number(grandTotal) || 0,
-          amountReceived: selectedPaymentMethod === 'money' ? amountReceivedInput : grandTotal,
-          changeAmount: selectedPaymentMethod === 'money' ? cashChange.change.toFixed(2) : '0.00',
-        })
-        saleDetailData = offRes.data
-        saleNumberStr = offRes.data.saleNumber
-      }
-    } else {
-      // Offline explícito
-      const offRes = await offlineSalesService.recordOfflineSale({
-        organizationId: currentOrganization.id,
-        userId: user?.id || 'offline_user',
-        operatorName: session?.operatorName || profile?.displayName || 'Operador',
+    try {
+      const res = await salesService.createSale(currentOrganization.id, {
+        customerId: selectedCustomerId || null,
         customerName,
         customerDocument: customerDocument || undefined,
-        paymentMethod: finalMethod,
         items: cart.map((item) => ({
           inventoryItemId: item.inventoryItemId || null,
           description: item.description,
@@ -952,12 +889,31 @@ export function PdvTerminalPage() {
           unitPrice: item.unitPrice,
         })),
         discount: discountValue,
-        total: Number(grandTotal) || 0,
+        paymentMethod: finalMethod,
+        isPdv: true,
+        sessionId: session?.id,
         amountReceived: selectedPaymentMethod === 'money' ? amountReceivedInput : grandTotal,
         changeAmount: selectedPaymentMethod === 'money' ? cashChange.change.toFixed(2) : '0.00',
+        operatorId: user?.id,
+        operatorName: session?.operatorName ?? undefined,
+        sellerName: session?.operatorName || profile?.displayName || user?.email?.split('@')[0] || 'Operador',
       })
-      saleDetailData = offRes.data
-      saleNumberStr = offRes.data.saleNumber
+
+      if (res.success) {
+        saleNumberStr = res.data.saleNumber
+        const saleDetailRes = await salesService.getSaleById(currentOrganization.id, res.data.saleId)
+        if (saleDetailRes.success) {
+          saleDetailData = saleDetailRes.data
+        }
+      } else {
+        setSaleError(res.error || 'Erro ao finalizar venda online')
+        setIsSubmittingSale(false)
+        return
+      }
+    } catch (err: any) {
+      setSaleError(err?.message || 'Erro inesperado ao registrar venda online')
+      setIsSubmittingSale(false)
+      return
     }
 
     if (saleDetailData) {
@@ -1455,9 +1411,8 @@ export function PdvTerminalPage() {
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                 JB SOFTWARE
               </span>
-              <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+              <h1 className="text-sm font-bold tracking-tight text-white">
                 PONTO DE VENDA (PDV)
-                <OfflineStatusBadge compact onOpenActivationModal={() => setShowActivationModal(true)} />
               </h1>
             </div>
           </div>
@@ -3151,14 +3106,6 @@ export function PdvTerminalPage() {
           </div>
         </>
       )}
-
-      {/* Modal de Ativação e Download Offline */}
-      <OfflineActivationModal
-        isOpen={showActivationModal}
-        onClose={() => setShowActivationModal(false)}
-        organizationId={currentOrganization?.id || ''}
-        onSuccess={() => void reloadInventory()}
-      />
     </div>
   )
 }

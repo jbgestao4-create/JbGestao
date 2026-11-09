@@ -46,9 +46,9 @@ export function formatLastAccess(dateString: string | null | undefined): string 
 
 export const screenTimeService = {
   /**
-   * Salva o tempo acumulado no Supabase e atualiza o timestamp de último acesso.
+   * Salva o tempo acumulado no Supabase e atualiza o timestamp de último acesso do usuário e da organização.
    */
-  async recordScreenTime(userId: string, seconds: number): Promise<void> {
+  async recordScreenTime(userId: string, seconds: number, orgId?: string | null): Promise<void> {
     if (!userId) return
 
     const sanitizedSeconds = Math.max(0, Math.floor(seconds))
@@ -71,10 +71,15 @@ export const screenTimeService = {
 
     // 2. Envia para o Supabase via RPC atômica
     try {
-      const { error: rpcError } = await supabase.rpc('record_user_screen_time', {
+      const rpcParams: Record<string, unknown> = {
         p_seconds: sanitizedSeconds,
         p_user_id: userId,
-      })
+      }
+      if (orgId) {
+        rpcParams.p_org_id = orgId
+      }
+
+      const { error: rpcError } = await supabase.rpc('record_user_screen_time', rpcParams as any)
 
       if (!rpcError) {
         return

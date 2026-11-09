@@ -7,6 +7,7 @@ export interface SystemAnnouncement {
   title?: string | null
   imageUrl: string
   linkUrl?: string | null
+  summary?: string | null
   orderIndex: number
   isActive: boolean
   createdAt: string
@@ -57,6 +58,7 @@ export const announcementService = {
         title: row.title,
         imageUrl: row.image_url,
         linkUrl: row.link_url,
+        summary: row.summary,
         orderIndex: row.order_index,
         isActive: row.is_active,
         createdAt: row.created_at,
@@ -90,6 +92,7 @@ export const announcementService = {
         title: row.title,
         imageUrl: row.image_url,
         linkUrl: row.link_url,
+        summary: row.summary,
         orderIndex: row.order_index,
         isActive: row.is_active,
         createdAt: row.created_at,
@@ -108,6 +111,7 @@ export const announcementService = {
     imageUrl: string
     title?: string
     linkUrl?: string
+    summary?: string
     orderIndex?: number
   }): Promise<ServiceResult<SystemAnnouncement>> {
     try {
@@ -117,6 +121,7 @@ export const announcementService = {
           image_url: params.imageUrl,
           title: params.title?.trim() || null,
           link_url: params.linkUrl?.trim() || null,
+          summary: params.summary?.trim() || null,
           order_index: params.orderIndex ?? 0,
           is_active: true,
         })
@@ -131,6 +136,7 @@ export const announcementService = {
           title: params.title || null,
           imageUrl: params.imageUrl,
           linkUrl: params.linkUrl || null,
+          summary: params.summary || null,
           orderIndex: params.orderIndex ?? 0,
           isActive: true,
           createdAt: new Date().toISOString(),
@@ -147,6 +153,7 @@ export const announcementService = {
         title: data.title,
         imageUrl: data.image_url,
         linkUrl: data.link_url,
+        summary: data.summary,
         orderIndex: data.order_index,
         isActive: data.is_active,
         createdAt: data.created_at,
@@ -161,6 +168,69 @@ export const announcementService = {
     } catch (err) {
       logger.error('Exceção ao criar anúncio:', err)
       return { success: false, error: 'Erro ao cadastrar anúncio' }
+    }
+  },
+
+  async update(
+    id: string,
+    params: {
+      title?: string | null
+      linkUrl?: string | null
+      summary?: string | null
+      isActive?: boolean
+    }
+  ): Promise<ServiceResult<SystemAnnouncement>> {
+    try {
+      const payload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      }
+      if (params.title !== undefined) payload.title = params.title?.trim() || null
+      if (params.linkUrl !== undefined) payload.link_url = params.linkUrl?.trim() || null
+      if (params.summary !== undefined) payload.summary = params.summary?.trim() || null
+      if (params.isActive !== undefined) payload.is_active = params.isActive
+
+      const { data, error } = await supabase
+        .from('system_announcements')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single()
+
+      if (error || !data) {
+        // Atualiza no cache local se falhar ou estiver em modo local
+        const cached = getLocalCache()
+        const existing = cached.find((c) => c.id === id)
+        if (existing) {
+          if (params.title !== undefined) existing.title = params.title
+          if (params.linkUrl !== undefined) existing.linkUrl = params.linkUrl
+          if (params.summary !== undefined) existing.summary = params.summary
+          if (params.isActive !== undefined) existing.isActive = params.isActive
+          existing.updatedAt = new Date().toISOString()
+          setLocalCache(cached)
+          return { success: true, data: existing }
+        }
+        return { success: false, error: 'Erro ao salvar alterações do anúncio' }
+      }
+
+      const updated: SystemAnnouncement = {
+        id: data.id,
+        title: data.title,
+        imageUrl: data.image_url,
+        linkUrl: data.link_url,
+        summary: data.summary,
+        orderIndex: data.order_index,
+        isActive: data.is_active,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      }
+
+      const cached = getLocalCache().map((c) => (c.id === id ? updated : c))
+      setLocalCache(cached)
+
+      return { success: true, data: updated }
+    } catch (err) {
+      logger.error('Exceção ao atualizar anúncio:', err)
+      return { success: false, error: 'Erro ao atualizar dados do anúncio' }
     }
   },
 

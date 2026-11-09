@@ -1,13 +1,46 @@
 import { useState, type SyntheticEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Check, X } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { authService } from '../services/auth.service'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
-import { isSystemOwner } from '@shared/utils/system-owner'
-import { Image as ImageIcon, Sparkles, ArrowRight } from 'lucide-react'
 import type { FontSizePreference } from '../context/AuthContext'
+import { validatePasswordStrength } from '@shared/utils/password-validator'
+
+function PasswordRequirementsChecklist({ password }: { password: string }) {
+  const result = validatePasswordStrength(password)
+  const items = [
+    { label: 'Mínimo de 8 caracteres', ok: result.hasMinLength },
+    { label: 'Pelo menos uma letra maiúscula (A-Z)', ok: result.hasUpperCase },
+    { label: 'Pelo menos uma letra minúscula (a-z)', ok: result.hasLowerCase },
+    { label: 'Pelo menos um número (0-9)', ok: result.hasNumber },
+    { label: 'Pelo menos um caractere especial (!@#$%...)', ok: result.hasSpecialChar },
+  ]
+
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-3 text-xs space-y-1.5">
+      <p className="font-semibold text-slate-700 dark:text-slate-300">A senha deve conter:</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+        {items.map((it, idx) => (
+          <div
+            key={idx}
+            className={`flex items-center gap-1.5 ${
+              it.ok ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            {it.ok ? (
+              <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <X className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            )}
+            <span>{it.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 const FONT_SIZE_OPTIONS: { value: FontSizePreference; label: string; sample: string }[] = [
   { value: 'small', label: 'Pequena', sample: 'A' },
@@ -59,13 +92,16 @@ export function ProfilePage() {
     setError('')
     setMessage('')
 
-    if (newPassword.length < 8) {
-      setError('A senha deve ter pelo menos 8 caracteres.')
+    const strength = validatePasswordStrength(newPassword)
+    if (!strength.isValid) {
+      setError(
+        'A senha deve ter no mínimo 8 caracteres, contendo pelo menos uma letra maiúscula, uma minúscula, um número e um caractere especial.'
+      )
       return
     }
 
-    if (mustChangePassword && newPassword === '12345678') {
-      setError('A nova senha não pode ser igual à senha temporária 12345678.')
+    if (mustChangePassword && (newPassword === '12345678' || newPassword === '00000000')) {
+      setError('A nova senha não pode ser igual à senha temporária inicial.')
       return
     }
 
@@ -121,12 +157,13 @@ export function ProfilePage() {
               <Input
                 label="Nova senha"
                 type="password"
-                placeholder="Mínimo de 8 caracteres"
+                placeholder="Ex: SenhaForte@2026"
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.currentTarget.value)}
                 required
               />
+              <PasswordRequirementsChecklist password={newPassword} />
               <Input
                 label="Confirmar nova senha"
                 type="password"
@@ -286,33 +323,6 @@ export function ProfilePage() {
         </CardContent>
       </Card>
 
-      {isSystemOwner(user) && (
-        <Card className="border-blue-300 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20">
-          <CardHeader>
-            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
-              <Sparkles className="h-4 w-4" />
-              <h2 className="text-sm font-bold">Painel do Desenvolvedor: Banners & Anúncios</h2>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              Configure as imagens de anúncios que serão exibidas na tela inicial do sistema no lado oposto à agenda.
-              Você pode importar várias imagens, que passarão a cada 3 segundos com pausa ao passar o mouse.
-            </p>
-            <div>
-              <Link
-                to="/admin/announcements"
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition"
-              >
-                <ImageIcon className="h-4 w-4" />
-                <span>Gerenciar Anúncios da Tela Inicial</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader>
           <h2 className="text-sm font-semibold text-gray-900">Alterar Senha</h2>
@@ -334,13 +344,14 @@ export function ProfilePage() {
             <Input
               label="Nova Senha"
               type="password"
-              placeholder="Mínimo 8 caracteres"
+              placeholder="Ex: SenhaForte@2026"
               value={newPassword}
               onChange={(e) => {
                 setNewPassword(e.target.value)
               }}
               required
             />
+            <PasswordRequirementsChecklist password={newPassword} />
             <Input
               label="Confirmar Nova Senha"
               type="password"

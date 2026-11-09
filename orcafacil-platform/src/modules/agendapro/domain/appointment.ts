@@ -135,3 +135,14 @@ export const APPOINTMENT_PRIORITY_CONFIG: Record<
   high: { label: 'Alta', badgeClass: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10' },
   urgent: { label: 'Urgente', badgeClass: 'text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-500/10' },
 }
+
+/**
+ * Remove o número/código do orçamento da frente do título na agenda
+ * Ex: "Orçamento #a1b2c3d4 - Bryan" -> "Orçamento - Bryan"
+ */
+export function formatAppointmentTitle(title: string): string {
+  if (!title) return ''
+  return title
+    .replace(/^Orçamento\s*(?:#|n[º°]\s*)?[a-zA-Z0-9_-]+\s*[-–]\s*/i, 'Orçamento - ')
+    .replace(/^Orçamento\s*(?:#|n[º°]\s*)?[a-zA-Z0-9_-]+$/i, 'Orçamento')
+}

@@ -7,7 +7,7 @@ const SYNC_INTERVAL_SECONDS = 5 // Sincroniza a cada 5 segundos
 /**
  * Hook para monitoramento contínuo do tempo de tela e atualização do último acesso.
  */
-export function useScreenTimeTracker(userId?: string | null) {
+export function useScreenTimeTracker(userId?: string | null, orgId?: string | null) {
   const pendingSecondsRef = useRef(0)
   const lastActiveTimestampRef = useRef(Date.now())
 
@@ -15,7 +15,7 @@ export function useScreenTimeTracker(userId?: string | null) {
     if (!userId) return
 
     // 1. Marca imediatamente o último acesso ao iniciar a sessão
-    void screenTimeService.recordScreenTime(userId, 0)
+    void screenTimeService.recordScreenTime(userId, 0, orgId)
 
     const handleUserActivity = () => {
       lastActiveTimestampRef.current = Date.now()
@@ -30,7 +30,7 @@ export function useScreenTimeTracker(userId?: string | null) {
       const secs = pendingSecondsRef.current
       if (secs > 0) {
         pendingSecondsRef.current = 0
-        void screenTimeService.recordScreenTime(userId, secs)
+        void screenTimeService.recordScreenTime(userId, secs, orgId)
         window.dispatchEvent(
           new CustomEvent('screen-time-tick', {
             detail: { userId, pendingSeconds: 0 },
