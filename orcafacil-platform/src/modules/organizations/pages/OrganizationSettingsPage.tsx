@@ -14,6 +14,7 @@ import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { SystemCustomizationSection } from '../components/SystemCustomizationSection'
+import { formatPhoneNumber } from '@shared/utils/phone'
 import {
   ShieldCheck,
   User,
@@ -26,6 +27,7 @@ import {
   Square,
   Building2,
   Palette,
+  Phone,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -202,6 +204,7 @@ export function OrganizationSettingsPage() {
   const [name, setName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<OrganizationRole>('member')
   const [selectedDashboardModules, setSelectedDashboardModules] = useState<DashboardModuleCode[]>([])
@@ -218,6 +221,7 @@ export function OrganizationSettingsPage() {
   const [editMemberName, setEditMemberName] = useState('')
   const [editMemberJobTitle, setEditMemberJobTitle] = useState('')
   const [editMemberEmail, setEditMemberEmail] = useState('')
+  const [editMemberPhone, setEditMemberPhone] = useState('')
   const [editMemberRole, setEditMemberRole] = useState<OrganizationRole>('member')
   const [editMemberError, setEditMemberError] = useState('')
   const [isSavingMember, setIsSavingMember] = useState(false)
@@ -382,6 +386,7 @@ export function OrganizationSettingsPage() {
     setName('')
     setJobTitle('')
     setEmail('')
+    setPhone('')
     setPassword('')
     setRole('member')
     setSelectedOrganizationId(initialOrganizationId)
@@ -426,6 +431,7 @@ export function OrganizationSettingsPage() {
     const res = await organizationService.addMember({
       organizationId: targetOrganization.id,
       name,
+      phone: phone.trim() ? phone.replace(/\D/g, '') : null,
       jobTitle: jobTitle.trim() || null,
       email,
       password,
@@ -445,6 +451,7 @@ export function OrganizationSettingsPage() {
         role: 'member',
         displayName: name.trim(),
         email: email.trim().toLowerCase(),
+        phone: phone.trim() ? phone.replace(/\D/g, '') : null,
         jobTitle: jobTitle.trim() || null,
         modules: [],
         dashboardModules: selectedDashboardModules,
@@ -510,11 +517,11 @@ export function OrganizationSettingsPage() {
   }
 
   const handleOpenEditMember = (member: OrganizationMemberDetail) => {
-    if (!canManageMembers || member.role === 'owner') return
     setMemberToEdit(member)
     setEditMemberName(member.displayName)
     setEditMemberJobTitle(member.jobTitle ?? '')
     setEditMemberEmail(member.email)
+    setEditMemberPhone(member.phone ? formatPhoneNumber(member.phone) : '')
     setEditMemberRole(member.role)
     setEditMemberError('')
   }
@@ -536,6 +543,7 @@ export function OrganizationSettingsPage() {
       name: editMemberName,
       jobTitle: editMemberJobTitle,
       email: editMemberEmail,
+      phone: editMemberPhone.trim() ? editMemberPhone.replace(/\D/g, '') : null,
       role: editMemberRole,
     })
 
@@ -753,6 +761,12 @@ export function OrganizationSettingsPage() {
                             Cargo: {member.jobTitle}
                           </span>
                         )}
+                        {member.phone && (
+                          <span className="text-xs text-slate-600 font-medium flex items-center gap-1.5 mt-0.5">
+                            <Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            Tel: {formatPhoneNumber(member.phone)}
+                          </span>
+                        )}
 
                         {/* MÓDULOS PERMITIDOS */}
                         <div className="mt-2 flex items-center gap-1.5 flex-wrap">
@@ -790,43 +804,47 @@ export function OrganizationSettingsPage() {
                     </div>
 
                     {/* AÇÕES DE GESTÃO */}
-                    {canManageMembers && !isOwner && !isCurrentUser && (
-                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                        {canResetMemberPassword && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setMemberToResetPassword(member)}
-                            className="h-8 text-xs gap-1.5 whitespace-nowrap text-amber-700 hover:text-amber-800 hover:border-amber-300"
-                            title={`Redefinir senha de ${member.displayName || member.email}`}
-                          >
-                            <KeyRound className="w-3.5 h-3.5" />
-                            Redefinir senha
-                          </Button>
-                        )}
-                        {canEditOperationalMemberModules && member.role === 'member' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenEditModal(member)}
-                            className="h-8 text-xs gap-1.5 whitespace-nowrap text-gray-700 hover:text-blue-600 hover:border-blue-300"
-                          >
-                            <Sliders className="w-3.5 h-3.5 text-gray-500" />
-                            Permissões de Módulos
-                          </Button>
-                        )}
-
+                    <div className="flex items-center gap-2 shrink-0 self-end md:self-center flex-wrap">
+                      {/* BOTÃO EDITAR INFORMAÇÕES DO USUÁRIO */}
+                      {(canManageMembers || isCurrentUser) && (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleOpenEditMember(member)}
-                          className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600 hover:border-blue-300"
-                          title="Editar funcionário"
+                          className="h-8 text-xs gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50 hover:border-blue-300 font-medium"
+                          title="Editar informações do usuário"
                           aria-label={`Editar ${member.displayName || member.email}`}
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Editar Informações</span>
                         </Button>
+                      )}
 
+                      {canManageMembers && !isOwner && !isCurrentUser && canResetMemberPassword && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMemberToResetPassword(member)}
+                          className="h-8 text-xs gap-1.5 whitespace-nowrap text-amber-700 hover:text-amber-800 hover:border-amber-300"
+                          title={`Redefinir senha de ${member.displayName || member.email}`}
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          Redefinir senha
+                        </Button>
+                      )}
+                      {canManageMembers && !isOwner && !isCurrentUser && canEditOperationalMemberModules && member.role === 'member' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEditModal(member)}
+                          className="h-8 text-xs gap-1.5 whitespace-nowrap text-gray-700 hover:text-blue-600 hover:border-blue-300"
+                        >
+                          <Sliders className="w-3.5 h-3.5 text-gray-500" />
+                          Permissões de Módulos
+                        </Button>
+                      )}
+
+                      {canManageMembers && !isOwner && !isCurrentUser && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -837,8 +855,8 @@ export function OrganizationSettingsPage() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -932,6 +950,17 @@ export function OrganizationSettingsPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="off"
                 required
+              />
+
+              <Input
+                label="Telefone / Celular"
+                name="new-employee-phone"
+                type="tel"
+                placeholder="(11) 99999-9999"
+                value={phone}
+                onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
+                autoComplete="tel"
+                helperText="Número de contato com DDD (opcional)."
               />
 
               <Input
@@ -1110,6 +1139,16 @@ export function OrganizationSettingsPage() {
                 onChange={(e) => setEditMemberEmail(e.target.value)}
                 required
                 helperText="O novo e-mail será usado imediatamente para entrar na plataforma."
+              />
+              <Input
+                label="Telefone / Celular"
+                name="edit-employee-phone"
+                type="tel"
+                placeholder="(11) 99999-9999"
+                value={editMemberPhone}
+                onChange={(e) => setEditMemberPhone(formatPhoneNumber(e.target.value))}
+                autoComplete="tel"
+                helperText="Número de telefone ou celular do funcionário."
               />
               <div>
                 <ListBox

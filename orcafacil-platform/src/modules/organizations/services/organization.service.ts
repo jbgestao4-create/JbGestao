@@ -20,6 +20,7 @@ export interface AddMemberParams {
   organizationId: UUID
   email: string
   name: string
+  phone?: string | null
   jobTitle: string | null
   password?: string
   role: OrganizationRole
@@ -254,7 +255,7 @@ export const organizationService = {
           const userIds = directMembers.map((m: any) => m.user_id)
           const { data: profiles } = await supabase
             .from('profiles')
-            .select('id, display_name, email')
+            .select('id, display_name, email, phone')
             .in('id', userIds)
 
           const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]))
@@ -266,6 +267,7 @@ export const organizationService = {
               role: m.role,
               display_name: p?.display_name || 'Funcionário',
               email: p?.email || '',
+              phone: p?.phone || null,
               modules: [],
               created_at: m.created_at,
             }
@@ -327,6 +329,7 @@ export const organizationService = {
             role: row.role as OrganizationRole,
             displayName: row.display_name,
             email: row.email,
+            phone: row.phone || null,
             jobTitle: jobTitleByUserId.get(row.user_id) ?? null,
             modules: (row.modules ?? []) as ModuleCode[],
             dashboardModules:
@@ -358,6 +361,7 @@ export const organizationService = {
     try {
       const cleanEmail = params.email.trim().toLowerCase()
       const cleanName = params.name.trim()
+      const cleanPhone = params.phone ? params.phone.replace(/\D/g, '') : null
       const cleanPassword = params.password ? params.password.trim() : null
       let createdUserId: string | null = null
 
@@ -382,6 +386,7 @@ export const organizationService = {
             options: {
               data: {
                 display_name: cleanName,
+                phone: cleanPhone || undefined,
               },
             },
           })
@@ -392,6 +397,7 @@ export const organizationService = {
                 id: createdUserId,
                 email: cleanEmail,
                 display_name: cleanName,
+                phone: cleanPhone || null,
               } as any)
             } catch {
               // ignore
@@ -431,6 +437,17 @@ export const organizationService = {
             return { success: false, error: 'O usuário foi cadastrado, mas não foi possível confirmar seu vínculo.' }
           }
           addedUserId = profileRecord.id
+        }
+
+        if (cleanPhone) {
+          try {
+            await supabase
+              .from('profiles')
+              .update({ phone: cleanPhone })
+              .eq('id', addedUserId)
+          } catch {
+            // ignore
+          }
         }
 
         if (params.inventoryAccessLevel !== undefined) {
@@ -548,9 +565,13 @@ export const organizationService = {
       jobTitle: string
       email: string
       role: OrganizationRole
+      phone?: string | null
     },
   ): Promise<ServiceResult<void>> {
     try {
+      const cleanPhone = params.phone ? params.phone.replace(/\D/g, '') : null
+
+      // Tenta a RPC atualizada com telefone
       const { error } = await supabase.rpc('update_organization_member', {
         p_org_id: orgId,
         p_user_id: params.userId,
@@ -558,7 +579,22 @@ export const organizationService = {
         p_email: params.email.trim(),
         p_job_title: params.jobTitle.trim() || null,
         p_role: params.role,
+        p_phone: cleanPhone || null,
       })
+
+      // Atualiza também na tabela profiles diretamente
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            display_name: params.name.trim(),
+            email: params.email.trim(),
+            phone: cleanPhone || null,
+          } as any)
+          .eq('id', params.userId)
+      } catch {
+        // ignore
+      }
 
       if (error) {
         logger.error('Erro ao atualizar funcionário no Supabase', error)

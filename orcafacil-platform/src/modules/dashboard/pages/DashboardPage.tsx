@@ -391,7 +391,7 @@ export function DashboardPage() {
                 <h1 className="text-base font-bold text-slate-900 dark:text-white">ControleSoft</h1>
                 <span
                   title={`Versão atual do sistema: ${systemVersion}`}
-                  className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
+                  className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
                 >
                   {systemVersion}
                 </span>

@@ -126,8 +126,9 @@ export function SuggestionsAdminPage() {
   useEffect(() => {
     if (!organizationId) return
 
+    const channelName = `sugg-admin-${organizationId}-${Math.random().toString(36).substring(2, 9)}`
     const channel = supabase
-      .channel(`suggestions-admin-realtime-${organizationId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {

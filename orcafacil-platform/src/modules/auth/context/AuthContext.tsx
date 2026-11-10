@@ -82,6 +82,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = authService.onAuthStateChange(async (event, newSession) => {
+      // Se o usuário clicou no link de redefinição de senha enviado por e-mail
+      if (
+        event === 'PASSWORD_RECOVERY' ||
+        (typeof window !== 'undefined' && window.location.hash.includes('type=recovery'))
+      ) {
+        if (window.location.pathname !== '/reset-password') {
+          window.location.href = '/reset-password' + window.location.hash
+          return
+        }
+      }
+
       setSession(newSession)
       const nextUser = newSession?.user ?? null
       setUser((prevUser) => {

@@ -11,6 +11,7 @@ import {
   ReceiptText,
   ShoppingCart,
   ShieldAlert,
+  Users,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { organizationService } from '@modules/organizations/services/organization.service'
@@ -151,41 +152,47 @@ export function LoginPage() {
           </div>
 
           <ul className="mt-8 grid grid-cols-2 gap-x-4 gap-y-4">
-            <li className="flex items-center gap-4 text-sm font-medium text-slate-200">
+            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
                 <CircleDollarSign aria-hidden="true" className="h-5 w-5" />
               </span>
               Controle Financeiro
             </li>
-            <li className="flex items-center gap-4 text-sm font-medium text-slate-200">
+            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
                 <FileText aria-hidden="true" className="h-5 w-5" />
               </span>
-              Orçamentos
+              Ordem de Serviço e Orçamentos
             </li>
-            <li className="flex items-center gap-4 text-sm font-medium text-slate-200">
+            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
                 <ShoppingCart aria-hidden="true" className="h-5 w-5" />
               </span>
-              Gestão de Vendas
+              Vendas Rápidas e Vendas PDV
             </li>
-            <li className="flex items-center gap-4 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <ReceiptText aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Nota Fiscal Eletrônica
-            </li>
-            <li className="flex items-center gap-4 text-sm font-medium text-slate-200">
+            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
                 <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5" />
               </span>
-              Relatórios em Tempo Real
+              Relatório Financeiros e Gerencial
             </li>
-            <li className="flex items-center gap-4 text-sm font-medium text-slate-200">
+            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
                 <Calculator aria-hidden="true" className="h-5 w-5" />
               </span>
-              Controle de Caixa
+              Controle Geral do Caixa
+            </li>
+            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                <Users aria-hidden="true" className="h-5 w-5" />
+              </span>
+              Controle de acesso de funcionários
+            </li>
+            <li className="col-span-2 flex items-center gap-3 text-sm font-medium text-slate-200">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                <ReceiptText aria-hidden="true" className="h-5 w-5" />
+              </span>
+              Emissão de nota fiscal NFC e NFC-e
             </li>
           </ul>
           <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-300">
@@ -199,12 +206,12 @@ export function LoginPage() {
             </span>
           </div>
           <div className="mt-6 max-w-md rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4">
-            <p className="text-sm font-semibold text-white">2 meses grátis para sua empresa</p>
+            <p className="text-sm font-semibold text-white">1 mês grátis para sua empresa</p>
             <p className="mt-1 text-sm leading-6 text-slate-300">
-              Clientes podem solicitar 2 meses grátis de utilização.
+              Clientes podem solicitar 1 mês grátis de utilização.
             </p>
             <a
-              href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20Gostaria%20de%20solicitar%202%20meses%20gr%C3%A1tis%20de%20utiliza%C3%A7%C3%A3o."
+              href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20Gostaria%20de%20solicitar%201%20m%C3%AAs%20gr%C3%A1tis%20de%20utiliza%C3%A7%C3%A3o."
               target="_blank"
               rel="noreferrer"
               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
@@ -221,8 +228,12 @@ export function LoginPage() {
       <section className="flex min-h-screen w-full flex-col items-center bg-[#F8FAFC] px-5 py-8 sm:px-8 lg:w-1/2 lg:px-12">
         <div className="flex w-full flex-1 items-center justify-center py-8">
           <div className="w-full max-w-[440px]">
-            <header className="mb-8 text-center">
-              <BrandLogo size="lg" showName={false} className="mx-auto mb-6 lg:hidden" />
+            <header className="mb-8 text-center flex flex-col items-center">
+              <img
+                src="/controlesoft-logo.png"
+                alt="ControleSoft"
+                className="h-16 sm:h-20 w-auto object-contain mx-auto mb-5 drop-shadow-xs"
+              />
               <h2 className="text-3xl font-semibold text-slate-900">Acesse sua conta</h2>
               <p className="mt-3 text-sm leading-6 text-slate-500">
                 ControleSoft — Potencialize a administração da sua empresa

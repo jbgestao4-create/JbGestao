@@ -53,8 +53,9 @@ export function SystemNotificationModal() {
     void loadNotifications()
 
     // Realtime listener para novas notificações direcionadas
+    const channelName = `sys-notif-${Math.random().toString(36).substring(2, 9)}`
     const channel = supabase
-      .channel('system-notifications-live')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {

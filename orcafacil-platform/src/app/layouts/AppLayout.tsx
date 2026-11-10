@@ -6,6 +6,7 @@ import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { isSystemOwner } from '@shared/utils/system-owner'
+import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
@@ -50,6 +51,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const isMobileMenuOpen = mobileMenuPath === location.pathname
 
   const isDeveloper = isSystemOwner(user)
+  const { version: systemVersion } = useSystemVersion()
   const [unreadSuggestionsCount, setUnreadSuggestionsCount] = useState(0)
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
 
@@ -64,8 +66,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
     void checkMaintenance()
 
+    const channelName = `applayout-maint-${Math.random().toString(36).substring(2, 9)}`
     const channel = supabase
-      .channel('applayout-maintenance-tracker')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -117,8 +120,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     window.addEventListener('focus', handleFocus)
     window.addEventListener('feedback-unread-count-changed', handleReadCountChange)
 
+    const feedbackChannelName = `sidebar-feedback-${orgId}-${Math.random().toString(36).substring(2, 9)}`
     const channel = supabase
-      .channel(`sidebar-feedback-suggestions-${orgId}`)
+      .channel(feedbackChannelName)
       .on(
         'postgres_changes',
         {
@@ -227,7 +231,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           )}
         <aside
           id="mobile-navigation"
-          className={`relative shrink-0 flex-col border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-all duration-300 ${
+          className={`relative shrink-0 flex-col border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-all duration-300 print:hidden ${
             isMobileMenuOpen
               ? 'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shadow-xl md:static md:z-auto md:max-w-none md:shadow-none'
               : 'hidden md:flex'
@@ -425,11 +429,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       {/* CONTEÚDO PRINCIPAL */}
       <main
-        className={isDashboard ? 'min-h-screen bg-slate-50 dark:bg-[#0b0f19]' : 'flex-1 flex flex-col min-w-0 overflow-y-auto'}
+        className={
+          isDashboard
+            ? 'min-h-screen bg-slate-50 dark:bg-[#0b0f19] print:bg-white print:p-0 print:m-0 print:min-h-0'
+            : 'flex-1 flex flex-col min-w-0 overflow-y-auto print:bg-white print:p-0 print:m-0 print:overflow-visible'
+        }
       >
         {/* BANNER DE MANUTENÇÃO ATIVA PARA O DESENVOLVEDOR */}
         {isDeveloper && isMaintenanceActive && (
-          <div className="bg-rose-600 text-white px-4 py-2.5 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 shadow-md z-40 shrink-0">
+          <div className="bg-rose-600 text-white px-4 py-2.5 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 shadow-md z-40 shrink-0 print:hidden">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 animate-bounce" />
               <span>MODO DE MANUTENÇÃO ATIVO: O acesso está bloqueado para clientes e colaboradores comuns.</span>
@@ -445,7 +453,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         )}
 
         {!isDashboard && (
-          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] px-3 sm:px-6 lg:px-8">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] px-3 sm:px-6 lg:px-8 print:hidden">
             <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
               {/* BOTÃO VOLTAR GLOBAL (EM TODAS AS PÁGINAS) */}
               <button
@@ -486,6 +494,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <span className="truncate font-semibold text-gray-900 dark:text-white">
                 {currentOrganization?.name || 'ControleSoft'}
               </span>
+              <span
+                title={`Versão atual do sistema: ${systemVersion}`}
+                className="hidden sm:inline-flex rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
+              >
+                {systemVersion}
+              </span>
             </div>
 
             <div className="flex items-center gap-2.5">
@@ -502,13 +516,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         <div
           className={
-            isDashboard ? 'w-full' : 'mx-auto flex-1 min-w-0 w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 sm:py-4'
+            isDashboard
+              ? 'w-full print:p-0 print:m-0 print:w-full print:max-w-none'
+              : 'mx-auto flex-1 min-w-0 w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 sm:py-4 print:p-0 print:m-0 print:w-full print:max-w-none'
           }
         >
           {children}
-          <UpcomingBillsAlertModal />
-          <FeedbackWidget />
-          <SystemNotificationModal />
+          <div className="print:hidden">
+            <UpcomingBillsAlertModal />
+            <FeedbackWidget />
+            <SystemNotificationModal />
+          </div>
         </div>
       </main>
     </div>

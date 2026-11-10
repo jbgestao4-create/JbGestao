@@ -69,6 +69,7 @@ export interface OrganizationMemberDetail {
   role: OrganizationRole
   displayName: string
   email: string
+  phone?: string | null
   jobTitle: string | null
   modules: ModuleCode[]
   dashboardModules: DashboardModuleCode[]

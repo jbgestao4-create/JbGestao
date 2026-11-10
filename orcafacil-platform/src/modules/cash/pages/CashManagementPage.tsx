@@ -298,8 +298,9 @@ export function CashManagementPage() {
     }, 10000);
 
     // Canal Realtime do Supabase
+    const channelName = `cash-mgmt-${currentOrganization.id}-${Math.random().toString(36).substring(2, 9)}`
     const channel = supabase
-      .channel(`cash-mgmt-realtime-${currentOrganization.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {

@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RequireModule } from './RequireModule'
 import { RequireDashboardModule } from './RequireDashboardModule'
@@ -48,7 +49,10 @@ import {
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
-  // Rotas públicas de autenticação
+  {
+    errorElement: <RouteErrorBoundary />,
+    children: [
+      // Rotas públicas de autenticação
   {
     path: '/login',
     element: <LoginPage />,
@@ -590,5 +594,7 @@ export const router = createBrowserRouter([
   {
     path: '*',
     element: <Navigate to="/" replace />,
+  },
+    ],
   },
 ])

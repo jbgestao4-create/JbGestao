@@ -30,6 +30,7 @@ export interface CompanyUserItem {
   userId: UUID
   displayName: string
   email: string
+  phone?: string | null
   role: string
   jobTitle?: string | null
   createdAt?: string
@@ -1131,6 +1132,7 @@ export const companyManagementService = {
             userId: row.user_id,
             displayName: row.display_name || 'Usuário',
             email: row.email || '',
+            phone: row.phone || null,
             role: row.role || 'member',
             jobTitle: row.job_title || null,
             createdAt: row.created_at,
@@ -1149,6 +1151,7 @@ export const companyManagementService = {
             userId: member.userId,
             displayName: member.displayName || 'Usuário',
             email: member.email || '',
+            phone: member.phone || null,
             role: member.role || 'member',
             jobTitle: member.jobTitle || (member.role === 'admin' ? 'Administrador da Empresa' : null),
             createdAt: member.createdAt,
@@ -1173,7 +1176,7 @@ export const companyManagementService = {
 
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, display_name, email')
+        .select('id, display_name, email, phone')
         .in('id', userIds)
 
       if (profilesError) {
@@ -1190,6 +1193,7 @@ export const companyManagementService = {
             userId: member.user_id,
             displayName: profile?.display_name || 'Usuário',
             email: profile?.email || '',
+            phone: profile?.phone || null,
             role: member.role || 'member',
             jobTitle: member.job_title || null,
             createdAt: member.created_at,
@@ -1199,6 +1203,63 @@ export const companyManagementService = {
     } catch (err) {
       logger.error('Exceção ao listar usuários da empresa', err)
       return { success: false, error: 'Erro inesperado ao listar usuários.' }
+    }
+  },
+
+  /**
+   * Atualiza informações cadastrais de um usuário da empresa (nome, e-mail, telefone, cargo e perfil).
+   */
+  async updateCompanyUser(
+    companyId: UUID,
+    userId: UUID,
+    params: {
+      name: string
+      email: string
+      phone?: string | null
+      jobTitle?: string | null
+      role?: 'admin' | 'member'
+    },
+  ): Promise<ServiceResult<void>> {
+    try {
+      const cleanPhone = params.phone ? params.phone.replace(/\D/g, '') : null
+
+      const { data, error } = await supabase.rpc('admin_update_company_user', {
+        p_org_id: companyId,
+        p_user_id: userId,
+        p_name: params.name.trim(),
+        p_email: params.email.trim(),
+        p_phone: cleanPhone || null,
+        p_job_title: params.jobTitle?.trim() || null,
+        p_role: params.role || 'member',
+      })
+
+      // Atualiza também na tabela profiles diretamente
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            display_name: params.name.trim(),
+            email: params.email.trim(),
+            phone: cleanPhone || null,
+          } as any)
+          .eq('id', userId)
+      } catch {
+        // ignore
+      }
+
+      if (error) {
+        logger.error('Erro na RPC admin_update_company_user', error)
+        return { success: false, error: error.message || 'Não foi possível atualizar o usuário.' }
+      }
+
+      if (data && !data.success) {
+        return { success: false, error: data.error || 'Erro ao atualizar usuário.' }
+      }
+
+      return { success: true, data: undefined }
+    } catch (err) {
+      logger.error('Exceção ao atualizar usuário da empresa', err)
+      return { success: false, error: 'Erro inesperado ao atualizar usuário.' }
     }
   },
 

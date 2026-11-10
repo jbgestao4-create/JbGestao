@@ -16,6 +16,7 @@ export interface SystemUpdate {
   performedAt: string
   createdAt: string
   updatedAt: string
+  isCurrent?: boolean
 }
 
 export interface CreateSystemUpdateParams {
@@ -27,6 +28,7 @@ export interface CreateSystemUpdateParams {
   authorEmail?: string | null
   modules?: string[] | null
   performedAt?: string | null
+  isCurrent?: boolean
 }
 
 export interface UpdateSystemUpdateParams {
@@ -38,6 +40,7 @@ export interface UpdateSystemUpdateParams {
   authorEmail?: string | null
   modules?: string[] | null
   performedAt?: string | null
+  isCurrent?: boolean
 }
 
 const LOCAL_STORAGE_KEY = 'jb_system_updates_cache'
@@ -74,22 +77,165 @@ function setLocalCache(items: SystemUpdate[]): void {
   }
 }
 
+// BroadcastChannel para sincronização instantânea entre abas
+let broadcastChannel: BroadcastChannel | null = null
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    broadcastChannel = new BroadcastChannel('jb_system_version_bus')
+  }
+} catch {
+  broadcastChannel = null
+}
+
+let realtimeInitialized = false
+
+export function initSystemVersionRealtime(): void {
+  if (realtimeInitialized || typeof window === 'undefined') return
+  realtimeInitialized = true
+
+  try {
+    const channelName = `sys-ver-live-${Math.random().toString(36).substring(2, 9)}`
+    supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'system_updates',
+        },
+        () => {
+          void systemUpdateService.getLatestVersion()
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'system_settings',
+          filter: 'key=eq.system_version',
+        },
+        (payload) => {
+          const newRow = payload.new as { value?: { version?: string } } | undefined
+          if (newRow?.value?.version) {
+            systemUpdateService.notifyVersionChange(newRow.value.version)
+          } else {
+            void systemUpdateService.getLatestVersion()
+          }
+        },
+      )
+      .subscribe()
+  } catch (err) {
+    logger.warn('Aviso ao inicializar canal realtime de versão:', { error: String(err) })
+  }
+}
+
 export const systemUpdateService = {
   notifyVersionChange(version: string): void {
     try {
       const formatted = formatSystemVersion(version)
       localStorage.setItem(LATEST_VERSION_STORAGE_KEY, formatted)
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('system-version-changed', { detail: { version: formatted } }),
         )
+      }
+
+      if (broadcastChannel) {
+        broadcastChannel.postMessage({ type: 'system-version-changed', version: formatted })
       }
     } catch {
       // ignore
     }
   },
 
+  async setCurrentVersion(version: string, updateId?: string): Promise<ServiceResult<string>> {
+    const formatted = formatSystemVersion(version)
+    systemUpdateService.notifyVersionChange(formatted)
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      // 1. Salva na tabela global system_settings
+      await supabase.from('system_settings').upsert({
+        key: 'system_version',
+        value: {
+          version: formatted,
+          update_id: updateId || null,
+          updated_at: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id || null,
+      })
+
+      // 2. Se houver id de atualização, atualiza is_current na tabela system_updates
+      if (updateId) {
+        // Remove is_current de outras atualizações
+        await supabase
+          .from('system_updates')
+          .update({ is_current: false })
+          .neq('id', updateId)
+
+        // Marca esta como is_current = true
+        await supabase
+          .from('system_updates')
+          .update({ is_current: true })
+          .eq('id', updateId)
+      }
+
+      return { success: true, data: formatted }
+    } catch (err) {
+      logger.warn('Erro ao persistir versão atual no banco:', { error: String(err) })
+      return { success: true, data: formatted }
+    }
+  },
+
   async getLatestVersion(): Promise<string> {
+    // 1. Primeiro tenta obter a versão oficial definida em system_settings
+    try {
+      const { data: settingData, error: settingError } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'system_version')
+        .maybeSingle()
+
+      if (!settingError && settingData?.value) {
+        const val = settingData.value as { version?: string }
+        if (val?.version && val.version.trim()) {
+          const formatted = formatSystemVersion(val.version)
+          systemUpdateService.notifyVersionChange(formatted)
+          return formatted
+        }
+      }
+    } catch {
+      // prossegue para tentar system_updates
+    }
+
+    // 2. Tenta obter a atualização explicitamente marcada como is_current = true
+    try {
+      const { data: currentUpdate } = await supabase
+        .from('system_updates')
+        .select('version')
+        .eq('is_current', true)
+        .not('version', 'is', null)
+        .neq('version', '')
+        .limit(1)
+        .maybeSingle()
+
+      if (currentUpdate?.version) {
+        const formatted = formatSystemVersion(currentUpdate.version)
+        systemUpdateService.notifyVersionChange(formatted)
+        return formatted
+      }
+    } catch {
+      // prossegue para tentar a mais recente por data
+    }
+
+    // 3. Busca a versão da atualização mais recente por data de realização / criação
     try {
       const { data, error } = await supabase
         .from('system_updates')
@@ -110,6 +256,7 @@ export const systemUpdateService = {
       logger.warn('Erro ao obter versão mais recente do sistema:', { error: String(err) })
     }
 
+    // 4. Fallback no cache local
     try {
       const cached = localStorage.getItem(LATEST_VERSION_STORAGE_KEY)
       if (cached && cached.trim()) return formatSystemVersion(cached)
@@ -153,12 +300,14 @@ export const systemUpdateService = {
         performedAt: row.performed_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        isCurrent: Boolean(row.is_current),
       }))
 
       setLocalCache(mapped)
 
       // Atualiza o cache da versão mais recente a partir da lista retornada
-      const latestWithVersion = mapped.find((item) => item.version && item.version.trim().length > 0)
+      const currentMarked = mapped.find((item) => item.isCurrent && item.version)
+      const latestWithVersion = currentMarked || mapped.find((item) => item.version && item.version.trim().length > 0)
       if (latestWithVersion?.version) {
         systemUpdateService.notifyVersionChange(formatSystemVersion(latestWithVersion.version))
       }
@@ -176,6 +325,17 @@ export const systemUpdateService = {
         data: { user },
       } = await supabase.auth.getUser()
 
+      const shouldBeCurrent = params.isCurrent ?? Boolean(params.version && params.version.trim().length > 0)
+
+      // Se esta for marcada como versão atual, desmarca as anteriores
+      if (shouldBeCurrent) {
+        try {
+          await supabase.from('system_updates').update({ is_current: false }).eq('is_current', true)
+        } catch {
+          // ignora se a coluna is_current ainda não estiver disponível
+        }
+      }
+
       const payload = {
         version: params.version?.trim() || null,
         title: params.title.trim(),
@@ -185,6 +345,7 @@ export const systemUpdateService = {
         author_email: params.authorEmail?.trim() || null,
         modules: params.modules || [],
         performed_at: params.performedAt || new Date().toISOString(),
+        is_current: shouldBeCurrent,
         created_by: user?.id || null,
       }
 
@@ -211,13 +372,20 @@ export const systemUpdateService = {
         performedAt: data.performed_at,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
+        isCurrent: Boolean(data.is_current),
       }
 
+      // Atualiza o cache local
+      const currentCache = getLocalCache()
+      setLocalCache([created, ...currentCache.filter((u) => u.id !== created.id)])
+
       // Notifica e atualiza versão mais recente imediatamente
-      if (created.version) {
+      if (shouldBeCurrent && created.version) {
+        void systemUpdateService.setCurrentVersion(created.version, created.id)
+      } else if (created.version) {
         systemUpdateService.notifyVersionChange(formatSystemVersion(created.version))
+        void systemUpdateService.getLatestVersion()
       }
-      void systemUpdateService.getLatestVersion()
 
       return { success: true, data: created }
     } catch (err) {
@@ -241,12 +409,21 @@ export const systemUpdateService = {
       if (params.authorEmail !== undefined) payload.author_email = params.authorEmail?.trim() || null
       if (params.modules !== undefined) payload.modules = params.modules
       if (params.performedAt !== undefined) payload.performed_at = params.performedAt
+      if (params.isCurrent !== undefined) payload.is_current = params.isCurrent
+
+      if (params.isCurrent) {
+        try {
+          await supabase.from('system_updates').update({ is_current: false }).neq('id', id)
+        } catch {
+          // ignore
+        }
+      }
 
       const { data, error } = await supabase
         .from('system_updates')
         .update(payload)
-        .eq('id', id)
         .select('*')
+        .eq('id', id)
         .single()
 
       if (error) {
@@ -266,13 +443,20 @@ export const systemUpdateService = {
         performedAt: data.performed_at,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
+        isCurrent: Boolean(data.is_current),
       }
 
+      // Atualiza cache local
+      const currentCache = getLocalCache()
+      setLocalCache(currentCache.map((u) => (u.id === updated.id ? updated : u)))
+
       // Notifica e atualiza versão mais recente imediatamente
-      if (updated.version) {
+      if (params.isCurrent && updated.version) {
+        void systemUpdateService.setCurrentVersion(updated.version, updated.id)
+      } else if (updated.version) {
         systemUpdateService.notifyVersionChange(formatSystemVersion(updated.version))
+        void systemUpdateService.getLatestVersion()
       }
-      void systemUpdateService.getLatestVersion()
 
       return { success: true, data: updated }
     } catch (err) {
@@ -289,6 +473,9 @@ export const systemUpdateService = {
       if (error) {
         return { success: false, error: error.message }
       }
+
+      const currentCache = getLocalCache().filter((u) => u.id !== id)
+      setLocalCache(currentCache)
 
       // Atualiza versão mais recente após exclusão
       void systemUpdateService.getLatestVersion()

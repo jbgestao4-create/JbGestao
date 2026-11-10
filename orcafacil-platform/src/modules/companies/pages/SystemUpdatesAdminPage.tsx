@@ -18,11 +18,15 @@ import {
   ShieldCheck,
   Tag,
   X,
+  Star,
+  Sparkles,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { isSystemOwner } from '@shared/utils/system-owner'
+import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import {
   systemUpdateService,
+  formatSystemVersion,
   type SystemUpdate,
   type SystemUpdateType,
 } from '@shared/services/system-update.service'
@@ -30,6 +34,7 @@ import {
 export function SystemUpdatesAdminPage() {
   const { user, profile } = useAuth()
   const navigate = useNavigate()
+  const { version: activeSystemVersion, setCustomVersion, refreshVersion } = useSystemVersion()
 
   const [updates, setUpdates] = useState<SystemUpdate[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -37,6 +42,11 @@ export function SystemUpdatesAdminPage() {
   // Modal de cadastro / edição
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUpdate, setEditingUpdate] = useState<SystemUpdate | null>(null)
+
+  // Modal rápido de definir versão atual
+  const [isQuickVersionModalOpen, setIsQuickVersionModalOpen] = useState(false)
+  const [quickVersionInput, setQuickVersionInput] = useState('')
+  const [isSavingQuickVersion, setIsSavingQuickVersion] = useState(false)
 
   // Campos do formulário
   const [version, setVersion] = useState('')
@@ -47,6 +57,7 @@ export function SystemUpdatesAdminPage() {
   const [authorEmail, setAuthorEmail] = useState('')
   const [modulesInput, setModulesInput] = useState('')
   const [performedAt, setPerformedAt] = useState('')
+  const [isCurrent, setIsCurrent] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -58,6 +69,7 @@ export function SystemUpdatesAdminPage() {
     if (res.success && res.data) {
       setUpdates(res.data)
     }
+    void refreshVersion()
     setIsLoading(false)
   }
 
@@ -95,6 +107,8 @@ export function SystemUpdatesAdminPage() {
     setAuthorName(profile?.displayName || user?.email?.split('@')[0] || 'Bryan Mendes')
     setAuthorEmail(user?.email || 'bryanmendes968@gmail.com')
     setModulesInput('')
+    setIsCurrent(true)
+
     // Formato YYYY-MM-DDTHH:mm para datetime-local
     const now = new Date()
     const tzOffset = now.getTimezoneOffset() * 60000
@@ -113,6 +127,8 @@ export function SystemUpdatesAdminPage() {
     setAuthorName(item.authorName)
     setAuthorEmail(item.authorEmail || '')
     setModulesInput(item.modules ? item.modules.join(', ') : '')
+    setIsCurrent(Boolean(item.isCurrent || (item.version && item.version === activeSystemVersion)))
+
     try {
       const date = new Date(item.performedAt)
       const tzOffset = date.getTimezoneOffset() * 60000
@@ -147,10 +163,11 @@ export function SystemUpdatesAdminPage() {
       .filter(Boolean)
 
     const isoPerformedAt = performedAt ? new Date(performedAt).toISOString() : new Date().toISOString()
+    const cleanVersion = version.trim() ? formatSystemVersion(version.trim()) : null
 
     if (editingUpdate) {
       const res = await systemUpdateService.update(editingUpdate.id, {
-        version: version.trim() || null,
+        version: cleanVersion,
         title: title.trim(),
         description: description.trim(),
         type,
@@ -158,6 +175,7 @@ export function SystemUpdatesAdminPage() {
         authorEmail: authorEmail.trim() || null,
         modules: parsedModules,
         performedAt: isoPerformedAt,
+        isCurrent,
       })
 
       setIsSubmitting(false)
@@ -165,12 +183,21 @@ export function SystemUpdatesAdminPage() {
       if (!res.success) {
         setFormError(`Erro ao atualizar: ${res.error}`)
       } else {
-        setUpdates((prev) => prev.map((u) => (u.id === editingUpdate.id ? res.data : u)))
+        setUpdates((prev) =>
+          prev.map((u) => {
+            if (u.id === editingUpdate.id) return res.data
+            if (isCurrent) return { ...u, isCurrent: false }
+            return u
+          }),
+        )
+        if (isCurrent && cleanVersion) {
+          void setCustomVersion(cleanVersion)
+        }
         handleCloseModal()
       }
     } else {
       const res = await systemUpdateService.create({
-        version: version.trim() || null,
+        version: cleanVersion,
         title: title.trim(),
         description: description.trim(),
         type,
@@ -178,6 +205,7 @@ export function SystemUpdatesAdminPage() {
         authorEmail: authorEmail.trim() || null,
         modules: parsedModules,
         performedAt: isoPerformedAt,
+        isCurrent,
       })
 
       setIsSubmitting(false)
@@ -185,10 +213,41 @@ export function SystemUpdatesAdminPage() {
       if (!res.success) {
         setFormError(`Erro ao cadastrar: ${res.error}`)
       } else {
-        setUpdates((prev) => [res.data, ...prev])
+        setUpdates((prev) => [
+          res.data,
+          ...prev.map((u) => (isCurrent ? { ...u, isCurrent: false } : u)),
+        ])
+        if (isCurrent && cleanVersion) {
+          void setCustomVersion(cleanVersion)
+        }
         handleCloseModal()
       }
     }
+  }
+
+  const handleSetAsCurrent = async (item: SystemUpdate) => {
+    if (!item.version) return
+    const formatted = formatSystemVersion(item.version)
+    await setCustomVersion(formatted)
+    await systemUpdateService.setCurrentVersion(formatted, item.id)
+
+    setUpdates((prev) =>
+      prev.map((u) => ({
+        ...u,
+        isCurrent: u.id === item.id,
+      })),
+    )
+  }
+
+  const handleSaveQuickVersion = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!quickVersionInput.trim()) return
+
+    setIsSavingQuickVersion(true)
+    const formatted = formatSystemVersion(quickVersionInput.trim())
+    await setCustomVersion(formatted)
+    setIsSavingQuickVersion(false)
+    setIsQuickVersionModalOpen(false)
   }
 
   const handleDelete = async (id: string) => {
@@ -197,6 +256,7 @@ export function SystemUpdatesAdminPage() {
     const res = await systemUpdateService.delete(id)
     if (res.success) {
       setUpdates((prev) => prev.filter((u) => u.id !== id))
+      void refreshVersion()
     }
   }
 
@@ -236,7 +296,6 @@ export function SystemUpdatesAdminPage() {
     }
   }
 
-  const latestVersion = updates.find((u) => u.version)?.version || 'v2.4.0'
   const latestAuthor = updates[0]?.authorName || 'Bryan Mendes'
 
   return (
@@ -266,7 +325,7 @@ export function SystemUpdatesAdminPage() {
                 </span>
               </div>
               <p className="mt-1 text-sm text-gray-500 dark:text-slate-400 max-w-2xl">
-                Registre e acompanhe todas as versões, melhorias, correções e manutenções do software, identificando quem realizou cada atualização e as mudanças entregues.
+                Registre e acompanhe todas as versões, melhorias, correções e manutenções do software. Qualquer nova versão cadastrada atualiza automaticamente o selo no topo da página inicial e em todo o sistema.
               </p>
             </div>
           </div>
@@ -308,18 +367,31 @@ export function SystemUpdatesAdminPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 flex items-center justify-center shrink-0">
-            <Rocket className="w-6 h-6" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 flex items-center justify-center shrink-0">
+              <Rocket className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                Versão Atual no Sistema
+              </span>
+              <span className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
+                {activeSystemVersion}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Versão Atual
-            </span>
-            <span className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
-              {latestVersion}
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setQuickVersionInput(activeSystemVersion)
+              setIsQuickVersionModalOpen(true)
+            }}
+            className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 font-medium cursor-pointer transition"
+            title="Alterar versão atual diretamente"
+          >
+            Alterar
+          </button>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs flex items-center gap-4">
@@ -344,7 +416,7 @@ export function SystemUpdatesAdminPage() {
             Histórico Cronológico de Atualizações
           </h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Todas as manutenções, novidades e ajustes implementados, organizados pela data em que foram realizados.
+            Todas as manutenções, novidades e ajustes implementados. Ao registrar ou definir uma versão como atual, ela passa a ser exibida automaticamente na página inicial.
           </p>
         </div>
 
@@ -364,20 +436,34 @@ export function SystemUpdatesAdminPage() {
                 timeStyle: 'short',
               })
 
+              const isCurrentVersion =
+                item.isCurrent || (Boolean(item.version) && formatSystemVersion(item.version) === activeSystemVersion)
+
               return (
                 <div key={item.id} className="relative group">
                   {/* Ponto na timeline */}
-                  <div className="absolute -left-[31px] sm:-left-[39px] top-1.5 w-4 h-4 rounded-full bg-white dark:bg-slate-900 border-4 border-indigo-600" />
+                  <div
+                    className={`absolute -left-[31px] sm:-left-[39px] top-1.5 w-4 h-4 rounded-full bg-white dark:bg-slate-900 border-4 ${
+                      isCurrentVersion ? 'border-emerald-500 ring-2 ring-emerald-300' : 'border-indigo-600'
+                    }`}
+                  />
 
-                  {/* Card da Atualização */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 transition hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 dark:border-slate-700/60 pb-4">
-                      <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4 hover:border-indigo-200 dark:hover:border-slate-700 transition">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         {item.version && (
-                          <span className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-600 text-white shadow-xs">
-                            {item.version}
+                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/50">
+                            {formatSystemVersion(item.version)}
                           </span>
                         )}
+
+                        {isCurrentVersion && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800">
+                            <Star className="w-3.5 h-3.5 fill-emerald-500 text-emerald-600" />
+                            Versão Atual do Sistema
+                          </span>
+                        )}
+
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${badge.badgeClass}`}>
                           <BadgeIcon className="w-3.5 h-3.5" />
                           {badge.label}
@@ -388,7 +474,18 @@ export function SystemUpdatesAdminPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        {!isCurrentVersion && item.version && (
+                          <button
+                            type="button"
+                            onClick={() => void handleSetAsCurrent(item)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 cursor-pointer transition"
+                            title="Tornar esta a versão atual ativa no sistema"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Definir como Atual
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleOpenEditModal(item)}
@@ -456,6 +553,72 @@ export function SystemUpdatesAdminPage() {
         )}
       </div>
 
+      {/* MODAL RÁPIDO PARA ALTERAR VERSÃO ATUAL */}
+      {isQuickVersionModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-400 flex items-center justify-center">
+                  <Rocket className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                  Alterar Versão Atual do Sistema
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickVersionModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickVersion} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Número / Código da Versão:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={quickVersionInput}
+                  onChange={(e) => setQuickVersionInput(e.target.value)}
+                  placeholder="Ex: v2.5.0 ou 2.5"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm font-mono text-gray-900 dark:text-white"
+                />
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  Ao salvar, a versão é imediatamente propagada em tempo real para a página inicial (ao lado de ControleSoft) e para todos os usuários logados.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickVersionModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingQuickVersion}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSavingQuickVersion ? 'Salvando...' : 'Aplicar Versão'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE CADASTRO / EDIÇÃO DE ATUALIZAÇÃO */}
       {isModalOpen && (
         <div
@@ -510,6 +673,23 @@ export function SystemUpdatesAdminPage() {
                     className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-gray-900 dark:text-white"
                   />
                 </div>
+              </div>
+
+              {/* OPÇÃO DE DEFINIR COMO VERSÃO ATUAL DO SISTEMA */}
+              <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="isCurrentVersionCheckbox"
+                  checked={isCurrent}
+                  onChange={(e) => setIsCurrent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="isCurrentVersionCheckbox" className="text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <strong className="text-blue-900 dark:text-blue-300 font-semibold block">
+                    Definir como Versão Atual do Sistema
+                  </strong>
+                  Atualiza automaticamente o selo de versão exibido na página inicial (Dashboard) e em toda a aplicação assim que salvar.
+                </label>
               </div>
 
               {/* QUEM REALIZOU A ATUALIZAÇÃO */}

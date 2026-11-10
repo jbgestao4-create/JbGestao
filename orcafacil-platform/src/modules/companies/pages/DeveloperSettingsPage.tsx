@@ -23,6 +23,7 @@ import { announcementService, type SystemAnnouncement } from '@shared/services/a
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { systemNotificationService } from '@shared/services/system-notification.service'
 import { systemUpdateService } from '@shared/services/system-update.service'
+import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import {
   getGeminiApiKey,
   setGeminiApiKey,
@@ -33,6 +34,7 @@ import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggesti
 export function DeveloperSettingsPage() {
   const { user } = useAuth()
   const { currentOrganization } = useOrganization()
+  const { version: systemVersion } = useSystemVersion()
   const navigate = useNavigate()
 
   const [companiesCount, setCompaniesCount] = useState<number | null>(null)
@@ -201,10 +203,10 @@ export function DeveloperSettingsPage() {
     {
       id: 'system-updates',
       title: 'Atualização do Sistema',
-      badge: updatesCount !== null ? `${updatesCount} registradas` : 'Histórico ativo',
-      badgeColor: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300',
+      badge: updatesCount !== null ? `${systemVersion} • ${updatesCount} entregas` : systemVersion,
+      badgeColor: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300 font-mono font-bold',
       description:
-        'Acompanhe e registre o histórico completo de releases, novidades e correções do software, detalhando quem realizou cada atualização e as mudanças entregues.',
+        'Acompanhe e registre o histórico completo de releases, novidades e correções do software, definindo a versão atual exibida em tempo real no topo do sistema.',
       actionText: 'Ver Atualizações',
       path: '/admin/system-updates',
       icon: GitBranch,

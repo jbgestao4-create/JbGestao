@@ -72,8 +72,9 @@ export function FeedbackWidget() {
     if (!orgId) return
 
     // Assina atualizações em tempo real das mensagens
+    const channelName = `feedback-replies-${orgId}-${Math.random().toString(36).substring(2, 9)}`
     const channel = supabase
-      .channel(`feedback-replies-user-${orgId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {

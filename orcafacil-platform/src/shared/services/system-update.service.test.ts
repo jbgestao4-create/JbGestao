@@ -20,13 +20,14 @@ describe('systemUpdateService', () => {
     const { supabase } = await import('@app/config/supabase')
     const queryMock: any = {}
     queryMock.select = vi.fn().mockReturnValue(queryMock)
+    queryMock.eq = vi.fn().mockReturnValue(queryMock)
     queryMock.not = vi.fn().mockReturnValue(queryMock)
     queryMock.neq = vi.fn().mockReturnValue(queryMock)
     queryMock.order = vi.fn().mockReturnValue(queryMock)
     queryMock.limit = vi.fn().mockReturnValue(queryMock)
     queryMock.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null })
 
-    vi.mocked(supabase.from).mockReturnValueOnce(queryMock)
+    vi.mocked(supabase.from).mockReturnValue(queryMock)
 
     const version = await systemUpdateService.getLatestVersion()
     expect(version).toBe('v1.0')
@@ -48,13 +49,14 @@ describe('systemUpdateService', () => {
     const { supabase } = await import('@app/config/supabase')
     const queryMock: any = {}
     queryMock.select = vi.fn().mockReturnValue(queryMock)
+    queryMock.eq = vi.fn().mockReturnValue(queryMock)
     queryMock.not = vi.fn().mockReturnValue(queryMock)
     queryMock.neq = vi.fn().mockReturnValue(queryMock)
     queryMock.order = vi.fn().mockReturnValue(queryMock)
     queryMock.limit = vi.fn().mockReturnValue(queryMock)
     queryMock.maybeSingle = vi.fn().mockRejectedValue(new Error('Network error'))
 
-    vi.mocked(supabase.from).mockReturnValueOnce(queryMock)
+    vi.mocked(supabase.from).mockReturnValue(queryMock)
 
     const version = await systemUpdateService.getLatestVersion()
     expect(version).toBe('v2.4.0')
@@ -66,5 +68,25 @@ describe('systemUpdateService', () => {
 
     systemUpdateService.notifyVersionChange('v2.1.0')
     expect(localStorage.getItem('jb_system_latest_version')).toBe('v2.1.0')
+  })
+
+  it('setCurrentVersion persiste a versão no localStorage e dispara notificação', async () => {
+    const { supabase } = await import('@app/config/supabase')
+    const queryMock: any = {}
+    queryMock.upsert = vi.fn().mockResolvedValue({ data: null, error: null })
+    queryMock.update = vi.fn().mockReturnValue(queryMock)
+    queryMock.eq = vi.fn().mockResolvedValue({ data: null, error: null })
+    queryMock.neq = vi.fn().mockResolvedValue({ data: null, error: null })
+    vi.mocked(supabase.from).mockReturnValue(queryMock)
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+    const res = await systemUpdateService.setCurrentVersion('3.0.0')
+
+    expect(res.success).toBe(true)
+    if (res.success) {
+      expect(res.data).toBe('v3.0.0')
+    }
+    expect(localStorage.getItem('jb_system_latest_version')).toBe('v3.0.0')
+    expect(dispatchSpy).toHaveBeenCalled()
   })
 })

@@ -4,6 +4,8 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Pencil,
+  Phone,
   RefreshCw,
   Search,
   Shield,
@@ -18,6 +20,7 @@ import {
 import { Button } from '@shared/components/ui/Button'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { organizationService } from '@modules/organizations/services/organization.service'
+import { formatPhoneNumber } from '@shared/utils/phone'
 import type { ServiceResult } from '@shared/types/common'
 import {
   companyManagementService,
@@ -48,12 +51,23 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
   const [isAddUserOpen, setIsAddUserOpen] = useState(false)
   const [newUserName, setNewUserName] = useState('')
   const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserPhone, setNewUserPhone] = useState('')
   const [newUserJobTitle, setNewUserJobTitle] = useState('')
   const [newUserPassword, setNewUserPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [newUserRole, setNewUserRole] = useState<'admin' | 'member'>('member')
   const [isAddingUser, setIsAddingUser] = useState(false)
   const [addUserError, setAddUserError] = useState<string | null>(null)
+
+  // Edição de informações do usuário
+  const [editingUser, setEditingUser] = useState<CompanyUserItem | null>(null)
+  const [editUserName, setEditUserName] = useState('')
+  const [editUserEmail, setEditUserEmail] = useState('')
+  const [editUserPhone, setEditUserPhone] = useState('')
+  const [editUserJobTitle, setEditUserJobTitle] = useState('')
+  const [editUserRole, setEditUserRole] = useState<'admin' | 'member'>('member')
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editUserError, setEditUserError] = useState<string | null>(null)
 
   const loadUsers = async () => {
     if (!company) return
@@ -77,9 +91,12 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
       setIsAddUserOpen(false)
       setNewUserName('')
       setNewUserEmail('')
+      setNewUserPhone('')
       setNewUserJobTitle('')
       setNewUserPassword('')
       setAddUserError(null)
+      setEditingUser(null)
+      setEditUserError(null)
       void loadUsers()
     }
   }, [isOpen, company?.id])
@@ -113,6 +130,7 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
     if (!company) return
     const cleanName = newUserName.trim()
     const cleanEmail = newUserEmail.trim().toLowerCase()
+    const cleanPhone = newUserPhone.replace(/\D/g, '')
     const cleanPw = newUserPassword.trim()
 
     if (!cleanName || cleanName.length < 2) {
@@ -140,6 +158,7 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
       organizationId: company.id,
       name: cleanName,
       email: cleanEmail,
+      phone: cleanPhone || null,
       password: effectivePw,
       role: newUserRole,
       jobTitle: newUserJobTitle.trim() || null,
@@ -154,11 +173,72 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
       setIsAddUserOpen(false)
       setNewUserName('')
       setNewUserEmail('')
+      setNewUserPhone('')
       setNewUserJobTitle('')
       setNewUserPassword('')
       await loadUsers()
     } else {
       setAddUserError(res.error || 'Não foi possível cadastrar o usuário nesta organização.')
+    }
+  }
+
+  const handleStartEditUser = (user: CompanyUserItem) => {
+    setEditingUser(user)
+    setEditUserName(user.displayName)
+    setEditUserEmail(user.email)
+    setEditUserPhone(user.phone ? formatPhoneNumber(user.phone) : '')
+    setEditUserJobTitle(user.jobTitle || '')
+    setEditUserRole(user.role === 'admin' ? 'admin' : 'member')
+    setEditUserError(null)
+  }
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!company || !editingUser) return
+
+    const cleanName = editUserName.trim()
+    const cleanEmail = editUserEmail.trim().toLowerCase()
+    const cleanPhone = editUserPhone.replace(/\D/g, '')
+
+    if (!cleanName || cleanName.length < 2) {
+      setEditUserError('Informe o nome completo do usuário.')
+      return
+    }
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setEditUserError('Informe um e-mail válido.')
+      return
+    }
+
+    if (cleanPhone && cleanPhone.length < 10) {
+      setEditUserError('O telefone / WhatsApp deve conter DDD e no mínimo 10 dígitos.')
+      return
+    }
+
+    setIsSavingEdit(true)
+    setEditUserError(null)
+
+    const res = await companyManagementService.updateCompanyUser(
+      company.id,
+      editingUser.userId,
+      {
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone || null,
+        jobTitle: editUserJobTitle.trim() || null,
+        role: editUserRole,
+      },
+    )
+
+    setIsSavingEdit(false)
+
+    if (res.success) {
+      setSuccessMsg(`Informações do usuário "${cleanName}" atualizadas com sucesso!`)
+      setTimeout(() => setSuccessMsg(null), 5000)
+      setEditingUser(null)
+      await loadUsers()
+    } else {
+      setEditUserError(res.error || 'Não foi possível atualizar as informações do usuário.')
     }
   }
 
@@ -386,6 +466,22 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
 
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                    Telefone / Celular
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="(11) 99999-9999"
+                    value={newUserPhone}
+                    onChange={(e) => setNewUserPhone(formatPhoneNumber(e.target.value))}
+                    className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                  />
+                  <p className="mt-0.5 text-[10px] text-gray-500 dark:text-slate-400">
+                    Número de telefone ou celular (opcional).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 dark:text-slate-300 mb-1">
                     Cargo / Função
                   </label>
                   <input
@@ -480,11 +576,12 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] text-left text-xs text-gray-600 dark:text-slate-300">
+                <table className="w-full min-w-[760px] text-left text-xs text-gray-600 dark:text-slate-300">
                   <thead className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/80 dark:bg-slate-800/60 font-semibold uppercase text-gray-400 dark:text-slate-400">
                     <tr>
                       <th className="px-4 py-3">Colaborador / Nome</th>
                       <th className="px-4 py-3">E-mail de Login</th>
+                      <th className="px-4 py-3">Telefone / Contato</th>
                       <th className="px-4 py-3">Perfil / Cargo</th>
                       <th className="px-4 py-3">Cadastro</th>
                       <th className="px-4 py-3 text-right">Ação</th>
@@ -519,6 +616,17 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
                             {u.email || <span className="text-gray-400 italic">Sem e-mail informado</span>}
                           </td>
 
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {u.phone ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800/60">
+                                <Phone className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                {formatPhoneNumber(u.phone)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 italic text-[11px]">Não cadastrado</span>
+                            )}
+                          </td>
+
                           <td className="px-4 py-3">
                             {getRoleBadge(u.role)}
                           </td>
@@ -534,8 +642,18 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => handleStartEditUser(u)}
+                                className="gap-1.5 text-xs font-semibold text-blue-700 border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:text-blue-400 dark:hover:bg-blue-950/50"
+                                title={`Editar informações de ${u.displayName}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                Editar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={() => handleStartPasswordReset(u)}
-                                className="gap-1.5 text-xs font-semibold text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:text-blue-400 dark:hover:bg-blue-950/50"
+                                className="gap-1.5 text-xs font-semibold text-amber-700 border-amber-200 hover:bg-amber-50 dark:border-amber-900/60 dark:text-amber-400 dark:hover:bg-amber-950/50"
                                 title={`Redefinir senha de ${u.displayName}`}
                               >
                                 <KeyRound className="h-3.5 w-3.5" />
@@ -573,6 +691,135 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
           </Button>
         </div>
       </div>
+
+      {/* Modal Editar Informações do Usuário */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-user-modal-title"
+            className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <h3 id="edit-user-modal-title" className="text-base font-bold text-gray-900 dark:text-white">
+                  Editar Informações do Usuário
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                aria-label="Fechar edição"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {editUserError && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs font-medium text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-300">
+                {editUserError}
+              </div>
+            )}
+
+            <form onSubmit={(e) => void handleSaveEditUser(e)} className="mt-4 space-y-3.5 flex-1 overflow-y-auto">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  value={editUserName}
+                  onChange={(e) => setEditUserName(e.target.value)}
+                  required
+                  maxLength={100}
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  E-mail de Acesso *
+                </label>
+                <input
+                  type="email"
+                  value={editUserEmail}
+                  onChange={(e) => setEditUserEmail(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  Telefone / Celular
+                </label>
+                <input
+                  type="tel"
+                  placeholder="(11) 99999-9999"
+                  value={editUserPhone}
+                  onChange={(e) => setEditUserPhone(formatPhoneNumber(e.target.value))}
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                />
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+                  Número de telefone ou celular do usuário.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  Cargo na Empresa
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex.: Vendedor, Balconista..."
+                  value={editUserJobTitle}
+                  onChange={(e) => setEditUserJobTitle(e.target.value)}
+                  maxLength={100}
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                  Perfil de Acesso
+                </label>
+                <select
+                  value={editUserRole}
+                  onChange={(e) => setEditUserRole(e.target.value as 'admin' | 'member')}
+                  disabled={editingUser.role === 'owner'}
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none disabled:opacity-50"
+                >
+                  <option value="member">Colaborador (Funcionário)</option>
+                  <option value="admin">Administrador da Empresa</option>
+                  {editingUser.role === 'owner' && <option value="owner">Proprietário (Imutável)</option>}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingUser(null)}
+                  disabled={isSavingEdit}
+                  className="text-xs"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5"
+                >
+                  {isSavingEdit ? 'Salvando...' : 'Salvar Alterações'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <ConfirmActionDialog
         open={Boolean(confirmDeleteUser)}
