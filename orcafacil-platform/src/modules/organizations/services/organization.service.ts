@@ -365,13 +365,13 @@ export const organizationService = {
       const cleanPassword = params.password ? params.password.trim() : null
       let createdUserId: string | null = null
 
-      // Validação: a senha inicial deve ter pelo menos 8 caracteres para compatibilidade com o banco remoto
-      if (cleanPassword && cleanPassword.length < 8) {
-        return { success: false, error: 'A senha inicial deve ter pelo menos 8 caracteres.' }
+      // Validação: a senha inicial deve ter pelo menos 6 caracteres
+      if (cleanPassword && cleanPassword.length < 6) {
+        return { success: false, error: 'A senha inicial deve ter pelo menos 6 caracteres.' }
       }
 
       // 1. Proativamente cria/garante a conta de usuário em auth.users via cliente efêmero
-      if (cleanPassword && cleanPassword.length >= 8) {
+      if (cleanPassword && cleanPassword.length >= 6) {
         try {
           const ephemeralAuthClient = createClient(env.supabase.url, env.supabase.anonKey, {
             auth: {

@@ -151,8 +151,7 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
     setIsAddingUser(true)
     setAddUserError(null)
 
-    // A RPC add_organization_member requer no mínimo 8 caracteres
-    const effectivePw = cleanPw.length >= 8 ? cleanPw : `${cleanPw}123`
+    const effectivePw = cleanPw
 
     const res = await organizationService.addMember({
       organizationId: company.id,
@@ -315,7 +314,7 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
         role="dialog"
         aria-modal="true"
         aria-labelledby="company-users-modal-title"
-        className="flex max-h-[92vh] w-full max-w-4xl flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+        className="flex max-h-[92vh] w-full max-w-6xl xl:max-w-7xl flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 p-5 dark:border-slate-800">
@@ -575,8 +574,8 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-xs text-gray-600 dark:text-slate-300">
+              <div className="overflow-x-auto lg:overflow-x-visible">
+                <table className="w-full text-left text-xs text-gray-600 dark:text-slate-300">
                   <thead className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/80 dark:bg-slate-800/60 font-semibold uppercase text-gray-400 dark:text-slate-400">
                     <tr>
                       <th className="px-4 py-3">Colaborador / Nome</th>
