@@ -1,4 +1,5 @@
 import { useState, type SyntheticEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { authService } from '../services/auth.service'
@@ -49,6 +50,7 @@ const FONT_SIZE_OPTIONS: { value: FontSizePreference; label: string; sample: str
 ]
 
 export function ProfilePage() {
+  const navigate = useNavigate()
   const {
     user,
     profile,
@@ -118,6 +120,8 @@ export function ProfilePage() {
     if (res.success) {
       if (mustChangePassword) {
         await refreshUser()
+        navigate('/', { replace: true })
+        return
       }
       setMessage('Senha atualizada com sucesso!')
       setNewPassword('')
