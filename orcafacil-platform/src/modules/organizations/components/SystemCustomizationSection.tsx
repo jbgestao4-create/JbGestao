@@ -995,7 +995,7 @@ export function SystemCustomizationSection() {
               size="md"
               onClick={handleSaveColor}
               isLoading={isSavingColor}
-              className="gap-2 text-sm font-semibold px-5 shadow-xs"
+              className="gap-2 text-sm font-bold px-6 shadow-md bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:via-indigo-700 hover:to-blue-700 text-white border-0 transition-all hover:scale-[1.02]"
             >
               <Save className="w-4 h-4" />
               Salvar personalização de cores

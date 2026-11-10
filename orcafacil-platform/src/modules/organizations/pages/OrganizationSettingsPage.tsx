@@ -28,6 +28,7 @@ import {
   Building2,
   Palette,
   Phone,
+  Sparkles,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -606,7 +607,7 @@ export function OrganizationSettingsPage() {
       </div>
 
       {/* OPÇÕES DO MÓDULO ORGANIZADOR */}
-      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
+      <div className="flex items-center gap-3 border-b border-gray-200 dark:border-slate-800 pb-3">
         <button
           type="button"
           onClick={() => handleTabChange('general')}
@@ -623,14 +624,27 @@ export function OrganizationSettingsPage() {
         <button
           type="button"
           onClick={() => handleTabChange('customization')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+          className={`group relative flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer shadow-xs ${
             activeTab === 'customization'
-              ? 'bg-white dark:bg-slate-800 text-[var(--theme-primary,#2563eb)] shadow-xs border border-gray-200 dark:border-slate-700'
-              : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+              ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white shadow-md shadow-purple-500/25 ring-2 ring-purple-400/50 scale-[1.02]'
+              : 'bg-gradient-to-r from-purple-50 via-pink-50 to-amber-50 dark:from-purple-950/40 dark:via-pink-950/40 dark:to-amber-950/40 text-purple-700 dark:text-purple-300 border-2 border-purple-300 dark:border-purple-600/70 hover:border-purple-500 hover:shadow-md hover:scale-[1.02]'
           }`}
         >
-          <Palette className="w-4 h-4" />
-          Personalização do Sistema
+          <span
+            className={`p-1 rounded-md transition-colors ${
+              activeTab === 'customization'
+                ? 'bg-white/20 text-white'
+                : 'bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-300 group-hover:bg-purple-200'
+            }`}
+          >
+            <Palette className="w-4 h-4" />
+          </span>
+          <span>Personalização do Sistema</span>
+          <Sparkles
+            className={`w-3.5 h-3.5 transition-transform group-hover:rotate-12 ${
+              activeTab === 'customization' ? 'text-amber-300 animate-pulse' : 'text-amber-500'
+            }`}
+          />
         </button>
       </div>
 
