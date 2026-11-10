@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Restringe a injeção automática de variáveis no bundle exclusivamente ao prefixo VITE_SUPABASE_
+  // Isso impede que variáveis de sistema da Vercel (VITE_VERCEL_GIT_COMMIT_*, VITE_VERCEL_DEPLOYMENT_ID, etc.)
+  // sejam expostas no objeto import.meta.env do cliente.
+  envPrefix: 'VITE_SUPABASE_',
   plugins: [
     react(),
     tailwindcss(),

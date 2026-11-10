@@ -1,4 +1,4 @@
-import { useState, useId, useRef } from 'react'
+import { useState, useId, useRef, useEffect } from 'react'
 import { useThemeColor } from '@shared/context/ThemeColorContext'
 import { useTheme } from '@shared/context/ThemeContext'
 import { useOrganization } from '../context/OrganizationContext'
@@ -29,6 +29,77 @@ import {
   Eye,
 } from 'lucide-react'
 
+/**
+ * Redimensiona e otimiza imagens no navegador antes do upload para evitar
+ * exceder o limite de LocalStorage e reduzir largura de banda.
+ */
+async function optimizeImageFile(file: File): Promise<{ file: File; dataUrl: string }> {
+  if (file.type === 'image/svg+xml') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve({ file, dataUrl: reader.result as string })
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      const maxDim = 1200
+      let { width, height } = img
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width)
+          width = maxDim
+        } else {
+          width = Math.round((width * maxDim) / height)
+          height = maxDim
+        }
+      }
+
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        const reader = new FileReader()
+        reader.onload = () => resolve({ file, dataUrl: reader.result as string })
+        reader.onerror = () => resolve({ file, dataUrl: '' })
+        reader.readAsDataURL(file)
+        return
+      }
+
+      ctx.clearRect(0, 0, width, height)
+      ctx.drawImage(img, 0, 0, width, height)
+      const dataUrl = canvas.toDataURL('image/png', 0.85)
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const optimizedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.png'), {
+            type: 'image/png',
+          })
+          resolve({ file: optimizedFile, dataUrl })
+        } else {
+          resolve({ file, dataUrl })
+        }
+      }, 'image/png', 0.85)
+    }
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      const reader = new FileReader()
+      reader.onload = () => resolve({ file, dataUrl: reader.result as string })
+      reader.onerror = () => resolve({ file, dataUrl: '' })
+      reader.readAsDataURL(file)
+    }
+
+    img.src = objectUrl
+  })
+}
+
 export function SystemCustomizationSection() {
   // -------------------------------------------------------------------------
   // 1. TEMA DE CORES PRIMÁRIAS DO SISTEMA
@@ -56,15 +127,31 @@ export function SystemCustomizationSection() {
   // -------------------------------------------------------------------------
   const { currentOrganization, updatePdvBackground } = useOrganization()
   const [selectedPdvFile, setSelectedPdvFile] = useState<File | null>(null)
-  const [pdvPreviewUrl, setPdvPreviewUrl] = useState<string | null>(
-    currentOrganization?.pdvBackgroundUrl || null,
-  )
+  const [pdvPreviewUrl, setPdvPreviewUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored =
+        (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
+        localStorage.getItem('pdv_bg_last') ||
+        localStorage.getItem('pdv_background_url')
+      if (stored) return stored
+    }
+    return currentOrganization?.pdvBackgroundUrl || currentOrganization?.logoUrl || null
+  })
   const [isUploadingPdv, setIsUploadingPdv] = useState(false)
   const [pdvFeedback, setPdvFeedback] = useState<{
     type: 'success' | 'error'
     text: string
   } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Sincroniza a pré-visualização quando a organização carregar ou for alterada
+  useEffect(() => {
+    if (currentOrganization?.pdvBackgroundUrl && !selectedPdvFile) {
+      setPdvPreviewUrl(currentOrganization.pdvBackgroundUrl)
+    } else if (currentOrganization?.logoUrl && !pdvPreviewUrl && !selectedPdvFile) {
+      setPdvPreviewUrl(currentOrganization.logoUrl)
+    }
+  }, [currentOrganization?.pdvBackgroundUrl, currentOrganization?.logoUrl, selectedPdvFile])
 
   // -------------------------------------------------------------------------
   // ESTADO LOCAL DE CORES E FEEDBACK
@@ -151,13 +238,13 @@ export function SystemCustomizationSection() {
     setIsUploadingPdv(true)
     setPdvFeedback({
       type: 'success',
-      text: 'Salvando e aplicando imagem de fundo no PDV...',
+      text: 'Salvando e aplicando imagem de marca d\'água no PDV...',
     })
 
     try {
       let finalUrl: string | null = base64Fallback || pdvPreviewUrl
 
-      // Se há um arquivo selecionado, faz o upload para o storage (com fallback automático para Base64)
+      // Se há um arquivo selecionado, faz o upload para o storage (com fallback automático para Base64 otimizado)
       if (file) {
         const uploadRes = await organizationService.uploadPdvBackground(
           currentOrganization.id,
@@ -169,18 +256,22 @@ export function SystemCustomizationSection() {
         }
       }
 
-      // Salva no localStorage para disponibilidade instantânea
+      // Salva no localStorage para disponibilidade instantânea com tratamento seguro de quota
       if (typeof window !== 'undefined') {
-        if (finalUrl) {
-          localStorage.setItem(`pdv_bg_${currentOrganization.id}`, finalUrl)
-          localStorage.setItem('pdv_bg_last', finalUrl)
-          localStorage.setItem('pdv_background_url', finalUrl)
-        } else {
-          localStorage.removeItem(`pdv_bg_${currentOrganization.id}`)
-          localStorage.removeItem('pdv_bg_last')
-          localStorage.removeItem('pdv_background_url')
+        try {
+          if (finalUrl) {
+            localStorage.setItem(`pdv_bg_${currentOrganization.id}`, finalUrl)
+            localStorage.setItem('pdv_bg_last', finalUrl)
+            localStorage.setItem('pdv_background_url', finalUrl)
+          } else {
+            localStorage.removeItem(`pdv_bg_${currentOrganization.id}`)
+            localStorage.removeItem('pdv_bg_last')
+            localStorage.removeItem('pdv_background_url')
+          }
+          window.dispatchEvent(new Event('storage'))
+        } catch {
+          // Ignora se a quota do navegador for restrita
         }
-        window.dispatchEvent(new Event('storage'))
       }
 
       // Atualiza o estado da organização
@@ -191,8 +282,8 @@ export function SystemCustomizationSection() {
         setPdvFeedback({
           type: 'success',
           text: finalUrl
-            ? 'Imagem de fundo do PDV aplicada com sucesso! Já está ativa no terminal de vendas.'
-            : 'Imagem de fundo do PDV removida com sucesso.',
+            ? 'Marca d\'água do PDV aplicada com sucesso! Já está ativa em tempo real no terminal de vendas.'
+            : 'Imagem de marca d\'água do PDV removida com sucesso.',
         })
       } else {
         setPdvFeedback({
@@ -223,37 +314,39 @@ export function SystemCustomizationSection() {
       return
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 8 * 1024 * 1024) {
       setPdvFeedback({
         type: 'error',
-        text: 'A imagem deve ter no máximo 5MB.',
+        text: 'A imagem deve ter no máximo 8MB.',
       })
       return
     }
 
-    setSelectedPdvFile(file)
-
-    // Converte imediatamente para Data URL Base64 para exibição e cache local imediato
+    // Processa e otimiza a imagem em segundo plano
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-
+      const { file: optimizedFile, dataUrl } = await optimizeImageFile(file)
+      setSelectedPdvFile(optimizedFile)
       setPdvPreviewUrl(dataUrl)
 
-      if (currentOrganization?.id) {
-        localStorage.setItem(`pdv_bg_${currentOrganization.id}`, dataUrl)
+      // Cache preliminar no localStorage protegido por try-catch
+      if (typeof window !== 'undefined') {
+        try {
+          if (currentOrganization?.id) {
+            localStorage.setItem(`pdv_bg_${currentOrganization.id}`, dataUrl)
+          }
+          localStorage.setItem('pdv_bg_last', dataUrl)
+          localStorage.setItem('pdv_background_url', dataUrl)
+          window.dispatchEvent(new Event('storage'))
+        } catch {
+          // Ignora erro de quota local
+        }
       }
-      localStorage.setItem('pdv_bg_last', dataUrl)
-      localStorage.setItem('pdv_background_url', dataUrl)
 
       // Salva e aplica automaticamente no PDV
-      await savePdvImageProcess(file, dataUrl)
+      await savePdvImageProcess(optimizedFile, dataUrl)
     } catch {
-      // Se falhar a leitura rápida, ainda tenta o processo convencional
+      // Se falhar a otimização rápida, executa o fluxo padrão
+      setSelectedPdvFile(file)
       await savePdvImageProcess(file, null)
     }
   }
@@ -270,12 +363,16 @@ export function SystemCustomizationSection() {
     }
 
     if (typeof window !== 'undefined') {
-      if (currentOrganization?.id) {
-        localStorage.removeItem(`pdv_bg_${currentOrganization.id}`)
+      try {
+        if (currentOrganization?.id) {
+          localStorage.removeItem(`pdv_bg_${currentOrganization.id}`)
+        }
+        localStorage.removeItem('pdv_bg_last')
+        localStorage.removeItem('pdv_background_url')
+        window.dispatchEvent(new Event('storage'))
+      } catch {
+        // Ignora erro
       }
-      localStorage.removeItem('pdv_bg_last')
-      localStorage.removeItem('pdv_background_url')
-      window.dispatchEvent(new Event('storage'))
     }
 
     setIsUploadingPdv(true)
@@ -521,66 +618,64 @@ export function SystemCustomizationSection() {
                 Pré-visualização do Terminal PDV
               </label>
 
-              {/* Mockup do Terminal PDV com Imagem de Fundo */}
-              <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 p-4 shadow-xl select-none min-h-[260px] flex flex-col justify-between">
-                {/* Camada de imagem de fundo com overlay de contraste */}
+              {/* Mockup do Terminal PDV com Marca d'Água */}
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 p-4 shadow-xl select-none min-h-[260px] flex flex-col justify-between">
+                {/* Camada de marca d'água de fundo */}
                 {pdvPreviewUrl ? (
-                  <div className="absolute inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 flex items-center justify-center" aria-hidden="true">
                     <div
-                      className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-300"
+                      className="absolute inset-0 bg-center bg-no-repeat opacity-[0.08] dark:opacity-[0.08] transition-opacity duration-300"
                       style={{
                         backgroundImage: `url("${pdvPreviewUrl}")`,
+                        backgroundSize: '130px',
                       }}
                     />
-                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]" />
                   </div>
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-slate-800 font-mono text-xs z-0 pointer-events-none">
-                    [Fundo Padrão Escuro do PDV]
+                  <div className="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-800 font-mono text-xs z-0 pointer-events-none">
+                    [Marca d'Água Padrão do Sistema]
                   </div>
                 )}
 
                 {/* Header Mockup */}
-                <div className="relative z-10 flex items-center justify-between border-b border-slate-800/80 pb-2 text-[11px] text-slate-400">
+                <div className="relative z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-2 text-[11px] text-slate-500 dark:text-slate-400">
                   <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="font-bold text-white tracking-wide">PDV ONLINE</span>
-                    <span className="text-[10px] text-slate-500">Caixa 01</span>
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-bold text-slate-800 dark:text-white tracking-wide">PDV ONLINE</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">Caixa 01</span>
                   </div>
-                  <div className="font-mono text-[10px] text-emerald-400">F10 Suporte</div>
+                  <div className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">F10 Suporte</div>
                 </div>
 
                 {/* Barcode Search Bar Mockup */}
                 <div className="relative z-10 my-2">
-                  <div className="rounded-xl border border-emerald-500/40 bg-slate-900/90 px-3 py-2 text-xs flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">Leitor de Código de Barras / Produto...</span>
-                    <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded">F2 Bipar</span>
+                  <div className="rounded-xl border border-emerald-500/40 bg-white/90 dark:bg-slate-900/90 px-3 py-2 text-xs flex items-center justify-between shadow-xs">
+                    <span className="text-slate-500 dark:text-slate-400 text-[11px]">Leitor de Código de Barras / Produto...</span>
+                    <span className="bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded">F2 Bipar</span>
                   </div>
                 </div>
 
-                {/* Centro: Caixa Livre / Carrinho */}
-                <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-4 border border-slate-800/80 rounded-xl bg-slate-900/60 backdrop-blur-md my-1">
+                {/* Centro: Carrinho com Marca d'Água Grande */}
+                <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 border border-slate-200 dark:border-slate-800/80 rounded-xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-md my-1 shadow-xs overflow-hidden min-h-[110px]">
                   {pdvPreviewUrl ? (
-                    <div className="mb-2 p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 shadow-lg flex items-center justify-center">
-                      <img
-                        src={pdvPreviewUrl}
-                        alt="Logomarca da Loja"
-                        className="max-h-12 max-w-[130px] object-contain drop-shadow-sm"
-                      />
-                    </div>
+                    <img
+                      src={pdvPreviewUrl}
+                      alt="Logomarca da Loja"
+                      className="max-h-24 max-w-[85%] object-contain opacity-25 dark:opacity-20 drop-shadow-xs select-none pointer-events-none"
+                    />
                   ) : (
-                    <div className="h-8 w-8 rounded-lg bg-slate-800/60 flex items-center justify-center text-slate-500 mb-1">
-                      <ShoppingCart className="w-4 h-4" />
-                    </div>
+                    <img
+                      src="/controlesoft-logo.png"
+                      alt="Marca d'Água Padrão"
+                      className="max-h-24 max-w-[85%] object-contain opacity-20 dark:opacity-15 select-none pointer-events-none"
+                    />
                   )}
-                  <span className="text-xs font-semibold text-slate-200">Caixa Livre • Aguardando Leitura</span>
-                  <span className="text-[10px] text-slate-400 mt-0.5">Imagem de fundo ativa no terminal</span>
                 </div>
 
                 {/* Footer Mockup */}
-                <div className="relative z-10 flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px]">
-                  <span className="text-slate-400">Total a Pagar:</span>
-                  <span className="text-sm font-bold font-mono text-emerald-400">R$ 0,00</span>
+                <div className="relative z-10 flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80 text-[10px]">
+                  <span className="text-slate-500 dark:text-slate-400">Total a Pagar:</span>
+                  <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">R$ 0,00</span>
                 </div>
               </div>
             </div>

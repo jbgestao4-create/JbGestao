@@ -104,8 +104,16 @@ export function SaleFormPage() {
   // Pagamento e Totais
   const [discount, setDiscount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('money')
-  const [emitFiscalNow, setEmitFiscalNow] = useState(true)
+  const [emitFiscalNow, setEmitFiscalNow] = useState(false)
   const [notes, setNotes] = useState('')
+
+  // Somente exibe "Emitir NFC-e imediatamente" se a organização estiver com o plano
+  // "Completo com emissão de NF-e e NFC-e" (ID '00000000-0000-4000-8000-000000000004')
+  const FULL_FISCAL_ACCESS_PLAN_ID = '00000000-0000-4000-8000-000000000004'
+  const hasFullFiscalAccessPlan =
+    currentOrganization?.accessPlanId === FULL_FISCAL_ACCESS_PLAN_ID ||
+    currentOrganization?.accessPlanName?.trim().toLowerCase() ===
+      'completo com emissão de nf-e e nfc-e'
 
   // Agendamento / Encaminhar para agenda
   const [forwardToSchedule, setForwardToSchedule] = useState(false)
@@ -565,7 +573,7 @@ export function SaleFormPage() {
       paymentMethod,
       notes,
       isPdv: false,
-      emitFiscalNow,
+      emitFiscalNow: hasFullFiscalAccessPlan ? emitFiscalNow : false,
       fiscalType: 'nfce' as const,
       operatorId: user?.id,
       operatorName: sellerName,
@@ -1215,24 +1223,26 @@ export function SaleFormPage() {
                 </div>
               </div>
 
-              {/* Opção Fiscal */}
-              <div className="rounded-xl border border-gray-200 p-3 bg-white space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-gray-800">
-                  <input
-                    type="checkbox"
-                    checked={emitFiscalNow}
-                    onChange={(e) => setEmitFiscalNow(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="flex items-center gap-1.5">
-                    <QrCode className="h-4 w-4 text-purple-600" />
-                    <span>Emitir NFC-e imediatamente</span>
-                  </div>
-                </label>
-                <p className="text-[11px] text-gray-500 pl-6">
-                  Gera autorização da NFC-e com protocolo SEFAZ e QR Code para o cliente.
-                </p>
-              </div>
+              {/* Opção Fiscal — Exclusiva para o plano "Completo com emissão de NF-e e NFC-e" */}
+              {hasFullFiscalAccessPlan && (
+                <div className="rounded-xl border border-gray-200 p-3 bg-white space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={emitFiscalNow}
+                      onChange={(e) => setEmitFiscalNow(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <QrCode className="h-4 w-4 text-purple-600" />
+                      <span>Emitir NFC-e imediatamente</span>
+                    </div>
+                  </label>
+                  <p className="text-[11px] text-gray-500 pl-6">
+                    Gera autorização da NFC-e com protocolo SEFAZ e QR Code para o cliente.
+                  </p>
+                </div>
+              )}
 
               {/* Observações da Venda */}
               <div>

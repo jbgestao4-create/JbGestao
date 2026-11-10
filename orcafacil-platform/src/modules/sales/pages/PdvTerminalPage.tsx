@@ -88,31 +88,45 @@ export function PdvTerminalPage() {
   // Marca d'água / imagem de fundo personalizada do PDV (sincronizada com organização e storage local)
   const [localPdvBg, setLocalPdvBg] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
-    return (
-      (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
-      localStorage.getItem('pdv_bg_last') ||
-      localStorage.getItem('pdv_background_url') ||
-      null
-    )
+    try {
+      return (
+        (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
+        localStorage.getItem('pdv_bg_last') ||
+        localStorage.getItem('pdv_background_url') ||
+        currentOrganization?.logoUrl ||
+        null
+      )
+    } catch {
+      return currentOrganization?.logoUrl || null
+    }
   })
 
   useEffect(() => {
     const syncBackground = () => {
-      const bg =
-        currentOrganization?.pdvBackgroundUrl ||
-        (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
-        localStorage.getItem('pdv_bg_last') ||
-        localStorage.getItem('pdv_background_url') ||
-        null
-      setLocalPdvBg(bg)
+      try {
+        const bg =
+          currentOrganization?.pdvBackgroundUrl ||
+          (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
+          localStorage.getItem('pdv_bg_last') ||
+          localStorage.getItem('pdv_background_url') ||
+          currentOrganization?.logoUrl ||
+          null
+        setLocalPdvBg(bg)
+      } catch {
+        setLocalPdvBg(currentOrganization?.pdvBackgroundUrl || currentOrganization?.logoUrl || null)
+      }
     }
 
     syncBackground()
     window.addEventListener('storage', syncBackground)
     return () => window.removeEventListener('storage', syncBackground)
-  }, [currentOrganization?.pdvBackgroundUrl, currentOrganization?.id])
+  }, [currentOrganization?.pdvBackgroundUrl, currentOrganization?.logoUrl, currentOrganization?.id])
 
-  const pdvBackgroundUrl = currentOrganization?.pdvBackgroundUrl || localPdvBg
+  const pdvBackgroundUrl =
+    currentOrganization?.pdvBackgroundUrl ||
+    (localPdvBg && localPdvBg !== 'null' ? localPdvBg : null) ||
+    currentOrganization?.logoUrl ||
+    '/controlesoft-logo.png'
 
   // Sessão de Caixa e Seleção de Terminal PDV
   const [registers, setRegisters] = useState<CashRegister[]>([])
@@ -1371,62 +1385,62 @@ export function PdvTerminalPage() {
 
   if (isLoadingSession) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 text-slate-100">
-        <Store className="h-12 w-12 animate-pulse text-emerald-400 mb-4" />
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100">
+        <Store className="h-12 w-12 animate-pulse text-emerald-600 dark:text-emerald-400 mb-4" />
         <h2 className="text-xl font-bold">Iniciando Terminal PDV...</h2>
-        <p className="text-sm text-slate-400 mt-1">Verificando sessões de caixa e estoque da loja</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Verificando sessões de caixa e estoque da loja</p>
       </div>
     )
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
-      {/* Imagem de Fundo Personalizada do PDV com Overlay Escuro de Alto Contraste */}
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans select-none overflow-hidden">
+      {/* Imagem de Marca d'Água no Fundo do PDV */}
       {pdvBackgroundUrl && (
         <div
-          className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0"
+          className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0 flex items-center justify-center"
           aria-hidden="true"
         >
+          {/* Marca d'água grande cobrindo o fundo de todo o PDV */}
           <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-500 pointer-events-none"
+            className="absolute inset-0 bg-center bg-no-repeat opacity-[0.12] dark:opacity-[0.09] transition-opacity duration-500 pointer-events-none"
             style={{
               backgroundImage: `url("${pdvBackgroundUrl}")`,
+              backgroundSize: 'min(920px, 75vw)',
             }}
           />
-          {/* Overlay escuro balanceado para garantir leitura impecável de códigos, preços e produtos */}
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]" />
         </div>
       )}
 
       {/* ============================================================== */}
       {/* 1. BARRA SUPERIOR DO TERMINAL (STATUS, CAIXA, OPERADOR, HORÁRIO) */}
       {/* ============================================================== */}
-      <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-6 backdrop-blur-md">
+      <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 px-6 backdrop-blur-md">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="rounded-lg bg-emerald-500/20 p-1.5 text-emerald-400 ring-1 ring-emerald-500/40">
+            <div className="rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 p-1.5 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/30 dark:ring-emerald-500/40">
               <Store className="h-5 w-5" />
             </div>
             <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 CONTROLESOFT
               </span>
-              <h1 className="text-sm font-bold tracking-tight text-white">
+              <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">
                 PONTO DE VENDA (PDV)
               </h1>
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-2 border-l border-slate-800 pl-4 text-xs text-slate-400">
-            <span className="font-semibold text-slate-200">{session?.registerId || selectedRegister}</span>
+          <div className="hidden md:flex items-center gap-2 border-l border-slate-200 dark:border-slate-800 pl-4 text-xs text-slate-500 dark:text-slate-400">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{session?.registerId || selectedRegister}</span>
             <span>•</span>
-            <span className="flex items-center gap-1 text-slate-300">
+            <span className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
               <User className="h-3.5 w-3.5 text-slate-400" />
               {session?.operatorName || profile?.displayName || 'Operador'}
             </span>
             <span>•</span>
-            <span className="text-slate-400">
-              Vendas no Turno: <b className="text-emerald-400">{session?.salesCount || 0}</b>
+            <span className="text-slate-500 dark:text-slate-400">
+              Vendas no Turno: <b className="text-emerald-600 dark:text-emerald-400">{session?.salesCount || 0}</b>
             </span>
           </div>
         </div>
@@ -1435,7 +1449,7 @@ export function PdvTerminalPage() {
           {isFullscreen ? (
             <div
               title="PDV em Modo Tela Cheia Bloqueado"
-              className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-emerald-400 border border-emerald-500/30 select-none font-bold"
+              className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 select-none font-bold"
             >
               <Maximize className="h-4 w-4" />
               <span className="hidden sm:inline font-mono text-xs">Tela Cheia Fixa</span>
@@ -1445,20 +1459,20 @@ export function PdvTerminalPage() {
               type="button"
               onClick={() => { void enterFullscreen(); }}
               title="Restaurar Tela Cheia [F11]"
-              className="flex items-center gap-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 px-3.5 py-2 text-amber-300 border border-amber-500/40 transition-colors animate-pulse font-bold cursor-pointer"
+              className="flex items-center gap-2 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 hover:bg-amber-500/20 dark:hover:bg-amber-500/30 px-3.5 py-2 text-amber-700 dark:text-amber-300 border border-amber-500/30 dark:border-amber-500/40 transition-colors animate-pulse font-bold cursor-pointer"
             >
               <Maximize className="h-4 w-4" />
               <span className="font-mono text-xs sm:text-sm">Restaurar Tela Cheia [F11]</span>
             </button>
           )}
 
-          <div className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-800 px-3.5 py-2 text-slate-200 border border-slate-700">
-            <User className="h-4 w-4 text-blue-400" />
-            <span className="text-xs sm:text-sm">Cliente: <b className="text-white">{customerName}</b></span>
+          <div className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3.5 py-2 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+            <User className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+            <span className="text-xs sm:text-sm">Cliente: <b className="text-slate-900 dark:text-white">{customerName}</b></span>
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl bg-slate-800 px-3.5 py-2 text-slate-200 border border-slate-700 font-mono text-xs sm:text-sm">
-            <Clock className="h-4 w-4 text-emerald-400" />
+          <div className="flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3.5 py-2 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-mono text-xs sm:text-sm">
+            <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <span>{currentTime.toLocaleTimeString('pt-BR')}</span>
           </div>
 
@@ -1466,9 +1480,9 @@ export function PdvTerminalPage() {
             type="button"
             onClick={() => { void handleExitToSales(); }}
             title="Sair do PDV e voltar para a listagem de vendas [Esc]"
-            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-rose-950/80 hover:border-rose-500/60 border border-slate-700 px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all shadow-sm cursor-pointer ml-1"
+            className="flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/80 hover:border-rose-300 dark:hover:border-rose-500/60 border border-slate-200 dark:border-slate-700 px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 hover:text-rose-700 dark:hover:text-white transition-all shadow-xs cursor-pointer ml-1"
           >
-            <LogOut className="h-4 w-4 text-rose-400 shrink-0" />
+            <LogOut className="h-4 w-4 text-rose-500 dark:text-rose-400 shrink-0" />
             <span className="font-semibold">Sair do PDV</span>
           </button>
         </div>
@@ -1481,18 +1495,18 @@ export function PdvTerminalPage() {
         {/* COLUNA ESQUERDA: LEITURA DE CÓDIGO DE BARRAS E TABELA DE PRODUTOS (8/12) */}
         <section className="lg:col-span-8 flex flex-col gap-4 overflow-hidden">
           {/* CAMPO DE LEITURA DE CÓDIGO DE BARRAS */}
-          <div className="rounded-2xl border-2 border-emerald-500/40 bg-slate-900/90 backdrop-blur-md p-3 shadow-lg relative">
-            <div className="flex items-center justify-between pb-1.5 px-1 text-xs text-slate-400">
+          <div className="rounded-2xl border-2 border-emerald-500/50 dark:border-emerald-500/40 bg-white/95 dark:bg-slate-900/90 backdrop-blur-md p-3 shadow-md relative">
+            <div className="flex items-center justify-between pb-1.5 px-1 text-xs text-slate-600 dark:text-slate-400">
               <span className="font-semibold flex items-center gap-1.5">
-                <Barcode className="h-4 w-4 text-emerald-400" />
+                <Barcode className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 Leitor de Código de Barras / Nome do Produto
               </span>
               {nextItemQuantity > 0 ? (
                 <span
                   className={`flex items-center gap-1.5 font-bold px-2.5 py-0.5 rounded-md border font-mono text-xs animate-pulse ${
                     quantityOperation === 'subtract'
-                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
-                      : 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                      ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/50'
+                      : 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/50'
                   }`}
                 >
                   {quantityOperation === 'subtract' ? (
@@ -1512,21 +1526,21 @@ export function PdvTerminalPage() {
                       setNextItemQuantity(0)
                       setQuantityOperation('multiply')
                     }}
-                    className="ml-1 text-slate-400 hover:text-white"
+                    className="ml-1 text-slate-400 hover:text-slate-700 dark:hover:text-white"
                     title="Cancelar operação [Esc]"
                   >
                     <X className="h-3 w-3" />
                   </button>
                 </span>
               ) : (
-                <span className="text-[11px] text-slate-500">
-                  Pressione <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-400 font-mono font-bold">F9</kbd> ou digite <kbd className="bg-slate-800 px-1 py-0.5 rounded text-emerald-400 font-mono font-bold">*6</kbd> / <kbd className="bg-slate-800 px-1 py-0.5 rounded text-rose-400 font-mono font-bold">-1</kbd> para Quantidade (+ / -)
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Pressione <kbd className="bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded text-amber-600 dark:text-amber-400 font-mono font-bold">F9</kbd> ou digite <kbd className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded text-emerald-600 dark:text-emerald-400 font-mono font-bold">*6</kbd> / <kbd className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded text-rose-600 dark:text-rose-400 font-mono font-bold">-1</kbd> para Quantidade (+ / -)
                 </span>
               )}
             </div>
             <div className="relative">
               <form onSubmit={handleScanBarcode} className="relative flex items-center">
-                <div className="absolute left-3.5 flex items-center pointer-events-none text-emerald-400">
+                <div className="absolute left-3.5 flex items-center pointer-events-none text-emerald-600 dark:text-emerald-400">
                   <Barcode className="h-6 w-6 animate-pulse" />
                 </div>
                 <input
@@ -1535,7 +1549,7 @@ export function PdvTerminalPage() {
                   value={barcodeQuery}
                   onChange={(e) => { setBarcodeQuery(e.target.value); }}
                   placeholder="Pressione [1] ou aponte o leitor de código de barras / digite o Nome do produto."
-                  className="w-full rounded-xl bg-slate-950 py-3.5 pl-12 pr-28 text-base font-semibold text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 tracking-wide"
+                  className="w-full rounded-xl bg-slate-100 dark:bg-slate-950 py-3.5 pl-12 pr-28 text-base font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-200 dark:border-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 tracking-wide focus:bg-white dark:focus:bg-slate-950"
                   autoComplete="off"
                 />
                 <button
@@ -1549,8 +1563,8 @@ export function PdvTerminalPage() {
 
               {/* SUGESTÕES DE PRODUTOS COM ESTOQUE DISPONÍVEL */}
               {matchedProducts.length > 0 && barcodeQuery.trim().length >= 2 && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden divide-y divide-slate-800">
-                  <div className="px-3 py-1.5 bg-slate-950/80 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex justify-between items-center">
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950/80 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex justify-between items-center">
                     <span>Produtos com Estoque Disponível</span>
                     <span>Clique para bipar</span>
                   </div>
@@ -1559,21 +1573,21 @@ export function PdvTerminalPage() {
                       key={p.id}
                       type="button"
                       onClick={() => handleAddProductToCart(p)}
-                      className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/90 transition-colors cursor-pointer group"
+                      className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/90 transition-colors cursor-pointer group"
                     >
                       <div>
-                        <p className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                           {p.name}
                         </p>
-                        <p className="text-[11px] text-slate-400">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
                           SKU: {p.sku} {p.barcode ? `· EAN: ${p.barcode}` : ''} · Un: {p.unit}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-bold text-emerald-400">
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(p.unitPrice)}
                         </p>
-                        <p className="text-[10px] text-emerald-500 font-semibold">
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-500 font-semibold">
                           Saldo: {p.quantityOnHand} {p.unit}
                         </p>
                       </div>
@@ -1588,8 +1602,8 @@ export function PdvTerminalPage() {
               <div
                 className={`mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold ${
                   scanFeedback.type === 'success'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                    : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30'
                 }`}
               >
                 {scanFeedback.type === 'success' ? (
@@ -1602,42 +1616,37 @@ export function PdvTerminalPage() {
             )}
           </div>
 
-          {/* TABELA DE PRODUTOS DA VENDA ATUAL */}
-          <div className="flex-1 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-md overflow-hidden shadow-inner">
-            <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+          {/* TABELA DE PRODUTOS DA VENDA ATUAL COM MARCA D'ÁGUA GIGANTE */}
+          <div className="relative flex-1 flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md overflow-hidden shadow-xs">
+            {/* Camada de Marca d'Água Grande cobrindo o carrinho (igual ao exemplo Controle Soft) */}
+            {pdvBackgroundUrl && (
+              <div
+                className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 p-6 overflow-hidden"
+                aria-hidden="true"
+              >
+                <img
+                  src={pdvBackgroundUrl}
+                  alt="Marca d'Água do PDV"
+                  className="w-auto h-auto max-w-[82%] max-h-[80%] object-contain opacity-[0.16] dark:opacity-[0.12] transition-opacity duration-300 pointer-events-none"
+                />
+              </div>
+            )}
+
+            <div className="relative z-10 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 backdrop-blur-xs">
               <div className="flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4 text-emerald-400" />
+                <ShoppingCart className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 <span>CARRINHO DE COMPRAS ({cart.length} itens)</span>
               </div>
-              <span className="text-slate-400">Total Volumes: {totalItemsCount}</span>
+              <span className="text-slate-500 dark:text-slate-400">Total Volumes: {totalItemsCount}</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="relative z-10 flex-1 overflow-y-auto">
               {cart.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-400">
-                  {pdvBackgroundUrl ? (
-                    <div className="mb-4 flex flex-col items-center">
-                      <div className="relative rounded-2xl p-4 bg-slate-900/70 border border-slate-700/60 shadow-2xl backdrop-blur-md max-w-xs flex items-center justify-center overflow-hidden">
-                        <img
-                          src={pdvBackgroundUrl}
-                          alt="Logomarca da Loja"
-                          className="max-h-24 max-w-[220px] object-contain drop-shadow-md select-none pointer-events-none"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl bg-slate-800/50 p-4 mb-3 border border-slate-800">
-                      <Barcode className="h-10 w-10 text-slate-600" />
-                    </div>
-                  )}
-                  <p className="text-base font-semibold text-slate-200">Caixa Livre • Aguardando Leitura</p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    Pressione <kbd className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-400 font-mono">1</kbd> para ativar o leitor USB ou digite o código de barras e pressione <kbd className="rounded bg-slate-800 px-1.5 py-0.5 text-white font-mono">Enter</kbd>.
-                  </p>
-                </div>
+                // Espaço limpo para destacar a marca d'água grande de fundo
+                <div className="h-full w-full min-h-[300px]" />
               ) : (
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="sticky top-0 bg-slate-950/90 backdrop-blur-xs text-slate-400 border-b border-slate-800 uppercase font-semibold">
+                  <thead className="sticky top-0 bg-slate-100/95 dark:bg-slate-950/95 backdrop-blur-xs text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase font-semibold">
                     <tr>
                       <th className="py-2.5 px-3 w-12 text-center">#</th>
                       <th className="py-2.5 px-3">Produto</th>
@@ -1648,30 +1657,30 @@ export function PdvTerminalPage() {
                       <th className="py-2.5 px-3 text-center w-12"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-mono text-slate-200">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono text-slate-800 dark:text-slate-200">
                     {cart.map((item, index) => {
                       const isLast = lastScannedItem?.id === item.id
                       return (
                         <tr
                           key={item.id}
-                          className={`hover:bg-slate-800/40 transition-colors ${
-                            isLast ? 'bg-emerald-950/30 text-emerald-300 font-bold' : ''
+                          className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors ${
+                            isLast ? 'bg-emerald-50/90 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300 font-bold' : 'bg-white/60 dark:bg-slate-900/60'
                           }`}
                         >
-                          <td className="py-3 px-3 text-center text-slate-500 font-sans">{index + 1}</td>
-                          <td className="py-3 px-3 font-sans font-medium text-slate-100">
+                          <td className="py-3 px-3 text-center text-slate-400 dark:text-slate-500 font-sans">{index + 1}</td>
+                          <td className="py-3 px-3 font-sans font-medium text-slate-900 dark:text-slate-100">
                             {item.description}
                           </td>
-                          <td className="py-3 px-3 text-slate-400 text-[11px]">
+                          <td className="py-3 px-3 text-slate-500 dark:text-slate-400 text-[11px]">
                             {item.barcode || item.sku || '—'}
                           </td>
-                          <td className="py-3 px-3 text-center font-bold text-white">
+                          <td className="py-3 px-3 text-center font-bold text-slate-900 dark:text-white">
                             {item.quantity} {item.unit}
                           </td>
-                          <td className="py-3 px-3 text-right text-slate-300">
+                          <td className="py-3 px-3 text-right text-slate-700 dark:text-slate-300">
                             {formatCurrency(item.unitPrice)}
                           </td>
-                          <td className="py-3 px-3 text-right font-bold text-emerald-400">
+                          <td className="py-3 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(item.total)}
                           </td>
                           <td className="py-3 px-3 text-center">
@@ -1679,7 +1688,7 @@ export function PdvTerminalPage() {
                               type="button"
                               onClick={() => { handleRemoveItem(item.id); }}
                               title="Remover Item"
-                              className="rounded-lg p-1 text-slate-500 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
+                              className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -1697,46 +1706,46 @@ export function PdvTerminalPage() {
         {/* COLUNA DIREITA: DISPLAY DE VALORES, CLIENTE, ÚLTIMO ITEM E BOTÃO FINALIZAR (4/12) */}
         <section className="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
           {/* CAIXA DE IDENTIFICAÇÃO DO CLIENTE */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-md">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5 text-blue-400" />
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 p-4 shadow-sm">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
                 Cliente Selecionado
               </span>
               <button
                 type="button"
                 onClick={() => { setShowCustomerModal(true); }}
-                className="text-xs font-bold text-blue-200 bg-blue-600/30 hover:bg-blue-600/50 px-3 py-1.5 rounded-lg border border-blue-400/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="text-xs font-bold text-blue-700 dark:text-blue-200 bg-blue-50 dark:bg-blue-600/30 hover:bg-blue-100 dark:hover:bg-blue-600/50 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-400/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                 title="Pressione F2 para selecionar ou alterar o cliente"
               >
-                <Users className="h-3.5 w-3.5 text-blue-300" />
+                <Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
                 <span>[F2] Alterar</span>
               </button>
             </div>
 
             <div className="mt-3 flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 font-bold border border-blue-500/30 text-sm">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-500/30 text-sm">
                 {getCustomerInitials(customerName)}
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-bold text-white truncate" title={customerName}>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate" title={customerName}>
                   {customerName}
                 </h3>
                 <div className="mt-1 flex flex-col gap-0.5 text-xs">
                   {customerPhone ? (
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-mono">
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-mono">
                       <Phone className="h-3 w-3 shrink-0" />
                       <span className="truncate">{customerPhone}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 text-[11px]">
                       <Phone className="h-3 w-3 shrink-0 opacity-40" />
                       <span>Sem telefone informado</span>
                     </div>
                   )}
 
                   {customerDocument ? (
-                    <span className="text-[11px] text-slate-400 font-mono">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                       Doc: {customerDocument}
                     </span>
                   ) : null}
@@ -1746,53 +1755,53 @@ export function PdvTerminalPage() {
           </div>
 
           {/* ÚLTIMO PRODUTO BIPADO */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-md">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 p-4 shadow-sm">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Último Item Registrado
             </span>
             {lastScannedItem ? (
               <div className="mt-2 space-y-1">
-                <h3 className="text-base font-bold text-white truncate">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">
                   {lastScannedItem.description}
                 </h3>
-                <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-mono">
                   <span>
                     {lastScannedItem.quantity} {lastScannedItem.unit} x {formatCurrency(lastScannedItem.unitPrice)}
                   </span>
-                  <span className="text-sm font-bold text-emerald-400">
+                  <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                     {formatCurrency(lastScannedItem.total)}
                   </span>
                 </div>
               </div>
             ) : (
-              <p className="mt-2 text-xs text-slate-500 italic">Nenhum produto registrado ainda.</p>
+              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 italic">Nenhum produto registrado ainda.</p>
             )}
           </div>
 
           {/* CARD DE VALORES & TOTAL (ESTILO DISPLAY DE SUPERMERCADO) */}
-          <div className="flex-1 flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/90 backdrop-blur-md p-5 shadow-xl">
+          <div className="flex-1 flex flex-col justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 backdrop-blur-md p-5 shadow-sm">
             <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-sm text-slate-400 font-mono">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 text-sm text-slate-500 dark:text-slate-400 font-mono">
                 <span>Subtotal:</span>
-                <span className="text-base font-bold text-slate-200">
+                <span className="text-base font-bold text-slate-800 dark:text-slate-200">
                   {formatCurrency(subtotal)}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-sm text-slate-400 font-mono">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 text-sm text-slate-500 dark:text-slate-400 font-mono">
                 <span>Desconto:</span>
-                <span className="text-base font-bold text-rose-400">
+                <span className="text-base font-bold text-rose-600 dark:text-rose-400">
                   - {formatCurrency(discountValue)}
                 </span>
               </div>
 
               {/* DISPLAY GIGANTE DO TOTAL (DESTAQUE VERDE SUPERMERCADO) */}
               <div className="pt-2">
-                <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+                <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
                   TOTAL A PAGAR
                 </span>
-                <div className="mt-1.5 rounded-xl border-2 border-emerald-500/50 bg-emerald-950/80 p-4 text-right shadow-[inset_0_0_20px_rgba(16,185,129,0.2)]">
-                  <div className="font-mono text-4xl xl:text-5xl font-black text-emerald-400 tracking-tight">
+                <div className="mt-1.5 rounded-xl border-2 border-emerald-500/40 dark:border-emerald-500/50 bg-emerald-50/80 dark:bg-emerald-950/80 p-4 text-right shadow-inner">
+                  <div className="font-mono text-4xl xl:text-5xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
                     {formatCurrency(grandTotal)}
                   </div>
                 </div>
@@ -1805,7 +1814,7 @@ export function PdvTerminalPage() {
                 type="button"
                 onClick={handleOpenPayment}
                 disabled={cart.length === 0}
-                className="w-full flex items-center justify-center gap-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 py-4.5 text-lg font-black tracking-wider text-white uppercase shadow-xl shadow-emerald-950/70 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all ring-2 ring-emerald-400/40 cursor-pointer"
+                className="w-full flex items-center justify-center gap-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 py-4.5 text-lg font-black tracking-wider text-white uppercase shadow-lg shadow-emerald-600/30 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all ring-2 ring-emerald-400/40 cursor-pointer"
               >
                 <CheckCircle2 className="h-7 w-7 text-emerald-100" />
                 <span>[Enter] Finalizar Venda</span>
@@ -1818,15 +1827,15 @@ export function PdvTerminalPage() {
       {/* ============================================================== */}
       {/* 3. BARRA INFERIOR DE ATALHOS DO TECLADO                         */}
       {/* ============================================================== */}
-      <footer className="relative z-10 min-h-18 lg:h-20 shrink-0 border-t-2 border-slate-800 bg-slate-900/95 px-4 lg:px-6 flex items-center justify-between overflow-x-auto gap-3 text-sm shadow-2xl py-2">
+      <footer className="relative z-10 min-h-18 lg:h-20 shrink-0 border-t-2 border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 px-4 lg:px-6 flex items-center justify-between overflow-x-auto gap-3 text-sm shadow-md py-2">
         <div className="flex items-center gap-2.5 font-sans">
           <button
             type="button"
             onClick={focusBarcodeInput}
-            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2.5 text-slate-800 dark:text-slate-100 font-bold border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <Barcode className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
-            <kbd className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-emerald-400 font-mono font-black text-xs">1</kbd>
+            <Barcode className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <kbd className="rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 px-2 py-0.5 text-emerald-600 dark:text-emerald-400 font-mono font-black text-xs">1</kbd>
             <span>Bipar Produto</span>
           </button>
 
@@ -1834,9 +1843,9 @@ export function PdvTerminalPage() {
             type="button"
             onClick={handleOpenPayment}
             disabled={cart.length === 0}
-            className="flex items-center gap-2 rounded-xl bg-emerald-700/80 hover:bg-emerald-600 px-4 py-2.5 text-white font-extrabold border border-emerald-500/50 shadow-md shadow-emerald-950/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-white font-extrabold border border-emerald-500/50 shadow-md shadow-emerald-950/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer whitespace-nowrap"
           >
-            <CheckCircle2 className="h-5 w-5 text-emerald-200 shrink-0" />
+            <CheckCircle2 className="h-5 w-5 text-emerald-100 shrink-0" />
             <kbd className="rounded-lg bg-white/20 px-2.5 py-0.5 text-white font-mono font-black text-xs">Enter</kbd>
             <span>Finalizar</span>
           </button>
@@ -1844,10 +1853,10 @@ export function PdvTerminalPage() {
           <button
             type="button"
             onClick={() => { setShowCustomerModal(true); }}
-            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2.5 text-slate-800 dark:text-slate-100 font-bold border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <Users className="h-4.5 w-4.5 text-blue-400 shrink-0" />
-            <kbd className="rounded-lg bg-blue-500/20 px-2 py-0.5 text-blue-400 font-mono font-black text-xs">F2</kbd>
+            <Users className="h-4.5 w-4.5 text-blue-500 dark:text-blue-400 shrink-0" />
+            <kbd className="rounded-lg bg-blue-500/10 dark:bg-blue-500/20 px-2 py-0.5 text-blue-600 dark:text-blue-400 font-mono font-black text-xs">F2</kbd>
             <span>Cliente</span>
           </button>
 
@@ -1857,10 +1866,10 @@ export function PdvTerminalPage() {
               setDiscountInput(discount)
               setShowDiscountModal(true)
             }}
-            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2.5 text-slate-800 dark:text-slate-100 font-bold border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <Tag className="h-4.5 w-4.5 text-amber-400 shrink-0" />
-            <kbd className="rounded-lg bg-amber-500/20 px-2 py-0.5 text-amber-400 font-mono font-black text-xs">F3</kbd>
+            <Tag className="h-4.5 w-4.5 text-amber-500 dark:text-amber-400 shrink-0" />
+            <kbd className="rounded-lg bg-amber-500/10 dark:bg-amber-500/20 px-2 py-0.5 text-amber-600 dark:text-amber-400 font-mono font-black text-xs">F3</kbd>
             <span>Desconto</span>
           </button>
 
@@ -1870,10 +1879,10 @@ export function PdvTerminalPage() {
               if (cart.length > 0) setShowCancelSaleModal(true)
             }}
             disabled={cart.length === 0}
-            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-rose-950/70 hover:border-rose-600/50 px-3.5 py-2.5 text-slate-200 hover:text-rose-200 font-bold border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/70 hover:border-rose-300 dark:hover:border-rose-600/50 px-3.5 py-2.5 text-slate-700 hover:text-rose-700 dark:text-slate-200 dark:hover:text-rose-200 font-bold border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <Trash2 className="h-4.5 w-4.5 text-rose-400 shrink-0" />
-            <kbd className="rounded-lg bg-rose-500/20 px-2 py-0.5 text-rose-400 font-mono font-black text-xs">F4</kbd>
+            <Trash2 className="h-4.5 w-4.5 text-rose-500 dark:text-rose-400 shrink-0" />
+            <kbd className="rounded-lg bg-rose-500/10 dark:bg-rose-500/20 px-2 py-0.5 text-rose-600 dark:text-rose-400 font-mono font-black text-xs">F4</kbd>
             <span>Cancelar</span>
           </button>
 
@@ -1883,10 +1892,10 @@ export function PdvTerminalPage() {
               setMovementType('supply')
               setShowMovementModal(true)
             }}
-            className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2.5 text-slate-800 dark:text-slate-100 font-bold border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <ArrowDownCircle className="h-4.5 w-4.5 text-cyan-400 shrink-0" />
-            <kbd className="rounded-lg bg-cyan-500/20 px-2 py-0.5 text-cyan-400 font-mono font-black text-xs">F7</kbd>
+            <ArrowDownCircle className="h-4.5 w-4.5 text-cyan-500 dark:text-cyan-400 shrink-0" />
+            <kbd className="rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20 px-2 py-0.5 text-cyan-600 dark:text-cyan-400 font-mono font-black text-xs">F7</kbd>
             <span>Suprimento</span>
           </button>
 
@@ -1896,10 +1905,10 @@ export function PdvTerminalPage() {
               setMovementType('bleed')
               setShowMovementModal(true)
             }}
-            className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-slate-100 font-bold border border-slate-700 hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2.5 text-slate-800 dark:text-slate-100 font-bold border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <ArrowUpCircle className="h-4.5 w-4.5 text-purple-400 shrink-0" />
-            <kbd className="rounded-lg bg-purple-500/20 px-2 py-0.5 text-purple-400 font-mono font-black text-xs">F8</kbd>
+            <ArrowUpCircle className="h-4.5 w-4.5 text-purple-500 dark:text-purple-400 shrink-0" />
+            <kbd className="rounded-lg bg-purple-500/10 dark:bg-purple-500/20 px-2 py-0.5 text-purple-600 dark:text-purple-400 font-mono font-black text-xs">F8</kbd>
             <span>Sangria</span>
           </button>
 
@@ -1909,14 +1918,14 @@ export function PdvTerminalPage() {
             className={`flex items-center gap-2 rounded-xl px-3.5 py-2.5 font-bold border transition-all shadow-xs cursor-pointer whitespace-nowrap ${
               nextItemQuantity > 0
                 ? quantityOperation === 'subtract'
-                  ? 'bg-rose-500/20 text-rose-200 border-rose-500 ring-2 ring-rose-500/40 animate-pulse'
-                  : 'bg-amber-500/20 text-amber-200 border-amber-500 ring-2 ring-amber-500/40 animate-pulse'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700 hover:border-slate-600'
+                  ? 'bg-rose-500/10 dark:bg-rose-500/20 text-rose-700 dark:text-rose-200 border-rose-500 ring-2 ring-rose-500/40 animate-pulse'
+                  : 'bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-200 border-amber-500 ring-2 ring-amber-500/40 animate-pulse'
+                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
             }`}
           >
-            <Hash className="h-4.5 w-4.5 text-amber-400 shrink-0" />
+            <Hash className="h-4.5 w-4.5 text-amber-500 dark:text-amber-400 shrink-0" />
             <kbd className={`rounded-lg px-2 py-0.5 font-mono font-black text-xs ${
-              quantityOperation === 'subtract' && nextItemQuantity > 0 ? 'bg-rose-500/30 text-rose-300' : 'bg-amber-500/20 text-amber-400'
+              quantityOperation === 'subtract' && nextItemQuantity > 0 ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300' : 'bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
             }`}>
               F9
             </kbd>
@@ -1928,12 +1937,12 @@ export function PdvTerminalPage() {
           </button>
         </div>
 
-        {/* ATALHO TECLA F12: FECHAMENTO DE CAIXA */}
-        <div>
+        {/* ATALHO TECLA F12: FECHAMENTO DE CAIXA (COM ESPAÇAMENTO À DIREITA PARA NÃO SOBREPOR BOTÃO DE SUPORTE) */}
+        <div className="mr-32 sm:mr-36">
           <button
             type="button"
             onClick={handleOpenCloseSession}
-            className="flex items-center gap-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 px-5 py-3 text-white font-black text-sm tracking-wide border border-rose-400/60 shadow-lg shadow-rose-950/60 transition-all cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 px-5 py-3 text-white font-black text-sm tracking-wide border border-rose-400/60 shadow-lg shadow-rose-950/30 transition-all cursor-pointer whitespace-nowrap"
           >
             <Lock className="h-5 w-5 text-white" />
             <kbd className="rounded-lg bg-white/20 px-2 py-0.5 text-white font-mono font-black text-xs">F12</kbd>
@@ -1946,29 +1955,29 @@ export function PdvTerminalPage() {
       {/* 4. MODAL DE ABERTURA DE CAIXA (OBRIGATÓRIO QUANDO NÃO HOUVER)   */}
       {/* ============================================================== */}
       {showOpenSessionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-              <div className="rounded-xl bg-emerald-500/20 p-2 text-emerald-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-400">
                 <Store className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Abertura de Caixa (PDV)</h3>
-                <p className="text-xs text-slate-400">Inicie um novo turno para operar o terminal</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Abertura de Caixa (PDV)</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Inicie um novo turno para operar o terminal</p>
               </div>
             </div>
 
             <form onSubmit={handleOpenSession} className="mt-5 space-y-4">
               {!isGeneralCashOpen ? (
-                <div className="rounded-xl bg-amber-500/10 p-3.5 text-xs font-semibold text-amber-300 border border-amber-500/30 flex items-start gap-2.5">
-                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
+                <div className="rounded-xl bg-amber-500/10 p-3.5 text-xs font-semibold text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-start gap-2.5">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500 dark:text-amber-400 mt-0.5" />
                   <div>
-                    <p className="font-bold text-sm text-amber-200">Abertura de PDV Bloqueada</p>
-                    <p className="mt-0.5 text-amber-300">Caixa Geral ainda não aberto, procure o seu administrador</p>
+                    <p className="font-bold text-sm text-amber-800 dark:text-amber-200">Abertura de PDV Bloqueada</p>
+                    <p className="mt-0.5 text-amber-700 dark:text-amber-300">Caixa Geral ainda não aberto, procure o seu administrador</p>
                   </div>
                 </div>
               ) : openSessionError ? (
-                <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-400 border border-rose-500/20 flex items-start gap-2">
+                <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{openSessionError}</span>
                 </div>
@@ -1976,7 +1985,7 @@ export function PdvTerminalPage() {
 
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-slate-400">
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
                     Terminal / Caixa PDV
                   </label>
                   {canManagePdvRegisters && (
@@ -1986,7 +1995,7 @@ export function PdvTerminalPage() {
                         setShowInlineNewRegister((prev) => !prev)
                         setOpenSessionError(null)
                       }}
-                      className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer"
+                      className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 hover:underline cursor-pointer"
                     >
                       {showInlineNewRegister ? 'Cancelar novo caixa' : '+ Cadastrar novo caixa'}
                     </button>
@@ -2000,7 +2009,7 @@ export function PdvTerminalPage() {
                       value={inlineNewRegisterName}
                       onChange={(e) => setInlineNewRegisterName(e.target.value)}
                       placeholder="Ex.: Caixa 02, Balcão..."
-                      className="flex-1 rounded-xl bg-slate-950 px-3 py-2 text-sm text-white border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                      className="flex-1 rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:border-emerald-500 focus:outline-hidden"
                     />
                     <button
                       type="button"
@@ -2019,7 +2028,7 @@ export function PdvTerminalPage() {
                     onChange={(e) => {
                       void handleSelectTerminalInModal(e.target.value)
                     }}
-                    className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200 border border-slate-800 focus:border-emerald-500 focus:outline-hidden"
+                    className="mt-1 w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 focus:outline-hidden"
                   >
                     {registers.map((reg) => (
                       <option key={reg.id} value={reg.name}>
@@ -2032,17 +2041,17 @@ export function PdvTerminalPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400">Operador Logado</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Operador Logado</label>
                 <input
                   type="text"
                   readOnly
                   value={profile?.displayName || user?.email?.split('@')[0] || 'Operador'}
-                  className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm text-slate-300 border border-slate-800 focus:outline-hidden"
+                  className="mt-1 w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 focus:outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400">
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
                   Saldo Inicial / Fundo de Troco (R$)
                 </label>
                 <input
@@ -2052,7 +2061,7 @@ export function PdvTerminalPage() {
                   onChange={(e) => { setOpeningBalanceInput(formatCurrencyInput(e.target.value)); }}
                   onFocus={(e) => e.target.select()}
                   placeholder="0,00"
-                  className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2.5 text-lg font-bold text-emerald-400 font-mono border border-slate-800 focus:border-emerald-500 focus:outline-hidden"
+                  className="mt-1 w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2.5 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono border border-slate-200 dark:border-slate-800 focus:border-emerald-500 focus:outline-hidden"
                 />
                 <span className="text-[11px] text-slate-500">
                   Informe o valor das moedas e cédulas deixadas na gaveta para troco.
@@ -2063,7 +2072,7 @@ export function PdvTerminalPage() {
                 <button
                   type="submit"
                   disabled={!isGeneralCashOpen}
-                  className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-500 shadow-md shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <CheckCircle2 className="h-5 w-5" />
                   <span>Abrir Caixa e Iniciar Operação</span>
@@ -2078,32 +2087,32 @@ export function PdvTerminalPage() {
       {/* 5. MODAL DE FINALIZAÇÃO DA VENDA (FORMAS DE PAGAMENTO)         */}
       {/* ============================================================== */}
       {showPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
-                <h3 className="text-lg font-bold text-white">Finalização de Venda</h3>
-                <p className="text-xs text-slate-400">Selecione a forma de pagamento pelo teclado</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Finalização de Venda</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Selecione a forma de pagamento pelo teclado</p>
               </div>
               <button
                 type="button"
                 onClick={() => { setShowPaymentModal(false); }}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* TOTAL DA VENDA */}
-            <div className="my-4 rounded-xl bg-slate-950 p-4 border border-slate-800 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase">Total a Receber:</span>
-              <span className="font-mono text-3xl font-black text-emerald-400">
+            <div className="my-4 rounded-xl bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total a Receber:</span>
+              <span className="font-mono text-3xl font-black text-emerald-600 dark:text-emerald-400">
                 {formatCurrency(grandTotal)}
               </span>
             </div>
 
             {saleError && (
-              <div className="mb-4 rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-400 border border-rose-500/20 flex items-start gap-2">
+              <div className="mb-4 rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{saleError}</span>
               </div>
@@ -2119,8 +2128,8 @@ export function PdvTerminalPage() {
                 }}
                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl p-3 border font-semibold text-xs transition-all ${
                   selectedPaymentMethod === 'money'
-                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
-                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 ring-2 ring-emerald-500/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
                 <DollarSign className="h-6 w-6" />
@@ -2135,8 +2144,8 @@ export function PdvTerminalPage() {
                 }}
                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl p-3 border font-semibold text-xs transition-all ${
                   selectedPaymentMethod === 'pix'
-                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
-                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 ring-2 ring-emerald-500/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
                 <QrCode className="h-6 w-6" />
@@ -2151,8 +2160,8 @@ export function PdvTerminalPage() {
                 }}
                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl p-3 border font-semibold text-xs transition-all ${
                   selectedPaymentMethod === 'credit_card' || selectedPaymentMethod === 'debit_card'
-                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
-                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 ring-2 ring-emerald-500/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
                 <Receipt className="h-6 w-6" />
@@ -2164,8 +2173,8 @@ export function PdvTerminalPage() {
             <div className="flex-1 overflow-y-auto space-y-3">
               {/* SELEÇÃO DO CARTÃO: CRÉDITO OU DÉBITO */}
               {showCardTypeSelection && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2">
-                  <span className="text-xs font-bold text-slate-300">Modalidade do Cartão:</span>
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 space-y-2">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Modalidade do Cartão:</span>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -2175,8 +2184,8 @@ export function PdvTerminalPage() {
                       }}
                       className={`rounded-lg p-2 text-xs font-bold border ${
                         cardType === 'credit'
-                          ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
-                          : 'border-slate-800 bg-slate-900 text-slate-400'
+                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 ring-2 ring-emerald-500/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
                       }`}
                     >
                       [C] Crédito
@@ -2189,8 +2198,8 @@ export function PdvTerminalPage() {
                       }}
                       className={`rounded-lg p-2 text-xs font-bold border ${
                         cardType === 'debit'
-                          ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
-                          : 'border-slate-800 bg-slate-900 text-slate-400'
+                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 ring-2 ring-emerald-500/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
                       }`}
                     >
                       [D] Débito
@@ -2201,9 +2210,9 @@ export function PdvTerminalPage() {
 
               {/* DETALHE DINHEIRO: VALOR RECEBIDO E TROCO */}
               {selectedPaymentMethod === 'money' && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-400">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
                       Valor Recebido em Dinheiro (R$)
                     </label>
                     <input
@@ -2212,16 +2221,16 @@ export function PdvTerminalPage() {
                       value={amountReceivedInput}
                       onChange={(e) => { setAmountReceivedInput(e.target.value); }}
                       placeholder="0,00"
-                      className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-white border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                      className="mt-1 w-full rounded-xl bg-white dark:bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:border-emerald-500 focus:outline-hidden"
                     />
                   </div>
 
                   {/* DISPLAY DE TROCO */}
-                  <div className="flex items-center justify-between rounded-lg bg-slate-900 p-3 border border-slate-800">
-                    <span className="text-xs font-bold text-slate-400 uppercase">Troco:</span>
+                  <div className="flex items-center justify-between rounded-lg bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-800">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Troco:</span>
                     <span
                       className={`font-mono text-2xl font-black ${
-                        cashChange.isSufficient ? 'text-emerald-400' : 'text-rose-400'
+                        cashChange.isSufficient ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                       }`}
                     >
                       {cashChange.isSufficient
@@ -2234,12 +2243,12 @@ export function PdvTerminalPage() {
 
               {/* DETALHE PIX */}
               {selectedPaymentMethod === 'pix' && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-center space-y-2">
-                  <QrCode className="h-16 w-16 text-emerald-400 mx-auto" />
-                  <p className="text-xs font-semibold text-slate-300">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 text-center space-y-2">
+                  <QrCode className="h-16 w-16 text-emerald-600 dark:text-emerald-400 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Chave Pix disponível no balcão da loja
                   </p>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Confirme o recebimento do comprovante no aplicativo bancário do cliente antes de liberar.
                   </p>
                 </div>
@@ -2247,12 +2256,12 @@ export function PdvTerminalPage() {
 
               {/* DETALHE CARTÃO CONFIRMADO */}
               {(selectedPaymentMethod === 'credit_card' || selectedPaymentMethod === 'debit_card') && !showCardTypeSelection && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-center space-y-1">
-                  <Receipt className="h-12 w-12 text-blue-400 mx-auto" />
-                  <p className="text-sm font-bold text-slate-200">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 text-center space-y-1">
+                  <Receipt className="h-12 w-12 text-blue-500 dark:text-blue-400 mx-auto" />
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
                     Cartão de {cardType === 'credit' ? 'Crédito' : 'Débito'}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Insira ou aproxime o cartão na maquininha de pagamento.
                   </p>
                 </div>
@@ -2260,11 +2269,11 @@ export function PdvTerminalPage() {
             </div>
 
             {/* BOTÃO CONFIRMAR PAGAMENTO */}
-            <div className="pt-4 border-t border-slate-800 flex gap-2">
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex gap-2">
               <button
                 type="button"
                 onClick={() => { setShowPaymentModal(false); }}
-                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+                className="flex-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 py-3 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors"
               >
                 [Esc] Cancelar
               </button>
@@ -2272,7 +2281,7 @@ export function PdvTerminalPage() {
                 type="button"
                 onClick={handleConfirmSale}
                 disabled={isSubmittingSale || (selectedPaymentMethod === 'money' && !cashChange.isSufficient)}
-                className="flex-2 rounded-xl bg-emerald-600 py-3 text-sm font-black text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/40 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+                className="flex-2 rounded-xl bg-emerald-600 py-3 text-sm font-black text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/30 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
               >
                 {isSubmittingSale ? (
                   <span>Registrando Venda...</span>
@@ -2292,16 +2301,16 @@ export function PdvTerminalPage() {
       {/* 6. MODAL DE FECHAMENTO DE CAIXA (TECLA 9 — PROCEDIMENTO OFICIAL)*/}
       {/* ============================================================== */}
       {showCloseModal && session && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[92vh]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="rounded-xl bg-rose-500/20 p-2 text-rose-400">
+                <div className="rounded-xl bg-rose-500/20 p-2 text-rose-500 dark:text-rose-400">
                   <Lock className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Fechamento de Caixa — Tecla F12</h3>
-                  <p className="text-xs text-slate-400">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Fechamento de Caixa — Tecla F12</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Conferência obrigatória dos valores físicos antes de encerrar o turno
                   </p>
                 </div>
@@ -2312,7 +2321,7 @@ export function PdvTerminalPage() {
                   setShowCloseModal(false)
                   focusBarcodeInput()
                 }}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -2320,94 +2329,94 @@ export function PdvTerminalPage() {
 
             <div className="flex-1 overflow-y-auto py-4 space-y-4 text-xs">
               {closureError && (
-                <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-400 border border-rose-500/20 flex items-start gap-2">
+                <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{closureError}</span>
                 </div>
               )}
 
               {/* CABEÇALHO DO TURNO */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-xl bg-slate-950 p-3 border border-slate-800 text-[11px]">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-xl bg-slate-50 dark:bg-slate-950 p-3 border border-slate-200 dark:border-slate-800 text-[11px]">
                 <div>
-                  <span className="text-slate-400">Operador:</span>
-                  <p className="font-bold text-white truncate">{session.operatorName}</p>
+                  <span className="text-slate-500 dark:text-slate-400">Operador:</span>
+                  <p className="font-bold text-slate-900 dark:text-white truncate">{session.operatorName}</p>
                 </div>
                 <div>
-                  <span className="text-slate-400">Terminal:</span>
-                  <p className="font-bold text-white">{session.registerId}</p>
+                  <span className="text-slate-500 dark:text-slate-400">Terminal:</span>
+                  <p className="font-bold text-slate-900 dark:text-white">{session.registerId}</p>
                 </div>
                 <div>
-                  <span className="text-slate-400">Abertura:</span>
-                  <p className="font-bold text-white">
+                  <span className="text-slate-500 dark:text-slate-400">Abertura:</span>
+                  <p className="font-bold text-slate-900 dark:text-white">
                     {new Date(session.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-400">Fechamento:</span>
-                  <p className="font-bold text-emerald-400">{currentTime.toLocaleTimeString('pt-BR')}</p>
+                  <span className="text-slate-500 dark:text-slate-400">Fechamento:</span>
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400">{currentTime.toLocaleTimeString('pt-BR')}</p>
                 </div>
               </div>
 
               {/* RESUMO FINANCEIRO DO TURNO */}
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Resumo Financeiro da Sessão
                 </span>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-xs pt-1">
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Saldo Inicial (Troco):</span>
-                    <span className="text-slate-200">{formatCurrency(session.openingBalance)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Saldo Inicial (Troco):</span>
+                    <span className="text-slate-800 dark:text-slate-200">{formatCurrency(session.openingBalance)}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Total Vendas ({session.salesCount}):</span>
-                    <span className="text-emerald-400 font-bold">{formatCurrency(session.totalSales)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Total Vendas ({session.salesCount}):</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(session.totalSales)}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Recebido em Dinheiro:</span>
-                    <span className="text-slate-200">{formatCurrency(session.totalMoney)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Recebido em Dinheiro:</span>
+                    <span className="text-slate-800 dark:text-slate-200">{formatCurrency(session.totalMoney)}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Recebido via Pix:</span>
-                    <span className="text-slate-200">{formatCurrency(session.totalPix)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Recebido via Pix:</span>
+                    <span className="text-slate-800 dark:text-slate-200">{formatCurrency(session.totalPix)}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Cartão de Crédito:</span>
-                    <span className="text-slate-200">{formatCurrency(session.totalCreditCard)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Cartão de Crédito:</span>
+                    <span className="text-slate-800 dark:text-slate-200">{formatCurrency(session.totalCreditCard)}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Cartão de Débito:</span>
-                    <span className="text-slate-200">{formatCurrency(session.totalDebitCard)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Cartão de Débito:</span>
+                    <span className="text-slate-800 dark:text-slate-200">{formatCurrency(session.totalDebitCard)}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Entradas / Suprimentos (+):</span>
-                    <span className="text-cyan-400">{formatCurrency(session.totalAdditionalEntries)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Entradas / Suprimentos (+):</span>
+                    <span className="text-cyan-600 dark:text-cyan-400">{formatCurrency(session.totalAdditionalEntries)}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">Retiradas / Sangrias (-):</span>
-                    <span className="text-rose-400">{formatCurrency(session.totalWithdrawals)}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <span className="text-slate-500 dark:text-slate-400">Retiradas / Sangrias (-):</span>
+                    <span className="text-rose-600 dark:text-rose-400">{formatCurrency(session.totalWithdrawals)}</span>
                   </div>
                 </div>
               </div>
 
               {/* VALOR ESPERADO EM DINHEIRO */}
-              <div className="flex items-center justify-between rounded-xl bg-slate-950 p-4 border border-slate-800">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
                 <div>
-                  <span className="text-xs font-bold text-slate-300 uppercase">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
                     Valor Esperado em Dinheiro na Gaveta:
                   </span>
                   <p className="text-[10px] text-slate-500">
                     Saldo inicial + vendas dinheiro + suprimentos - sangrias
                   </p>
                 </div>
-                <span className="font-mono text-2xl font-black text-emerald-400">
+                <span className="font-mono text-2xl font-black text-emerald-600 dark:text-emerald-400">
                   {formatCurrency(session.expectedMoney)}
                 </span>
               </div>
 
               {/* CONTAGEM FÍSICA INFORMADA PELO OPERADOR */}
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-white uppercase">
+                  <label className="block text-xs font-bold text-slate-900 dark:text-white uppercase">
                     Informe o Valor Físico Contado em Dinheiro (R$)
                   </label>
                   <input
@@ -2417,7 +2426,7 @@ export function PdvTerminalPage() {
                     onChange={(e) => { setCountedMoneyInput(formatCurrencyInput(e.target.value)); }}
                     onFocus={(e) => e.target.select()}
                     placeholder="0,00"
-                    className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-emerald-400 border border-slate-700 focus:border-emerald-500 focus:outline-hidden"
+                    className="mt-1 w-full rounded-xl bg-white dark:bg-slate-900 px-3 py-2 text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 border border-slate-300 dark:border-slate-700 focus:border-emerald-500 focus:outline-hidden"
                   />
                   <span className="text-[11px] text-slate-500">
                     Conte todas as notas e moedas presentes na gaveta e digite o valor total.
@@ -2429,17 +2438,17 @@ export function PdvTerminalPage() {
                   <div
                     className={`rounded-xl p-3 border flex items-center justify-between ${
                       reconciliation.discrepancyType === 'correct'
-                        ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
+                        ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
                         : reconciliation.discrepancyType === 'surplus'
-                        ? 'border-amber-500/40 bg-amber-950/40 text-amber-300'
-                        : 'border-rose-500/40 bg-rose-950/40 text-rose-300'
+                        ? 'border-amber-500/40 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
+                        : 'border-rose-500/40 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       {reconciliation.discrepancyType === 'correct' ? (
-                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                       ) : (
-                        <AlertTriangle className="h-5 w-5 text-amber-400" />
+                        <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                       )}
                       <div>
                         <p className="font-bold">
@@ -2464,9 +2473,9 @@ export function PdvTerminalPage() {
 
                 {/* JUSTIFICATIVA OBRIGATÓRIA SE HOUVER DIVERGÊNCIA */}
                 {reconciliation && !reconciliation.isBalanced && countedMoneyInput.trim() !== '' && (
-                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                     <div>
-                      <label className="block text-xs font-bold text-amber-400">
+                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-400">
                         Justificativa da Divergência (Obrigatória):
                       </label>
                       <textarea
@@ -2474,11 +2483,11 @@ export function PdvTerminalPage() {
                         value={closureJustification}
                         onChange={(e) => { setClosureJustification(e.target.value); }}
                         placeholder="Explique o motivo da sobra ou falta de caixa encontrada..."
-                        className="mt-1 w-full rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:border-amber-500 focus:outline-hidden"
+                        className="mt-1 w-full rounded-xl bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-hidden"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-400">
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
                         Autorização do Supervisor / Gerente (Opcional):
                       </label>
                       <input
@@ -2486,7 +2495,7 @@ export function PdvTerminalPage() {
                         value={supervisorAuthInput}
                         onChange={(e) => { setSupervisorAuthInput(e.target.value); }}
                         placeholder="Nome ou código do supervisor autorizador"
-                        className="mt-1 w-full rounded-xl bg-slate-900 px-3 py-1.5 text-xs text-white border border-slate-700 focus:outline-hidden"
+                        className="mt-1 w-full rounded-xl bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:outline-hidden"
                       />
                     </div>
                   </div>
@@ -2495,14 +2504,14 @@ export function PdvTerminalPage() {
             </div>
 
             {/* BOTÕES DE AÇÃO DO FECHAMENTO */}
-            <div className="pt-3 border-t border-slate-800 flex gap-2">
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setShowCloseModal(false)
                   focusBarcodeInput()
                 }}
-                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+                className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 py-3 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 [Esc] Retornar ao PDV
               </button>
@@ -2530,31 +2539,31 @@ export function PdvTerminalPage() {
       {/* 7. RELATÓRIO DO FECHAMENTO DE CAIXA APÓS CONCLUSÃO             */}
       {/* ============================================================== */}
       {closedSessionReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-center space-y-4">
-            <div className="rounded-full bg-emerald-500/20 p-3 text-emerald-400 w-12 h-12 mx-auto flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-2xl text-center space-y-4">
+            <div className="rounded-full bg-emerald-500/20 p-3 text-emerald-600 dark:text-emerald-400 w-12 h-12 mx-auto flex items-center justify-center">
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Caixa Encerrado com Sucesso!</h3>
-              <p className="text-xs text-slate-400 mt-1">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Caixa Encerrado com Sucesso!</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 A sessão do operador foi fechada e os registros foram persistidos no sistema.
               </p>
             </div>
 
-            <div className="rounded-xl bg-slate-950 p-4 border border-slate-800 text-left font-mono text-xs space-y-1.5">
-              <p><span className="text-slate-400">Terminal:</span> {closedSessionReport.registerId}</p>
-              <p><span className="text-slate-400">Operador:</span> {closedSessionReport.operatorName}</p>
-              <p><span className="text-slate-400">Vendas:</span> {closedSessionReport.salesCount} ({formatCurrency(closedSessionReport.totalSales)})</p>
-              <p><span className="text-slate-400">Dinheiro Físico:</span> {formatCurrency(closedSessionReport.countedMoney || '0')}</p>
-              <p><span className="text-slate-400">Divergência:</span> {closedSessionReport.difference || '0.00'}</p>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800 text-left font-mono text-xs space-y-1.5 text-slate-800 dark:text-slate-200">
+              <p><span className="text-slate-500 dark:text-slate-400">Terminal:</span> {closedSessionReport.registerId}</p>
+              <p><span className="text-slate-500 dark:text-slate-400">Operador:</span> {closedSessionReport.operatorName}</p>
+              <p><span className="text-slate-500 dark:text-slate-400">Vendas:</span> {closedSessionReport.salesCount} ({formatCurrency(closedSessionReport.totalSales)})</p>
+              <p><span className="text-slate-500 dark:text-slate-400">Dinheiro Físico:</span> {formatCurrency(closedSessionReport.countedMoney || '0')}</p>
+              <p><span className="text-slate-500 dark:text-slate-400">Divergência:</span> {closedSessionReport.difference || '0.00'}</p>
             </div>
 
             <div className="pt-2 flex flex-col sm:flex-row gap-2">
               <button
                 type="button"
                 onClick={() => { void handleExitToSales(); }}
-                className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 py-3 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 [Esc] Sair do PDV
               </button>
@@ -2575,12 +2584,12 @@ export function PdvTerminalPage() {
       {/* 8. MODAL SELECIONAR CLIENTE (F2)                               */}
       {/* ============================================================== */}
       {showCustomerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
-                <h3 className="text-base font-bold text-white">[F2] Selecionar Cliente</h3>
-                <p className="text-[11px] text-slate-400">Navegue com [↑/↓] e pressione [Enter] para selecionar</p>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">[F2] Selecionar Cliente</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Navegue com [↑/↓] e pressione [Enter] para selecionar</p>
               </div>
               <button
                 type="button"
@@ -2588,7 +2597,7 @@ export function PdvTerminalPage() {
                   setShowCustomerModal(false)
                   focusBarcodeInput()
                 }}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -2602,11 +2611,11 @@ export function PdvTerminalPage() {
                 placeholder="Buscar por nome, CPF ou telefone..."
                 value={customerSearchQuery}
                 onChange={(e) => { setCustomerSearchQuery(e.target.value); }}
-                className="w-full rounded-xl bg-slate-950 px-3 py-2 text-xs text-white border border-slate-700 focus:border-blue-500 focus:outline-hidden"
+                className="w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:outline-hidden"
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-800 text-xs">
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {customerCandidates.map((candidate, idx) => {
                 const isSelected = idx === customerSelectedIndex
                 return (
@@ -2628,34 +2637,34 @@ export function PdvTerminalPage() {
                     }}
                     className={`w-full py-2.5 px-3 text-left transition-colors flex items-center justify-between ${
                       isSelected
-                        ? 'bg-blue-600/20 text-blue-200 border-l-4 border-blue-500 pl-2 font-medium'
-                        : 'hover:bg-slate-800/50 text-slate-200'
+                        ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-900 dark:text-blue-200 border-l-4 border-blue-500 pl-2 font-medium'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-800 dark:text-slate-200'
                     }`}
                   >
                     <div>
                       <p className="font-semibold flex items-center gap-1.5">
                         {candidate.name}
                         {candidate.isDefault && (
-                          <span className="text-[10px] text-emerald-400 font-mono font-normal">(Padrão)</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-normal">(Padrão)</span>
                         )}
                       </p>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                         {candidate.document && <span>CPF: {candidate.document}</span>}
                         {candidate.phone && (
-                          <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
+                          <span className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-mono">
                             <Phone className="h-2.5 w-2.5" />
                             {candidate.phone}
                           </span>
                         )}
                       </div>
                     </div>
-                    <ChevronRight className={`h-4 w-4 ${isSelected ? 'text-blue-400' : 'text-slate-600'}`} />
+                    <ChevronRight className={`h-4 w-4 ${isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-slate-600'}`} />
                   </button>
                 )
               })}
             </div>
 
-            <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-[11px] text-slate-400 font-mono">
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400 font-mono">
               <span>[↑/↓] Navegar • [Enter] Selecionar</span>
               <button
                 type="button"
@@ -2663,7 +2672,7 @@ export function PdvTerminalPage() {
                   setShowCustomerModal(false)
                   focusBarcodeInput()
                 }}
-                className="hover:text-white"
+                className="hover:text-slate-900 dark:hover:text-white"
               >
                 [Esc] Fechar
               </button>
@@ -2676,11 +2685,11 @@ export function PdvTerminalPage() {
       {/* 9. MODAL DE DESCONTO (F3)                                      */}
       {/* ============================================================== */}
       {showDiscountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white">[F3] Aplicar Desconto</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">[F3] Aplicar Desconto</h3>
             <div>
-              <label className="block text-xs text-slate-400">Valor do Desconto (R$)</label>
+              <label className="block text-xs text-slate-600 dark:text-slate-400">Valor do Desconto (R$)</label>
               <input
                 type="text"
                 autoFocus
@@ -2688,7 +2697,7 @@ export function PdvTerminalPage() {
                 onChange={(e) => { setDiscountInput(formatCurrencyInput(e.target.value)); }}
                 onFocus={(e) => e.target.select()}
                 placeholder="0,00"
-                className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-rose-400 border border-slate-700 focus:outline-hidden"
+                className="mt-1 w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-rose-600 dark:text-rose-400 border border-slate-300 dark:border-slate-700 focus:outline-hidden"
               />
             </div>
             <div className="flex gap-2">
@@ -2698,7 +2707,7 @@ export function PdvTerminalPage() {
                   setShowDiscountModal(false)
                   focusBarcodeInput()
                 }}
-                className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300"
+                className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 Cancelar
               </button>
@@ -2709,7 +2718,7 @@ export function PdvTerminalPage() {
                   setShowDiscountModal(false)
                   focusBarcodeInput()
                 }}
-                className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white"
+                className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors"
               >
                 Aplicar
               </button>
@@ -2722,13 +2731,13 @@ export function PdvTerminalPage() {
       {/* 10. MODAL CANCELAR VENDA (F4)                                  */}
       {/* ============================================================== */}
       {showCancelSaleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl text-center space-y-4">
-            <div className="rounded-full bg-rose-500/20 p-3 text-rose-400 w-12 h-12 mx-auto flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl text-center space-y-4">
+            <div className="rounded-full bg-rose-500/20 p-3 text-rose-600 dark:text-rose-400 w-12 h-12 mx-auto flex items-center justify-center">
               <Trash2 className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-bold text-white">Cancelar Venda Atual?</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Cancelar Venda Atual?</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Todos os {cart.length} itens serão removidos do carrinho e a operação será cancelada.
             </p>
             <div className="flex gap-2">
@@ -2738,7 +2747,7 @@ export function PdvTerminalPage() {
                   setShowCancelSaleModal(false)
                   focusBarcodeInput()
                 }}
-                className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300"
+                className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 [Esc] Não
               </button>
@@ -2752,7 +2761,7 @@ export function PdvTerminalPage() {
                   pdvSound.playError()
                   focusBarcodeInput()
                 }}
-                className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white hover:bg-rose-500"
+                className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white hover:bg-rose-500 transition-colors"
               >
                 [Enter] Sim, Cancelar
               </button>
@@ -2765,13 +2774,13 @@ export function PdvTerminalPage() {
       {/* 11. MODAL SUPRIMENTO (F7) / SANGRIA (F8)                       */}
       {/* ============================================================== */}
       {showMovementModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
               {movementType === 'supply' ? '[F7] Suprimento de Caixa (Troco)' : '[F8] Sangria de Caixa (Retirada)'}
             </h3>
             <div>
-              <label className="block text-xs text-slate-400">Valor (R$)</label>
+              <label className="block text-xs text-slate-600 dark:text-slate-400">Valor (R$)</label>
               <input
                 type="text"
                 autoFocus
@@ -2779,17 +2788,17 @@ export function PdvTerminalPage() {
                 onChange={(e) => { setMovementAmountInput(formatCurrencyInput(e.target.value)); }}
                 onFocus={(e) => e.target.select()}
                 placeholder="0,00"
-                className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-white border border-slate-700 focus:outline-hidden"
+                className="mt-1 w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2 text-lg font-bold font-mono text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:outline-hidden"
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400">Motivo</label>
+              <label className="block text-xs text-slate-600 dark:text-slate-400">Motivo</label>
               <input
                 type="text"
                 value={movementReasonInput}
                 onChange={(e) => { setMovementReasonInput(e.target.value); }}
                 placeholder={movementType === 'supply' ? 'Ex: Reforço de troco da manhã' : 'Ex: Recolhimento para o cofre'}
-                className="mt-1 w-full rounded-xl bg-slate-950 px-3 py-2 text-xs text-white border border-slate-700 focus:outline-hidden"
+                className="mt-1 w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:outline-hidden"
               />
             </div>
             <div className="flex gap-2">
@@ -2799,14 +2808,14 @@ export function PdvTerminalPage() {
                   setShowMovementModal(false)
                   focusBarcodeInput()
                 }}
-                className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300"
+                className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmMovement}
-                className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500"
+                className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors"
               >
                 Confirmar
               </button>
@@ -2815,23 +2824,22 @@ export function PdvTerminalPage() {
         </div>
       )}
 
-      
       {/* ============================================================== */}
       {/* MODAL DE QUANTIDADE (F9)                                       */}
       {/* ============================================================== */}
       {showQuantityModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className={`rounded-lg p-1.5 ${
-                  modalOperation === 'subtract' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
+                  modalOperation === 'subtract' ? 'bg-rose-500/20 text-rose-500 dark:text-rose-400' : 'bg-amber-500/20 text-amber-500 dark:text-amber-400'
                 }`}>
                   <Hash className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">[F9] Quantidade de Itens</h3>
-                  <p className="text-[11px] text-slate-400">Defina a operação e a quantidade para a próxima leitura</p>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">[F9] Quantidade de Itens</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Defina a operação e a quantidade para a próxima leitura</p>
                 </div>
               </div>
               <button
@@ -2840,7 +2848,7 @@ export function PdvTerminalPage() {
                   setShowQuantityModal(false)
                   focusBarcodeInput()
                 }}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -2849,7 +2857,7 @@ export function PdvTerminalPage() {
             <form onSubmit={handleConfirmQuantity} className="space-y-4">
               {/* SELEÇÃO DA OPERAÇÃO: MULTIPLICAR OU SUBTRAIR */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Operação para a próxima leitura:
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -2858,14 +2866,14 @@ export function PdvTerminalPage() {
                     onClick={() => setModalOperation('multiply')}
                     className={`flex items-center justify-center gap-2 rounded-xl p-3 border font-bold text-xs transition-all ${
                       modalOperation === 'multiply'
-                        ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300 ring-2 ring-emerald-500/40'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-500/40'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
                     <Plus className="h-4 w-4" />
                     <div className="text-left">
                       <p className="leading-none">Multiplicar</p>
-                      <span className="text-[10px] font-normal text-slate-400">[M] Próxima leitura</span>
+                      <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">[M] Próxima leitura</span>
                     </div>
                   </button>
 
@@ -2874,14 +2882,14 @@ export function PdvTerminalPage() {
                     onClick={() => setModalOperation('subtract')}
                     className={`flex items-center justify-center gap-2 rounded-xl p-3 border font-bold text-xs transition-all ${
                       modalOperation === 'subtract'
-                        ? 'border-rose-500 bg-rose-950/40 text-rose-300 ring-2 ring-rose-500/40'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                        ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 ring-2 ring-rose-500/40'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
                     <Minus className="h-4 w-4" />
                     <div className="text-left">
                       <p className="leading-none">Subtrair</p>
-                      <span className="text-[10px] font-normal text-slate-400">[S] Próxima leitura</span>
+                      <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">[S] Próxima leitura</span>
                     </div>
                   </button>
                 </div>
@@ -2889,7 +2897,7 @@ export function PdvTerminalPage() {
 
               {/* INPUT DE QUANTIDADE */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   {modalOperation === 'multiply' ? 'Multiplicar por (UN):' : 'Subtrair quantidade (UN):'}
                 </label>
                 <input
@@ -2900,13 +2908,13 @@ export function PdvTerminalPage() {
                   value={quantityInput}
                   onChange={(e) => setQuantityInput(e.target.value)}
                   placeholder="Ex: 5"
-                  className={`mt-1.5 w-full rounded-xl bg-slate-950 px-4 py-3 text-2xl font-bold font-mono border focus:outline-hidden ${
+                  className={`mt-1.5 w-full rounded-xl bg-slate-50 dark:bg-slate-950 px-4 py-3 text-2xl font-bold font-mono border focus:outline-hidden ${
                     modalOperation === 'subtract'
-                      ? 'text-rose-400 border-slate-700 focus:border-rose-500'
-                      : 'text-amber-400 border-slate-700 focus:border-emerald-500'
+                      ? 'text-rose-600 dark:text-rose-400 border-slate-300 dark:border-slate-700 focus:border-rose-500'
+                      : 'text-amber-600 dark:text-amber-400 border-slate-300 dark:border-slate-700 focus:border-emerald-500'
                   }`}
                 />
-                <span className="text-[11px] text-slate-400 mt-1.5 block">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 block">
                   {modalOperation === 'multiply'
                     ? 'O próximo código de barras lido adicionará esta quantidade e retornará a zero na leitura seguinte.'
                     : 'O próximo código de barras lido deduzirá esta quantidade do carrinho e retornará a zero na leitura seguinte.'}
@@ -2920,7 +2928,7 @@ export function PdvTerminalPage() {
                     setShowQuantityModal(false)
                     focusBarcodeInput()
                   }}
-                  className="flex-1 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+                  className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   [Esc] Cancelar
                 </button>

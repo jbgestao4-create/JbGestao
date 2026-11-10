@@ -2,8 +2,6 @@
  * Validação e acesso às variáveis de ambiente da aplicação.
  */
 
-const REQUIRED_ENV_VARS = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] as const
-
 export interface EnvironmentValidationResult {
   isValid: boolean
   missing: string[]
@@ -19,18 +17,26 @@ function normalizeSupabaseUrl(rawUrl: string): string {
   return cleaned
 }
 
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim()
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
+
 /**
- * Valida a presença das variáveis de ambiente obrigatórias.
+ * Valida a presença das variáveis de ambiente obrigatórias sem acesso dinâmico
+ * a import.meta.env[key], evitando que o bundler serialize todo o objeto import.meta.env.
  */
 export function checkEnvironment(): EnvironmentValidationResult {
-  const missing = REQUIRED_ENV_VARS.filter(
-    (key) => !import.meta.env[key] || import.meta.env[key].trim() === '',
-  ).map((key) => key as string)
+  const missing: string[] = []
 
-  const configuredUrl = import.meta.env['VITE_SUPABASE_URL'].trim()
-  if (configuredUrl) {
+  if (!rawUrl) {
+    missing.push('VITE_SUPABASE_URL')
+  }
+  if (!rawKey) {
+    missing.push('VITE_SUPABASE_ANON_KEY')
+  }
+
+  if (rawUrl) {
     try {
-      const url = new URL(normalizeSupabaseUrl(configuredUrl))
+      const url = new URL(normalizeSupabaseUrl(rawUrl))
       if (
         url.protocol !== 'https:' ||
         !/^[a-z0-9-]+\.supabase\.co$/i.test(url.hostname)
@@ -47,9 +53,6 @@ export function checkEnvironment(): EnvironmentValidationResult {
     missing,
   }
 }
-
-const rawUrl = import.meta.env['VITE_SUPABASE_URL'].trim()
-const rawKey = import.meta.env['VITE_SUPABASE_ANON_KEY'].trim()
 
 /** Configurações do Supabase remoto; a aplicação não usa endpoints locais ou valores fictícios. */
 export const env = {

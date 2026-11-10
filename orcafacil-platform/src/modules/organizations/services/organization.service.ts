@@ -40,17 +40,17 @@ export const organizationService = {
         // Ignora silenciosamente se a RPC ainda não estiver criada no banco remoto
       }
 
-      // 2. Sempre consulta a tabela organizations para obter todos os campos atualizados, incluindo pdv_background_url e logo_url
+      // 2. Sempre consulta a tabela organizations para obter todos os campos atualizados, incluindo pdv_background_url, logo_url e access_plan_id
       let data: any[] | null = null
       const resWithTrial = await supabase
         .from('organizations')
-        .select('id, name, slug, is_active, trial_ends_at, pdv_background_url, logo_url, created_at')
+        .select('id, name, slug, is_active, trial_ends_at, pdv_background_url, logo_url, access_plan_id, created_at')
         .order('created_at', { ascending: true })
 
       if (!resWithTrial.error && resWithTrial.data && resWithTrial.data.length > 0) {
         data = resWithTrial.data as any
       } else {
-        // Fallback resiliente se a consulta com trial_ends_at falhar
+        // Fallback resiliente se a consulta com trial_ends_at/access_plan_id falhar
         const fallbackWithStatus = await supabase
           .from('organizations')
           .select('id, name, slug, is_active, pdv_background_url, logo_url, created_at')
@@ -100,6 +100,8 @@ export const organizationService = {
             trialEndsAt: org.trial_ends_at ?? null,
             pdvBackgroundUrl: org.pdv_background_url || localBg,
             logoUrl: org.logo_url ?? null,
+            accessPlanId: org.access_plan_id ?? null,
+            accessPlanName: org.access_plan_name ?? null,
             createdAt: org.created_at,
           }
         }),
@@ -766,16 +768,20 @@ export const organizationService = {
     try {
       // Salva no localStorage como cache imediato e redundante
       if (typeof window !== 'undefined') {
-        if (backgroundUrl) {
-          localStorage.setItem(`pdv_bg_${organizationId}`, backgroundUrl)
-          localStorage.setItem('pdv_bg_last', backgroundUrl)
-          localStorage.setItem('pdv_background_url', backgroundUrl)
-        } else {
-          localStorage.removeItem(`pdv_bg_${organizationId}`)
-          localStorage.removeItem('pdv_bg_last')
-          localStorage.removeItem('pdv_background_url')
+        try {
+          if (backgroundUrl) {
+            localStorage.setItem(`pdv_bg_${organizationId}`, backgroundUrl)
+            localStorage.setItem('pdv_bg_last', backgroundUrl)
+            localStorage.setItem('pdv_background_url', backgroundUrl)
+          } else {
+            localStorage.removeItem(`pdv_bg_${organizationId}`)
+            localStorage.removeItem('pdv_bg_last')
+            localStorage.removeItem('pdv_background_url')
+          }
+          window.dispatchEvent(new Event('storage'))
+        } catch {
+          // Ignora caso quota local esteja cheia
         }
-        window.dispatchEvent(new Event('storage'))
       }
 
       const { error } = await supabase

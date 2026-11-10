@@ -48,6 +48,8 @@ export interface Organization {
   trialEndsAt?: string | null
   pdvBackgroundUrl?: string | null
   logoUrl?: string | null
+  accessPlanId?: UUID | null
+  accessPlanName?: string | null
   createdAt: string
 }
 

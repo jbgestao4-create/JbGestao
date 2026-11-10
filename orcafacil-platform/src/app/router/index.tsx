@@ -268,6 +268,10 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/reports',
+    element: <Navigate to="/orcafacil/reports" replace />,
+  },
+  {
     path: '/orcafacil/suppliers',
     element: (
       <ProtectedRoute>
