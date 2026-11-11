@@ -81,18 +81,22 @@ export function DashboardPage() {
     'checking',
   )
   const [isModulesExpanded, setIsModulesExpanded] = useState(true)
-  const [initialAnnouncements, setInitialAnnouncements] = useState<SystemAnnouncement[]>([])
+  const [initialAnnouncements, setInitialAnnouncements] = useState<SystemAnnouncement[] | undefined>(
+    undefined,
+  )
 
   useEffect(() => {
     let isMounted = true
     const loadAnnouncements = async () => {
       try {
         const res = await announcementService.listActive()
-        if (isMounted && res.success && res.data) {
-          setInitialAnnouncements(res.data)
+        if (isMounted) {
+          setInitialAnnouncements(res.success && res.data ? res.data : [])
         }
       } catch {
-        // ignore
+        if (isMounted) {
+          setInitialAnnouncements([])
+        }
       }
     }
     void loadAnnouncements()

@@ -12,22 +12,36 @@ interface AnnouncementCarouselProps {
   onReady?: () => void
 }
 
-function preloadImage(src: string, timeoutMs = 3000): Promise<void> {
+function preloadImage(src: string, timeoutMs = 6000): Promise<void> {
   return new Promise((resolve) => {
     if (!src) {
       resolve()
       return
     }
     const img = new Image()
-    const timer = setTimeout(resolve, timeoutMs)
+    let resolved = false
+    const finish = () => {
+      if (!resolved) {
+        resolved = true
+        resolve()
+      }
+    }
+    const timer = setTimeout(finish, timeoutMs)
+
     img.onload = () => {
       clearTimeout(timer)
-      resolve()
+      if ('decode' in img && typeof img.decode === 'function') {
+        img.decode().then(finish).catch(finish)
+      } else {
+        finish()
+      }
     }
+
     img.onerror = () => {
       clearTimeout(timer)
-      resolve()
+      finish()
     }
+
     img.src = src
   })
 }
@@ -46,39 +60,73 @@ export function AnnouncementCarousel({
   )
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
-  const [isLoading, setIsLoading] = useState(initialAnnouncements === undefined)
+  const [isLoading, setIsLoading] = useState(true)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const loadAnnouncements = async () => {
-    setIsLoading(true)
-    try {
-      const res = await announcementService.listActive()
-      const activeList = res.success && res.data ? res.data : []
-      if (activeList.length > 0 && activeList[0].imageUrl) {
-        await preloadImage(activeList[0].imageUrl)
-        // Preload remaining images in background
-        activeList.slice(1).forEach((item) => {
-          if (item.imageUrl) void preloadImage(item.imageUrl)
-        })
-      }
-      setAnnouncements(activeList)
-    } finally {
-      setIsLoading(false)
-      onReady?.()
-    }
-  }
-
   useEffect(() => {
-    if (initialAnnouncements !== undefined) {
-      setAnnouncements(initialAnnouncements)
-      setIsLoading(false)
-      initialAnnouncements.slice(1).forEach((item) => {
-        if (item.imageUrl) void preloadImage(item.imageUrl)
-      })
-      onReady?.()
-      return
+    let isMounted = true
+
+    const syncAnnouncements = async () => {
+      // Caso a lista venha por prop
+      if (initialAnnouncements !== undefined) {
+        if (initialAnnouncements.length > 0 && initialAnnouncements[0].imageUrl) {
+          setIsLoading(true)
+          await preloadImage(initialAnnouncements[0].imageUrl)
+          if (isMounted) {
+            setAnnouncements(initialAnnouncements)
+            setIsLoading(false)
+            onReady?.()
+          }
+          // Pré-carrega demais imagens em segundo plano
+          initialAnnouncements.slice(1).forEach((item) => {
+            if (item.imageUrl) void preloadImage(item.imageUrl)
+          })
+        } else {
+          if (isMounted) {
+            setAnnouncements(initialAnnouncements)
+            setIsLoading(false)
+            onReady?.()
+          }
+        }
+        return
+      }
+
+      // Caso precise buscar diretamente do serviço
+      setIsLoading(true)
+      try {
+        const res = await announcementService.listActive()
+        const activeList = res.success && res.data ? res.data : []
+        if (activeList.length > 0 && activeList[0].imageUrl) {
+          await preloadImage(activeList[0].imageUrl)
+          if (isMounted) {
+            setAnnouncements(activeList)
+            setIsLoading(false)
+            onReady?.()
+          }
+          activeList.slice(1).forEach((item) => {
+            if (item.imageUrl) void preloadImage(item.imageUrl)
+          })
+        } else {
+          if (isMounted) {
+            setAnnouncements(activeList)
+            setIsLoading(false)
+            onReady?.()
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setAnnouncements([])
+          setIsLoading(false)
+          onReady?.()
+        }
+      }
     }
-    void loadAnnouncements()
+
+    void syncAnnouncements()
+
+    return () => {
+      isMounted = false
+    }
   }, [initialAnnouncements])
 
   // Cycle every 3 seconds unless hovered/paused
@@ -107,9 +155,32 @@ export function AnnouncementCarousel({
     setCurrentIndex((prev) => (prev + 1) % announcements.length)
   }
 
-  // Não exibe nada no lugar do anúncio antes do carregamento dele terminar
+  // Enquanto o anúncio/gif está carregando, exibe a barra e spinner para não ficar vazio em baixo
   if (isLoading) {
-    return null
+    return (
+      <div className="relative flex flex-col items-center justify-center h-full min-h-[260px] sm:min-h-[340px] rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-xs select-none">
+        {/* Spinner giratório com a marca ControleSoft */}
+        <div className="relative flex items-center justify-center w-14 h-14 mb-3">
+          <div className="absolute inset-0 rounded-full border-2 border-blue-500/20 border-t-blue-600 dark:border-t-blue-400 animate-spin" />
+          <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 p-1 shadow-2xs ring-1 ring-slate-200 dark:ring-slate-700">
+            <img
+              src="/controlesoft-mark.png"
+              alt="ControleSoft"
+              className="h-full w-full object-contain"
+            />
+          </div>
+        </div>
+
+        {/* Barra de carregamento animada */}
+        <div className="w-36 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 mb-2">
+          <div className="h-full w-full bg-gradient-to-r from-blue-600 via-sky-400 to-blue-600 animate-[shimmer_1.5s_infinite_linear] rounded-full" />
+        </div>
+
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 animate-pulse">
+          Carregando...
+        </p>
+      </div>
+    )
   }
 
   // If there are uploaded announcement images, render the interactive 3-second carousel!
