@@ -7,7 +7,7 @@ interface ReportActionBarProps {
   badgeText: string
   badgeColorClass?: string
   description: string
-  onBack: () => void
+  onBack?: () => void
   onExportExcel: () => void
   onExportXml: () => void
   onPrint: () => void
@@ -34,14 +34,16 @@ export function ReportActionBar({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs transition-colors shrink-0"
-          title="Voltar para a Central"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs transition-colors shrink-0"
+            title="Voltar"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+        )}
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
