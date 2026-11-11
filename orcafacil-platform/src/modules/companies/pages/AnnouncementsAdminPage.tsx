@@ -377,7 +377,7 @@ export function AnnouncementsAdminPage() {
             <span className="text-[11px] font-normal text-slate-400">Dimensões reais de exibição</span>
           </div>
           <div className="h-[360px] w-full max-w-2xl mx-auto">
-            <LoginAnnouncementCarousel />
+            <LoginAnnouncementCarousel variant="contained" />
           </div>
         </div>
       )}

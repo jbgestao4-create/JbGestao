@@ -4,13 +4,21 @@ import {
   announcementService,
   type SystemAnnouncement,
 } from '../services/announcement.service'
+import { BrandLogo } from './BrandLogo'
 
-interface LoginAnnouncementCarouselProps {
+export interface LoginAnnouncementCarouselProps {
   /**
    * Callback invocado quando os anúncios terminam de carregar.
    * Informa se há anúncios de login cadastrados e ativos.
    */
   onStatusChange?: (hasAnnouncements: boolean) => void
+
+  /**
+   * Modo de renderização:
+   * - 'fullscreen' (padrão): ocupa a tela inteira (100% largura e altura da lateral da tela de login, sem margens).
+   * - 'contained': modo contido com cantos arredondados, usado para pré-visualização em painéis administrativos.
+   */
+  variant?: 'fullscreen' | 'contained'
 }
 
 function preloadImage(src: string, timeoutMs = 4000): Promise<void> {
@@ -33,7 +41,10 @@ function preloadImage(src: string, timeoutMs = 4000): Promise<void> {
   })
 }
 
-export function LoginAnnouncementCarousel({ onStatusChange }: LoginAnnouncementCarouselProps) {
+export function LoginAnnouncementCarousel({
+  onStatusChange,
+  variant = 'fullscreen',
+}: LoginAnnouncementCarouselProps) {
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
@@ -118,17 +129,23 @@ export function LoginAnnouncementCarousel({ onStatusChange }: LoginAnnouncementC
     }
   }
 
+  const isFullscreen = variant === 'fullscreen'
+
   return (
     <div
-      className="group relative flex h-full w-full flex-col justify-between overflow-hidden rounded-2xl bg-slate-950/80 shadow-2xl transition-all"
+      className={`group relative flex w-full flex-col justify-between overflow-hidden bg-slate-950 select-none transition-all ${
+        isFullscreen
+          ? 'h-full min-h-screen rounded-none'
+          : 'h-full rounded-2xl shadow-2xl'
+      }`}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       role="region"
       aria-label="Carrossel de novidades e anúncios da tela de login"
     >
-      {/* Imagem do anúncio */}
+      {/* Imagem do anúncio em tela inteira */}
       <div
-        className={`relative flex h-full w-full items-center justify-center overflow-hidden ${
+        className={`absolute inset-0 h-full w-full overflow-hidden ${
           current.linkUrl ? 'cursor-pointer' : 'cursor-default'
         }`}
         onClick={handleBannerClick}
@@ -136,21 +153,44 @@ export function LoginAnnouncementCarousel({ onStatusChange }: LoginAnnouncementC
         <img
           key={current.id}
           src={current.imageUrl}
-          alt={current.title || 'Anúncio'}
-          className="h-full w-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.02]"
+          alt={current.title || 'Anúncio de Login'}
+          className="h-full w-full object-cover object-center transition-all duration-700 ease-out group-hover:scale-[1.02]"
         />
 
-        {/* Gradiente de proteção para texto e navegação */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-slate-950/40" />
+        {/* Gradiente superior para proteger logo e badges */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-slate-950/90 via-slate-950/40 to-transparent z-10" />
 
-        {/* Indicador de link externo no topo quando aplicável */}
-        {current.linkUrl && (
-          <div className="absolute right-4 top-4 z-20 flex items-center gap-1.5 rounded-full bg-slate-900/80 px-3 py-1 text-[11px] font-bold text-white shadow-md backdrop-blur-md transition-transform group-hover:scale-105 border border-white/10">
+        {/* Gradiente inferior para proteger textos, paginação e rodapé */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-transparent z-10" />
+      </div>
+
+      {/* Topo: Logo ControleSoft e Link externo */}
+      {isFullscreen && (
+        <div className="relative z-30 flex items-center justify-between p-8 xl:p-10 pointer-events-auto">
+          <BrandLogo dark />
+
+          {current.linkUrl && (
+            <button
+              type="button"
+              onClick={handleBannerClick}
+              className="flex items-center gap-2 rounded-full bg-slate-900/80 px-4 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur-md transition-all hover:bg-slate-800 hover:scale-105 border border-white/10 cursor-pointer"
+            >
+              <span>Abrir novidade</span>
+              <ExternalLink className="h-3.5 w-3.5 text-sky-400" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Indicador de link em modo contained (preview) */}
+      {!isFullscreen && current.linkUrl && (
+        <div className="relative z-30 flex justify-end p-4">
+          <div className="flex items-center gap-1.5 rounded-full bg-slate-900/80 px-3 py-1 text-[11px] font-bold text-white shadow-md backdrop-blur-md border border-white/10">
             <span>Abrir novidade</span>
             <ExternalLink className="h-3 w-3 text-sky-400" />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Botões de navegação lateral (exibidos no hover quando há mais de 1 imagem) */}
       {announcements.length > 1 && (
@@ -158,40 +198,44 @@ export function LoginAnnouncementCarousel({ onStatusChange }: LoginAnnouncementC
           <button
             type="button"
             onClick={handlePrev}
-            className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white shadow-lg backdrop-blur-md opacity-0 transition-opacity hover:bg-slate-900 group-hover:opacity-100 cursor-pointer border border-white/10"
+            className="absolute left-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-slate-900/70 p-3 text-white shadow-2xl backdrop-blur-md opacity-0 transition-all hover:bg-slate-900 hover:scale-110 group-hover:opacity-100 cursor-pointer border border-white/10"
             title="Anúncio anterior"
             aria-label="Anúncio anterior"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className="h-6 w-6" />
           </button>
           <button
             type="button"
             onClick={handleNext}
-            className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white shadow-lg backdrop-blur-md opacity-0 transition-opacity hover:bg-slate-900 group-hover:opacity-100 cursor-pointer border border-white/10"
+            className="absolute right-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-slate-900/70 p-3 text-white shadow-2xl backdrop-blur-md opacity-0 transition-all hover:bg-slate-900 hover:scale-110 group-hover:opacity-100 cursor-pointer border border-white/10"
             title="Próximo anúncio"
             aria-label="Próximo anúncio"
           >
-            <ChevronRight className="h-5 w-5" />
+            <ChevronRight className="h-6 w-6" />
           </button>
         </>
       )}
 
-      {/* Conteúdo inferior: Legenda, resumo, barra de tempo e bolinhas indicadoras */}
-      <div className="absolute bottom-0 inset-x-0 z-20 p-6 flex flex-col gap-3">
+      {/* Rodapé: Legenda, resumo, barra de tempo e bolinhas indicadoras */}
+      <div
+        className={`relative z-30 flex flex-col gap-3.5 ${
+          isFullscreen ? 'p-8 xl:p-10' : 'p-6'
+        }`}
+      >
         {(current.title || current.summary) && (
           <div
-            className={`max-w-xl space-y-1 ${
+            className={`max-w-xl space-y-1.5 ${
               current.linkUrl ? 'cursor-pointer hover:opacity-95' : ''
             }`}
             onClick={handleBannerClick}
           >
             {current.title && (
-              <h2 className="text-xl font-bold tracking-tight text-white drop-shadow-md">
+              <h2 className="text-2xl font-bold tracking-tight text-white drop-shadow-lg">
                 {current.title}
               </h2>
             )}
             {current.summary && (
-              <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed drop-shadow-sm font-medium">
+              <p className="text-sm text-slate-200 line-clamp-2 leading-relaxed drop-shadow-md font-medium">
                 {current.summary}
               </p>
             )}
@@ -200,18 +244,18 @@ export function LoginAnnouncementCarousel({ onStatusChange }: LoginAnnouncementC
 
         {/* Indicadores de slides e progresso de 8 segundos */}
         {announcements.length > 1 && (
-          <div className="flex items-center justify-between pt-2 border-t border-white/10">
+          <div className="flex items-center justify-between pt-2 border-t border-white/15">
             {/* Bolinhas / Barras de paginação */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               {announcements.map((_, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => setCurrentIndex(idx)}
-                  className={`h-2 rounded-full transition-all cursor-pointer ${
+                  className={`h-2.5 rounded-full transition-all cursor-pointer ${
                     idx === currentIndex
-                      ? 'w-7 bg-sky-400'
-                      : 'w-2 bg-white/40 hover:bg-white/70'
+                      ? 'w-8 bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.7)]'
+                      : 'w-2.5 bg-white/40 hover:bg-white/70'
                   }`}
                   aria-label={`Ir para anúncio ${idx + 1}`}
                 />
@@ -219,10 +263,14 @@ export function LoginAnnouncementCarousel({ onStatusChange }: LoginAnnouncementC
             </div>
 
             {/* Marcador de tempo (8s) */}
-            <span className="text-[11px] font-semibold text-slate-300 tracking-wider">
+            <span className="text-xs font-semibold text-slate-300 tracking-wider">
               {isPaused ? 'Pausado' : 'Passa a cada 8s'}
             </span>
           </div>
+        )}
+
+        {isFullscreen && (
+          <p className="text-xs text-slate-400">ControleSoft — Potencialize a administração da sua empresa</p>
         )}
       </div>
     </div>
