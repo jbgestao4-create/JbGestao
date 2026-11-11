@@ -267,27 +267,65 @@ export const inventoryService = {
         .map(mapInventoryItem)
 
       // Identifica se há produtos duplicados com o mesmo código no estoque para consolidação automática
-      const seenCodes = new Set<string>()
       let hasDuplicates = false
+      const seenSku = new Set<string>()
+      const seenBarcode = new Set<string>()
+      const seenSupplierCode = new Set<string>()
+      const seenName = new Set<string>()
+
       for (const item of activeItems) {
-        const cleanSku = (item.sku || '').trim().toLowerCase().replace(/^0+/, '')
+        const cleanSku = (item.sku || '').trim().toLowerCase().replace(/^#+/, '').replace(/^0+/, '')
         const cleanBarcode = (item.barcode || '').trim().toLowerCase()
-        const key = cleanSku
-          ? `sku:${cleanSku}`
-          : cleanBarcode && !cleanBarcode.includes('sem gtin') && cleanBarcode !== '0'
-            ? `barcode:${cleanBarcode}`
-            : ''
-        if (key) {
-          if (seenCodes.has(key)) {
+        const isValidBarcode = cleanBarcode && !cleanBarcode.includes('sem gtin') && cleanBarcode !== '0'
+        const cleanSupplierCode = (item.supplierProductCode || '').trim().toLowerCase().replace(/^0+/, '')
+        const cleanName = (item.name || '').trim().toLowerCase()
+
+        if (cleanSku) {
+          if (seenSku.has(cleanSku) || (cleanSupplierCode && seenSku.has(cleanSupplierCode))) {
             hasDuplicates = true
             break
           }
-          seenCodes.add(key)
+          seenSku.add(cleanSku)
+        }
+        if (isValidBarcode) {
+          if (seenBarcode.has(cleanBarcode)) {
+            hasDuplicates = true
+            break
+          }
+          seenBarcode.add(cleanBarcode)
+        }
+        if (cleanSupplierCode) {
+          if (seenSupplierCode.has(cleanSupplierCode) || seenSku.has(cleanSupplierCode)) {
+            hasDuplicates = true
+            break
+          }
+          seenSupplierCode.add(cleanSupplierCode)
+        }
+        if (cleanName) {
+          const nameKey = `${cleanName}::${(item.unit || '').trim().toLowerCase()}`
+          if (seenName.has(nameKey)) {
+            hasDuplicates = true
+            break
+          }
+          seenName.add(nameKey)
         }
       }
 
       if (hasDuplicates) {
-        void this.consolidateDuplicates(organizationId)
+        await this.consolidateDuplicates(organizationId)
+        const recheck = await supabase
+          .from('inventory_items')
+          .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
+          .eq('organization_id', organizationId)
+          .order('name', { ascending: true })
+          .returns<InventoryItemRow[]>()
+
+        if (!recheck.error && recheck.data) {
+          return {
+            success: true,
+            data: recheck.data.filter((row) => !row.deleted_at).map(mapInventoryItem),
+          }
+        }
       }
 
       return { success: true, data: activeItems }

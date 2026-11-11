@@ -20,7 +20,6 @@ import {
   Ban,
   Boxes,
   Briefcase,
-  Calendar,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -47,7 +46,7 @@ type ReportView = 'home' | 'registrations' | 'quotes_orders' | 'inventory'
 type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
 
 type QuotesOrdersPeriodMode = 'day' | 'month' | 'custom'
-type QuotesOrdersTab = 'all' | 'orders' | 'quotes'
+type QuotesOrdersTab = 'orders' | 'quotes'
 
 const PERIOD_LABELS: Record<ReportPeriodPreset, string> = {
   today: 'Hoje',
@@ -108,7 +107,7 @@ export function ReportsPage() {
   const [qoCustomEndDate, setQoCustomEndDate] = useState<string>(() => {
     return getPresetDateRange('month').endDate
   })
-  const [qoTab, setQoTab] = useState<QuotesOrdersTab>('all')
+  const [qoTab, setQoTab] = useState<QuotesOrdersTab>('orders')
   const [qoStatus, setQoStatus] = useState<string>('all')
   const [qoSearch, setQoSearch] = useState<string>('')
 
@@ -1466,23 +1465,8 @@ export function ReportsPage() {
 
             {/* Linha de Seleção Principal: Ordens de Serviço / Orçamentos / Todas, Status e Busca */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
-              {/* Botões Principais de Seleção: Todas, O.S e Orçamentos */}
+              {/* Botões Principais de Seleção: O.S e Orçamentos */}
               <div className="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQoTab('all')
-                    setQoStatus('all')
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    qoTab === 'all'
-                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <ClipboardList className="h-3.5 w-3.5" />
-                  Todas as Operações ({allUnifiedRecords.length})
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1532,7 +1516,7 @@ export function ReportsPage() {
                       <option value="ready">Pronto p/ Retirada ({queueCounts.ready})</option>
                       <option value="closed">O.S. Encerrada ({queueCounts.closed})</option>
                     </>
-                  ) : qoTab === 'quotes' ? (
+                  ) : (
                     <>
                       <option value="all">Todos os Orçamentos ({quoteStatusCounts.total})</option>
                       <option value="draft">Em Rascunho ({quoteStatusCounts.draft})</option>
@@ -1540,18 +1524,6 @@ export function ReportsPage() {
                       <option value="sent">Enviados ao Cliente ({quoteStatusCounts.sent})</option>
                       <option value="rejected">Recusados ({quoteStatusCounts.rejected})</option>
                       <option value="expired">Expirados</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="all">Todas as Operações ({allUnifiedRecords.length})</option>
-                      <option value="queue">Fila de Atendimento (O.S)</option>
-                      <option value="maintenance_pending">Manutenção Pendente (O.S)</option>
-                      <option value="ready">Pronto p/ Retirada (O.S)</option>
-                      <option value="closed">O.S. Encerrada</option>
-                      <option value="draft">Rascunho (Orçamento)</option>
-                      <option value="approved">Aprovado (Orçamento)</option>
-                      <option value="sent">Enviado ao Cliente (Orçamento)</option>
-                      <option value="rejected">Recusado (Orçamento)</option>
                     </>
                   )}
                 </select>
@@ -1686,7 +1658,7 @@ export function ReportsPage() {
                 </CardContent>
               </Card>
             </>
-          ) : qoTab === 'orders' ? (
+          ) : (
             <>
               {/* 1. Total O.S */}
               <Card
@@ -1794,110 +1766,6 @@ export function ReportsPage() {
                   </div>
                   <div className="rounded-xl bg-slate-200 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300">
                     <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <>
-              {/* 1. Total Geral */}
-              <Card
-                onClick={() => setQoStatus('all')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
-                  qoStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Total Registros
-                    </p>
-                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
-                      {qoMetrics.totalCount} cadastrado(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
-                    <ClipboardList className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 2. Ordens de Serviço */}
-              <Card
-                onClick={() => {
-                  setQoTab('orders')
-                  setQoStatus('all')
-                }}
-                className="cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900"
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Ordens de Serviço
-                    </p>
-                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
-                      {qoMetrics.ordersCount} O.S
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
-                    <Wrench className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 3. Orçamentos */}
-              <Card
-                onClick={() => {
-                  setQoTab('quotes')
-                  setQoStatus('all')
-                }}
-                className="cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900"
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Orçamentos
-                    </p>
-                    <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
-                      {qoMetrics.quotesCount} proposta(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 4. Total Consolidado */}
-              <Card className="transition-all rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Total Consolidado
-                    </p>
-                    <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 font-mono">
-                      {formatCurrency(qoMetrics.grandTotal.toFixed(2))}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 5. Período */}
-              <Card className="transition-all rounded-xl shadow-xs border-slate-200 dark:border-slate-800 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-950">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Período Auditado
-                    </p>
-                    <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200 mt-0.5 truncate max-w-[120px]">
-                      {qoPeriodInfo.rangeText}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-slate-200 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300">
-                    <Calendar className="h-5 w-5" />
                   </div>
                 </CardContent>
               </Card>

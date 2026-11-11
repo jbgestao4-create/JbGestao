@@ -403,27 +403,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             )}
           </nav>
-
-          {/* FOOTER DO USUÁRIO */}
-          <div className={`p-3 border-t border-sky-200/60 dark:border-slate-800/80 bg-sky-100/30 dark:bg-slate-900/40 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-            {sidebarCollapsed ? (
-              <ProfileMenu
-                variant="header"
-                displayName={profile?.displayName || 'Usuário'}
-                email={user?.email}
-                avatarUrl={profile?.avatarUrl}
-                onSignOut={handleSignOut}
-              />
-            ) : (
-              <ProfileMenu
-                variant="sidebar"
-                displayName={profile?.displayName || 'Usuário'}
-                email={user?.email}
-                avatarUrl={profile?.avatarUrl}
-                onSignOut={handleSignOut}
-              />
-            )}
-          </div>
         </aside>
         </>
       )}
