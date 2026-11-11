@@ -14,6 +14,12 @@ export interface LoginAnnouncementCarouselProps {
   onStatusChange?: (hasAnnouncements: boolean) => void
 
   /**
+   * Callback invocado quando todo o anúncio e sua imagem estiverem 100% carregados e decodificados em memória.
+   * Usado para sincronizar a liberação da abertura da página do site.
+   */
+  onReady?: () => void
+
+  /**
    * Modo de renderização:
    * - 'fullscreen' (padrão): ocupa a lateral inteira da tela de login, sem margens ou textos indesejados.
    * - 'contained': modo contido com cantos arredondados, usado para pré-visualização em painéis administrativos.
@@ -21,28 +27,43 @@ export interface LoginAnnouncementCarouselProps {
   variant?: 'fullscreen' | 'contained'
 }
 
-function preloadImage(src: string, timeoutMs = 4000): Promise<void> {
+function preloadImage(src: string, timeoutMs = 5000): Promise<void> {
   return new Promise((resolve) => {
     if (!src) {
       resolve()
       return
     }
     const img = new Image()
-    const timer = setTimeout(resolve, timeoutMs)
+    let resolved = false
+    const finish = () => {
+      if (!resolved) {
+        resolved = true
+        resolve()
+      }
+    }
+    const timer = setTimeout(finish, timeoutMs)
+
     img.onload = () => {
       clearTimeout(timer)
-      resolve()
+      if ('decode' in img && typeof img.decode === 'function') {
+        img.decode().then(finish).catch(finish)
+      } else {
+        finish()
+      }
     }
+
     img.onerror = () => {
       clearTimeout(timer)
-      resolve()
+      finish()
     }
+
     img.src = src
   })
 }
 
 export function LoginAnnouncementCarousel({
   onStatusChange,
+  onReady,
   variant = 'fullscreen',
 }: LoginAnnouncementCarouselProps) {
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
@@ -61,6 +82,7 @@ export function LoginAnnouncementCarousel({
 
         if (!isMounted) return
 
+        // Pré-carrega e decodifica a imagem antes de sinalizar prontidão
         if (activeList.length > 0 && activeList[0].imageUrl) {
           await preloadImage(activeList[0].imageUrl)
           activeList.slice(1).forEach((item) => {
@@ -80,6 +102,7 @@ export function LoginAnnouncementCarousel({
       } finally {
         if (isMounted) {
           setIsLoading(false)
+          onReady?.()
         }
       }
     }
@@ -89,7 +112,7 @@ export function LoginAnnouncementCarousel({
     return () => {
       isMounted = false
     }
-  }, [onStatusChange])
+  }, [onStatusChange, onReady])
 
   // Transição automática a cada 8 segundos
   useEffect(() => {

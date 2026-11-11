@@ -30,6 +30,7 @@ export function LoginPage() {
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
   const [maintenanceMessage, setMaintenanceMessage] = useState('')
   const [isFullMaintenanceBlocked, setIsFullMaintenanceBlocked] = useState(false)
+  const [isPageReady, setIsPageReady] = useState(false)
 
   useEffect(() => {
     // Sempre que acessar a tela de login do zero, limpa qualquer dispensa anterior de alertas de boletos
@@ -125,10 +126,33 @@ export function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] lg:flex">
-      <section className="relative hidden min-h-screen w-1/2 overflow-hidden bg-slate-950 text-white lg:flex lg:flex-col p-0">
-        <LoginAnnouncementCarousel variant="fullscreen" />
-      </section>
+    <>
+      {/* Tela de carregamento: o site só abre quando a imagem do anúncio estiver totalmente carregada */}
+      {!isPageReady && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0F172A] text-white">
+          <img
+            src="/controlesoft-logo.png"
+            alt="ControleSoft"
+            className="h-16 sm:h-20 w-auto object-contain mb-8 drop-shadow-md brightness-0 invert"
+          />
+          <div
+            className="h-12 w-12 animate-spin rounded-full border-4 border-slate-700 border-t-sky-400"
+            role="status"
+            aria-label="Carregando"
+          />
+          <p className="mt-4 text-xs font-medium tracking-wider text-slate-400">
+            Carregando...
+          </p>
+        </div>
+      )}
+
+      <main className="min-h-screen bg-[#F8FAFC] lg:flex">
+        <section className="relative hidden min-h-screen w-1/2 overflow-hidden bg-slate-950 text-white lg:flex lg:flex-col p-0">
+          <LoginAnnouncementCarousel
+            variant="fullscreen"
+            onReady={() => setIsPageReady(true)}
+          />
+        </section>
 
       <section className="flex min-h-screen w-full flex-col items-center bg-[#F8FAFC] px-5 py-8 sm:px-8 lg:w-1/2 lg:px-12">
         <div className="flex w-full flex-1 items-center justify-center py-8">
@@ -306,5 +330,6 @@ export function LoginPage() {
         </footer>
       </section>
     </main>
+    </>
   )
 }
