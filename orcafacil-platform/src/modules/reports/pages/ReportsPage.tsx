@@ -16,6 +16,8 @@ import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import {
+  AlertTriangle,
+  Boxes,
   Briefcase,
   Calendar,
   CheckCircle2,
@@ -24,9 +26,12 @@ import {
   ClipboardList,
   FileBarChart,
   FileText,
+  Package,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
+  TrendingUp,
   Truck,
   UserCheck,
   Users,
@@ -36,7 +41,7 @@ import { ReportPrintHeader } from '../components/ReportPrintHeader'
 import { ReportPrintFooter } from '../components/ReportPrintFooter'
 import { ReportActionBar } from '../components/ReportActionBar'
 
-type ReportView = 'home' | 'registrations' | 'quotes_orders'
+type ReportView = 'home' | 'registrations' | 'quotes_orders' | 'inventory'
 type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
 
 type QuotesOrdersPeriodMode = 'day' | 'month' | 'custom'
@@ -62,7 +67,9 @@ export function ReportsPage() {
       ? 'registrations'
       : rawView === 'quotes_orders' || rawView === 'os_orcamentos' || rawView === 'os'
         ? 'quotes_orders'
-        : 'home'
+        : rawView === 'inventory' || rawView === 'estoque'
+          ? 'inventory'
+          : 'home'
 
   // Abas do Módulo de Cadastros
   const rawTab = searchParams.get('tab')
@@ -102,6 +109,19 @@ export function ReportsPage() {
   const [qoTab, setQoTab] = useState<QuotesOrdersTab>('all')
   const [qoStatus, setQoStatus] = useState<string>('all')
   const [qoSearch, setQoSearch] = useState<string>('')
+
+  // ============================================================================
+  // ESTADO DO MÓDULO: RELATÓRIO DE ESTOQUE
+  // ============================================================================
+  const [invSearch, setInvSearch] = useState('')
+  const [invStatus, setInvStatus] = useState<'all' | 'normal' | 'low' | 'out' | 'excess'>('all')
+  const [invCategory, setInvCategory] = useState<string>('all')
+  const [invSupplier, setInvSupplier] = useState<string>('all')
+  const [invAbcClass, setInvAbcClass] = useState<'all' | 'A' | 'B' | 'C'>('all')
+  const [invActiveFilter, setInvActiveFilter] = useState<'all' | 'active' | 'inactive' | 'can_sell'>('all')
+  const [invSortBy, setInvSortBy] = useState<
+    'value_desc' | 'cost_desc' | 'qty_asc' | 'qty_desc' | 'name_asc' | 'margin_desc'
+  >('value_desc')
 
   // Dataset Geral
   const [dataset, setDataset] = useState<ReportsDataset>({
@@ -435,20 +455,23 @@ export function ReportsPage() {
 
     // 1. Mapeamento de Ordens de Serviço (O.S.)
     for (const os of dataset.serviceOrders) {
-      let statusLabel = 'Pendente'
+      let statusLabel = 'Manutenção Pendente'
       let statusBadgeColor = 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300'
-      if (os.status === 'in_maintenance') {
+      if (os.status === 'queue') {
+        statusLabel = 'Fila de Atendimento'
+        statusBadgeColor = 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300'
+      } else if (os.status === 'in_maintenance') {
         statusLabel = 'Em Manutenção'
         statusBadgeColor = 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300'
+      } else if (os.status === 'pending') {
+        statusLabel = 'Manutenção Pendente'
+        statusBadgeColor = 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300'
       } else if (os.status === 'ready') {
         statusLabel = 'Pronto'
         statusBadgeColor = 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300'
       } else if (os.status === 'closed') {
-        statusLabel = 'Entregue / Concluído'
-        statusBadgeColor = 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300'
-      } else if (os.status === 'queue') {
-        statusLabel = 'Na Fila'
-        statusBadgeColor = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300'
+        statusLabel = 'O.S. Encerrada'
+        statusBadgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300'
       }
 
       const equipDesc = [os.equipmentName, os.equipmentBrand, os.equipmentModel].filter(Boolean).join(' ')
@@ -536,8 +559,14 @@ export function ReportsPage() {
         if (qoCustomEndDate && recDate > qoCustomEndDate) return false
       }
 
-      // 3. Filtro de Status
-      if (qoStatus !== 'all' && rec.status !== qoStatus) return false
+      // 3. Filtro de Status / Filas
+      if (qoStatus !== 'all') {
+        if (qoStatus === 'maintenance_pending') {
+          if (rec.status !== 'pending' && rec.status !== 'in_maintenance') return false
+        } else if (rec.status !== qoStatus) {
+          return false
+        }
+      }
 
       // 4. Busca Textual
       if (qoSearch.trim()) {
@@ -584,6 +613,31 @@ export function ReportsPage() {
       totalCount: filteredQoRecords.length,
     }
   }, [filteredQoRecords])
+
+  // Contadores das Filas de O.S (considerando o período ativo para auditoria precisa)
+  const queueCounts = useMemo(() => {
+    const osInPeriod = allUnifiedRecords.filter((rec) => {
+      if (rec.kind !== 'order') return false
+      const recDate = rec.date.slice(0, 10)
+      if (qoPeriodMode === 'day') {
+        if (recDate !== qoSelectedDay) return false
+      } else if (qoPeriodMode === 'month') {
+        if (recDate.slice(0, 7) !== qoSelectedMonth) return false
+      } else if (qoPeriodMode === 'custom') {
+        if (qoCustomStartDate && recDate < qoCustomStartDate) return false
+        if (qoCustomEndDate && recDate > qoCustomEndDate) return false
+      }
+      return true
+    })
+
+    return {
+      all: osInPeriod.length,
+      queue: osInPeriod.filter((r) => r.status === 'queue').length,
+      maintenance_pending: osInPeriod.filter((r) => r.status === 'pending' || r.status === 'in_maintenance').length,
+      ready: osInPeriod.filter((r) => r.status === 'ready').length,
+      closed: osInPeriod.filter((r) => r.status === 'closed').length,
+    }
+  }, [allUnifiedRecords, qoPeriodMode, qoSelectedDay, qoSelectedMonth, qoCustomStartDate, qoCustomEndDate])
 
   // Exportações de O.S & Orçamentos
   const handleExportQoExcel = () => {
@@ -669,6 +723,337 @@ export function ReportsPage() {
   }
 
   // ============================================================================
+  // CÁLCULOS: MÓDULO DE RELATÓRIO DE ESTOQUE
+  // ============================================================================
+  const invCategories = useMemo(() => {
+    const set = new Set<string>()
+    dataset.inventory.forEach((i) => {
+      if (i.category?.trim()) set.add(i.category.trim())
+    })
+    return Array.from(set).sort()
+  }, [dataset.inventory])
+
+  const invSuppliers = useMemo(() => {
+    const map = new Map<string, string>()
+    dataset.suppliers.forEach((s) => {
+      map.set(s.id, s.name)
+    })
+    dataset.inventory.forEach((i) => {
+      if (i.supplierId && i.supplierName) {
+        map.set(i.supplierId, i.supplierName)
+      }
+    })
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
+  }, [dataset.suppliers, dataset.inventory])
+
+  const enrichedInventory = useMemo(() => {
+    const list = dataset.inventory.map((item) => {
+      const qty = Math.max(0, parseFloat(item.quantityOnHand) || 0)
+      const minQty = Math.max(0, parseFloat(item.minimumQuantity) || 0)
+      const maxQty = parseFloat(item.maximumQuantity) || 0
+      const cost = Math.max(0, parseFloat(item.purchasePrice) || parseFloat(item.averageCost) || 0)
+      const price = Math.max(0, parseFloat(item.unitPrice) || 0)
+      const totalCostValue = qty * cost
+      const totalSaleValue = qty * price
+      const potentialProfit = totalSaleValue - totalCostValue
+      const marginPercent = price > 0 ? ((price - cost) / price) * 100 : 0
+
+      let stockStatus: 'out' | 'low' | 'normal' | 'excess' = 'normal'
+      let statusLabel = 'Normal'
+      let statusBadgeColor = 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300'
+
+      if (qty <= 0) {
+        stockStatus = 'out'
+        statusLabel = 'Esgotado'
+        statusBadgeColor = 'bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300'
+      } else if (minQty > 0 && qty <= minQty) {
+        stockStatus = 'low'
+        statusLabel = 'Estoque Baixo'
+        statusBadgeColor = 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300'
+      } else if (maxQty > 0 && qty > maxQty) {
+        stockStatus = 'excess'
+        statusLabel = 'Excedente'
+        statusBadgeColor = 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300'
+      }
+
+      return {
+        ...item,
+        qty,
+        minQty,
+        maxQty,
+        cost,
+        price,
+        totalCostValue,
+        totalSaleValue,
+        potentialProfit,
+        marginPercent,
+        stockStatus,
+        statusLabel,
+        statusBadgeColor,
+      }
+    })
+
+    // Curva ABC decrescente por valor total de venda
+    const sorted = [...list].sort((a, b) => b.totalSaleValue - a.totalSaleValue)
+    const grandSale = sorted.reduce((sum, i) => sum + i.totalSaleValue, 0)
+    let cumulative = 0
+    const abcMap = new Map<string, 'A' | 'B' | 'C'>()
+    sorted.forEach((i) => {
+      const share = grandSale > 0 ? (i.totalSaleValue / grandSale) * 100 : 0
+      cumulative += share
+      let cls: 'A' | 'B' | 'C' = 'C'
+      if (cumulative <= 80 || (cumulative - share < 80 && share > 0)) {
+        cls = 'A'
+      } else if (cumulative <= 95 || (cumulative - share < 95 && share > 0)) {
+        cls = 'B'
+      }
+      abcMap.set(i.id, cls)
+    })
+
+    return list.map((item) => ({
+      ...item,
+      abcClass: abcMap.get(item.id) || 'C',
+    }))
+  }, [dataset.inventory])
+
+  const filteredInventory = useMemo(() => {
+    return enrichedInventory
+      .filter((item) => {
+        // 1. Status do estoque
+        if (invStatus !== 'all' && item.stockStatus !== invStatus) return false
+
+        // 2. Categoria
+        if (invCategory !== 'all' && (item.category || '').trim() !== invCategory) return false
+
+        // 3. Fornecedor
+        if (invSupplier !== 'all') {
+          const matchSup =
+            item.supplierId === invSupplier ||
+            item.supplierName === invSupplier ||
+            item.suppliers?.some((s) => s.supplierId === invSupplier)
+          if (!matchSup) return false
+        }
+
+        // 4. Curva ABC
+        if (invAbcClass !== 'all' && item.abcClass !== invAbcClass) return false
+
+        // 5. Situação cadastral
+        if (invActiveFilter === 'active' && !item.isActive) return false
+        if (invActiveFilter === 'inactive' && item.isActive) return false
+        if (invActiveFilter === 'can_sell' && !item.canSell) return false
+
+        // 6. Busca textual
+        if (invSearch.trim()) {
+          const q = invSearch.toLowerCase()
+          const matchName = item.name.toLowerCase().includes(q)
+          const matchSku = item.sku?.toLowerCase().includes(q)
+          const matchBarcode = item.barcode?.toLowerCase().includes(q)
+          const matchBrand = item.brand?.toLowerCase().includes(q)
+          const matchModel = item.model?.toLowerCase().includes(q)
+          const matchCategory = item.category?.toLowerCase().includes(q)
+          const matchLocation = item.location?.toLowerCase().includes(q)
+          if (!matchName && !matchSku && !matchBarcode && !matchBrand && !matchModel && !matchCategory && !matchLocation) {
+            return false
+          }
+        }
+
+        return true
+      })
+      .sort((a, b) => {
+        if (invSortBy === 'value_desc') return b.totalSaleValue - a.totalSaleValue
+        if (invSortBy === 'cost_desc') return b.totalCostValue - a.totalCostValue
+        if (invSortBy === 'qty_asc') return a.qty - b.qty
+        if (invSortBy === 'qty_desc') return b.qty - a.qty
+        if (invSortBy === 'name_asc') return a.name.localeCompare(b.name, 'pt-BR')
+        if (invSortBy === 'margin_desc') return b.marginPercent - a.marginPercent
+        return 0
+      })
+  }, [
+    enrichedInventory,
+    invStatus,
+    invCategory,
+    invSupplier,
+    invAbcClass,
+    invActiveFilter,
+    invSearch,
+    invSortBy,
+  ])
+
+  const inventoryMetrics = useMemo(() => {
+    let totalUnits = 0
+    let totalCostValue = 0
+    let totalSaleValue = 0
+    let outCount = 0
+    let lowCount = 0
+    let normalCount = 0
+    let excessCount = 0
+
+    for (const item of filteredInventory) {
+      totalUnits += item.qty
+      totalCostValue += item.totalCostValue
+      totalSaleValue += item.totalSaleValue
+      if (item.stockStatus === 'out') outCount += 1
+      else if (item.stockStatus === 'low') lowCount += 1
+      else if (item.stockStatus === 'excess') excessCount += 1
+      else normalCount += 1
+    }
+
+    const potentialProfit = totalSaleValue - totalCostValue
+    const avgMargin = totalSaleValue > 0 ? (potentialProfit / totalSaleValue) * 100 : 0
+
+    return {
+      totalItems: filteredInventory.length,
+      totalUnits,
+      totalCostValue,
+      totalSaleValue,
+      potentialProfit,
+      avgMargin,
+      outCount,
+      lowCount,
+      normalCount,
+      excessCount,
+    }
+  }, [filteredInventory])
+
+  const inventoryGlobalCounts = useMemo(() => {
+    return {
+      all: enrichedInventory.length,
+      normal: enrichedInventory.filter((i) => i.stockStatus === 'normal').length,
+      low: enrichedInventory.filter((i) => i.stockStatus === 'low').length,
+      out: enrichedInventory.filter((i) => i.stockStatus === 'out').length,
+      excess: enrichedInventory.filter((i) => i.stockStatus === 'excess').length,
+    }
+  }, [enrichedInventory])
+
+  const inventoryStatusLabel = useMemo(() => {
+    switch (invStatus) {
+      case 'normal':
+        return 'Estoque Normal'
+      case 'low':
+        return 'Estoque Baixo'
+      case 'out':
+        return 'Estoque Zerado / Esgotado'
+      case 'excess':
+        return 'Estoque Excedente'
+      default:
+        return 'Todos os Itens'
+    }
+  }, [invStatus])
+
+  const handleExportInventoryExcel = () => {
+    const timestamp = new Date().toISOString().split('T')[0]
+    const headers = [
+      'Código / SKU',
+      'Código de Barras',
+      'Descrição do Produto',
+      'Categoria',
+      'Marca',
+      'Localização',
+      'Unidade',
+      'Qtd. em Estoque',
+      'Qtd. Mínima',
+      'Qtd. Máxima',
+      'Preço de Custo (R$)',
+      'Preço de Venda (R$)',
+      'Valor Total Custo (R$)',
+      'Valor Total Venda (R$)',
+      'Lucro Potencial (R$)',
+      'Margem de Lucro (%)',
+      'Situação do Estoque',
+      'Curva ABC',
+      'Fornecedor Principal',
+      'Ativo',
+    ]
+    const rows = filteredInventory.map((item) => [
+      item.sku || '—',
+      item.barcode || '—',
+      item.name,
+      item.category || 'Sem Categoria',
+      item.brand || '—',
+      item.location || '—',
+      item.unit || 'UN',
+      item.qty,
+      item.minQty,
+      item.maxQty > 0 ? item.maxQty : '—',
+      formatCurrency(item.cost.toFixed(2)),
+      formatCurrency(item.price.toFixed(2)),
+      formatCurrency(item.totalCostValue.toFixed(2)),
+      formatCurrency(item.totalSaleValue.toFixed(2)),
+      formatCurrency(item.potentialProfit.toFixed(2)),
+      `${item.marginPercent.toFixed(1)}%`,
+      item.statusLabel,
+      `Classe ${item.abcClass}`,
+      item.supplierName || '—',
+      item.isActive ? 'Sim' : 'Não',
+    ])
+    exportRowsToExcel(`relatorio-estoque-inventario-${timestamp}.xlsx`, headers, rows)
+  }
+
+  const handleExportInventoryXml = () => {
+    const timestamp = new Date().toISOString().split('T')[0]
+    const metadata = {
+      empresa: currentOrganization?.name || 'ControleSoft',
+      data_emissao: emissionDate,
+      hora_emissao: emissionTime,
+      filtro_status: invStatus,
+      filtro_categoria: invCategory,
+      total_produtos: filteredInventory.length,
+      unidades_em_estoque: inventoryMetrics.totalUnits,
+      valor_total_custo: inventoryMetrics.totalCostValue.toFixed(2),
+      valor_total_venda: inventoryMetrics.totalSaleValue.toFixed(2),
+      lucro_potencial: inventoryMetrics.potentialProfit.toFixed(2),
+    }
+    const headers = [
+      'sku',
+      'codigo_barras',
+      'nome_produto',
+      'categoria',
+      'marca',
+      'localizacao',
+      'unidade',
+      'quantidade_estoque',
+      'quantidade_minima',
+      'preco_custo',
+      'preco_venda',
+      'total_custo',
+      'total_venda',
+      'lucro_potencial',
+      'margem_percentual',
+      'status_estoque',
+      'curva_abc',
+      'fornecedor',
+    ]
+    const rows = filteredInventory.map((item) => [
+      item.sku || '',
+      item.barcode || '',
+      item.name,
+      item.category || '',
+      item.brand || '',
+      item.location || '',
+      item.unit || 'UN',
+      item.qty,
+      item.minQty,
+      item.cost.toFixed(2),
+      item.price.toFixed(2),
+      item.totalCostValue.toFixed(2),
+      item.totalSaleValue.toFixed(2),
+      item.potentialProfit.toFixed(2),
+      item.marginPercent.toFixed(1),
+      item.stockStatus,
+      item.abcClass,
+      item.supplierName || '',
+    ])
+    exportRowsToXml(
+      `relatorio-estoque-inventario-${timestamp}.xml`,
+      'relatorio_estoque',
+      'produto',
+      headers,
+      rows,
+      metadata
+    )
+  }
+
+  // ============================================================================
   // VIEW: CENTRAL DE RELATÓRIO (HUB PRINCIPAL LIMPO)
   // ============================================================================
   if (currentView === 'home') {
@@ -676,6 +1061,19 @@ export function ReportsPage() {
     const grandFinanceAll =
       dataset.serviceOrders.reduce((sum, os) => sum + (parseFloat(os.total) || 0), 0) +
       dataset.quotes.reduce((sum, q) => sum + (parseFloat(q.total) || 0), 0)
+
+    const totalInventorySkus = dataset.inventory.length
+    const totalInventoryUnits = dataset.inventory.reduce((sum, i) => sum + (parseFloat(i.quantityOnHand) || 0), 0)
+    const totalInventorySaleValue = dataset.inventory.reduce((sum, i) => {
+      const q = Math.max(0, parseFloat(i.quantityOnHand) || 0)
+      const p = Math.max(0, parseFloat(i.unitPrice) || 0)
+      return sum + q * p
+    }, 0)
+    const inventoryAttentionCount = dataset.inventory.filter((i) => {
+      const q = Math.max(0, parseFloat(i.quantityOnHand) || 0)
+      const min = Math.max(0, parseFloat(i.minimumQuantity) || 0)
+      return q <= 0 || (min > 0 && q <= min)
+    }).length
 
     return (
       <div className="space-y-6">
@@ -716,7 +1114,7 @@ export function ReportsPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {/* 1. MÓDULO: RELATÓRIO GERAL DE CADASTROS */}
             <Card className="group relative overflow-hidden rounded-2xl border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
               <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
@@ -800,6 +1198,48 @@ export function ReportsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* 3. MÓDULO: RELATÓRIO DE ESTOQUE */}
+            <Card className="group relative overflow-hidden rounded-2xl border-gray-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+              <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 p-3 text-emerald-700 dark:text-emerald-300">
+                      <Package className="h-6 w-6" />
+                    </div>
+                    <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-300">
+                      ESTOQUE &amp; INVENTÁRIO
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
+                    RELATÓRIO DE ESTOQUE
+                  </h3>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
+                    Balanço analítico do inventário físico, controle de reposição mínima, itens esgotados, valorização a custo e venda, e Curva ABC.
+                  </p>
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                    <span>Itens / SKUs: <b>{totalInventorySkus}</b></span>
+                    <span>Unidades Físicas: <b>{totalInventoryUnits}</b></span>
+                    <span>Atenção / Baixo: <b className={inventoryAttentionCount > 0 ? 'text-amber-600 font-bold' : ''}>{inventoryAttentionCount}</b></span>
+                    <span>Valor de Venda: <b>{formatCurrency(totalInventorySaleValue.toFixed(2))}</b></span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    onClick={() => navigateToView('inventory')}
+                    className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Boxes className="h-4 w-4" />
+                      Abrir Relatório de Estoque
+                    </span>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
@@ -818,11 +1258,19 @@ export function ReportsPage() {
           organizationLogoUrl={currentOrganization?.logoUrl}
           reportTitle="Relatório de Ordens de Serviço & Orçamentos"
           moduleTitle={
-            qoTab === 'orders'
-              ? 'Ordens de Serviço (O.S)'
-              : qoTab === 'quotes'
-                ? 'Orçamentos Comerciais'
-                : 'Visão Consolidada (O.S & Orçamentos)'
+            qoStatus === 'queue'
+              ? 'O.S - Fila de Atendimento'
+              : qoStatus === 'maintenance_pending'
+                ? 'O.S - Manutenção Pendente'
+                : qoStatus === 'ready'
+                  ? 'O.S - Pronto'
+                  : qoStatus === 'closed'
+                    ? 'O.S - Encerrada'
+                    : qoTab === 'orders'
+                      ? 'Ordens de Serviço (O.S)'
+                      : qoTab === 'quotes'
+                        ? 'Orçamentos Comerciais'
+                        : 'Visão Consolidada (O.S & Orçamentos)'
           }
           totalRecords={filteredQoRecords.length}
           emissionWeekday={emissionWeekday}
@@ -1040,12 +1488,13 @@ export function ReportsPage() {
                   onChange={(e) => setQoStatus(e.target.value)}
                   className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
                 >
-                  <option value="all">Todos os Status</option>
-                  <option value="queue">Na Fila (O.S)</option>
-                  <option value="pending">Pendente (O.S)</option>
+                  <option value="all">Fila de Todas (O.S &amp; Orçamentos)</option>
+                  <option value="queue">Fila de Atendimento (O.S)</option>
+                  <option value="maintenance_pending">Manutenção Pendente (O.S)</option>
                   <option value="in_maintenance">Em Manutenção (O.S)</option>
+                  <option value="pending">Pendente (O.S)</option>
                   <option value="ready">Pronto (O.S)</option>
-                  <option value="closed">Entregue / Concluído (O.S)</option>
+                  <option value="closed">O.S. Encerrada</option>
                   <option value="draft">Rascunho (Orçamento)</option>
                   <option value="approved">Aprovado (Orçamento)</option>
                   <option value="rejected">Rejeitado (Orçamento)</option>
@@ -1064,6 +1513,80 @@ export function ReportsPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* LINHA DE FILAS RÁPIDAS DE O.S */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-gray-100 dark:border-slate-800/80">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                Fila de O.S:
+              </span>
+              <button
+                type="button"
+                onClick={() => setQoStatus('all')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  qoStatus === 'all'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                Fila de Todas ({queueCounts.all})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQoStatus('queue')
+                  if (qoTab === 'quotes') setQoTab('orders')
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  qoStatus === 'queue'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
+                }`}
+              >
+                Fila de Atendimento ({queueCounts.queue})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQoStatus('maintenance_pending')
+                  if (qoTab === 'quotes') setQoTab('orders')
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  qoStatus === 'maintenance_pending'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60'
+                }`}
+              >
+                Manutenção Pendente ({queueCounts.maintenance_pending})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQoStatus('ready')
+                  if (qoTab === 'quotes') setQoTab('orders')
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  qoStatus === 'ready'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                }`}
+              >
+                Pronto ({queueCounts.ready})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQoStatus('closed')
+                  if (qoTab === 'quotes') setQoTab('orders')
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  qoStatus === 'closed'
+                    ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                O.S. Encerrada ({queueCounts.closed})
+              </button>
             </div>
           </CardContent>
         </Card>
@@ -1261,6 +1784,452 @@ export function ReportsPage() {
           emissionDate={emissionDate}
           emissionTime={emissionTime}
           documentType="Relatório Oficial de Auditoria de O.S & Orçamentos"
+        />
+      </div>
+    )
+  }
+
+  // ============================================================================
+  // VIEW: RELATÓRIO DE ESTOQUE
+  // ============================================================================
+  if (currentView === 'inventory') {
+    return (
+      <div className="space-y-6">
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO (A4 PRINT MEDIA) */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório Analítico de Estoque"
+          moduleTitle={`Balanço de Estoque • ${inventoryStatusLabel}`}
+          totalRecords={filteredInventory.length}
+          totalAmountLabel="Valor Total de Venda"
+          totalAmountValue={formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel="Posição Atual do Estoque"
+          periodRange={invCategory !== 'all' ? `Categoria: ${invCategory}` : 'Todas as Categorias'}
+        />
+
+        {/* BARRA DE AÇÃO COM VOLTAR, EXCEL, XML E IMPRESSÃO */}
+        <ReportActionBar
+          title="Relatório de Estoque"
+          badgeText="Inventário & Balanço Físico"
+          badgeColorClass="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
+          description="Auditoria analítica e controle de estoque com filtros de reposição mínima, itens zerados/esgotados, valorização a custo e venda, e Curva ABC."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportInventoryExcel}
+          onExportXml={handleExportInventoryXml}
+          onPrint={() => window.print()}
+          onRefresh={() => void loadData()}
+          isRefreshing={isLoading}
+          disableExport={filteredInventory.length === 0}
+        />
+
+        {/* PAINEL DE FILTROS AVANÇADOS DO ESTOQUE */}
+        <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden">
+          <CardContent className="p-4 space-y-4">
+            {/* Linha 1: Status do Estoque (Pills Rápidos com Contadores) */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                  Status:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setInvStatus('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    invStatus === 'all'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  Todos ({inventoryGlobalCounts.all})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvStatus('normal')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    invStatus === 'normal'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                  }`}
+                >
+                  Estoque Normal ({inventoryGlobalCounts.normal})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvStatus('low')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    invStatus === 'low'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60'
+                  }`}
+                >
+                  Estoque Baixo ({inventoryGlobalCounts.low})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvStatus('out')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    invStatus === 'out'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60'
+                  }`}
+                >
+                  Zerado / Esgotado ({inventoryGlobalCounts.out})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvStatus('excess')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    invStatus === 'excess'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60'
+                  }`}
+                >
+                  Excedente ({inventoryGlobalCounts.excess})
+                </button>
+              </div>
+
+              {/* Botão para limpar todos os filtros */}
+              {(invStatus !== 'all' ||
+                invCategory !== 'all' ||
+                invSupplier !== 'all' ||
+                invAbcClass !== 'all' ||
+                invActiveFilter !== 'all' ||
+                invSearch.trim() ||
+                invSortBy !== 'value_desc') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvStatus('all')
+                    setInvCategory('all')
+                    setInvSupplier('all')
+                    setInvAbcClass('all')
+                    setInvActiveFilter('all')
+                    setInvSearch('')
+                    setInvSortBy('value_desc')
+                  }}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition"
+                  title="Restaurar todos os filtros"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Limpar Filtros</span>
+                </button>
+              )}
+            </div>
+
+            {/* Linha 2: Dropdowns de Categoria, Fornecedor, Curva ABC, Situação, Ordenação e Busca */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
+              {/* Filtro de Categoria */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Categoria
+                </label>
+                <select
+                  value={invCategory}
+                  onChange={(e) => setInvCategory(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="all">Todas as Categorias</option>
+                  {invCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtro de Fornecedor */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Fornecedor
+                </label>
+                <select
+                  value={invSupplier}
+                  onChange={(e) => setInvSupplier(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="all">Todos os Fornecedores</option>
+                  {invSuppliers.map((sup) => (
+                    <option key={sup.id} value={sup.id}>
+                      {sup.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtro Curva ABC */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Curva ABC
+                </label>
+                <select
+                  value={invAbcClass}
+                  onChange={(e) => setInvAbcClass(e.target.value as 'all' | 'A' | 'B' | 'C')}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="all">Todas as Classes</option>
+                  <option value="A">Classe A (80% do Valor)</option>
+                  <option value="B">Classe B (15% do Valor)</option>
+                  <option value="C">Classe C (5% do Valor)</option>
+                </select>
+              </div>
+
+              {/* Filtro Situação Cadastral */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Situação
+                </label>
+                <select
+                  value={invActiveFilter}
+                  onChange={(e) => setInvActiveFilter(e.target.value as 'all' | 'active' | 'inactive' | 'can_sell')}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="all">Todos os Itens</option>
+                  <option value="active">Apenas Ativos</option>
+                  <option value="can_sell">Disponíveis para Venda</option>
+                  <option value="inactive">Inativos</option>
+                </select>
+              </div>
+
+              {/* Ordenação */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Ordenar Por
+                </label>
+                <select
+                  value={invSortBy}
+                  onChange={(e) => setInvSortBy(e.target.value as 'value_desc' | 'cost_desc' | 'qty_asc' | 'qty_desc' | 'name_asc' | 'margin_desc')}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="value_desc">Maior Valor Venda</option>
+                  <option value="cost_desc">Maior Valor Custo</option>
+                  <option value="qty_asc">Menor Qtd. (Reposição)</option>
+                  <option value="qty_desc">Maior Qtd.</option>
+                  <option value="name_asc">Nome (A - Z)</option>
+                  <option value="margin_desc">Maior Margem (%)</option>
+                </select>
+              </div>
+
+              {/* Busca Textual */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Pesquisar
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Nome, SKU, barras..."
+                    value={invSearch}
+                    onChange={(e) => setInvSearch(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-8 pr-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* INDICADORES RESUMIDOS DE AUDITORIA DO ESTOQUE (KPIS) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                <Package className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 uppercase">Itens / SKUs</span>
+                <h4 className="text-lg font-bold text-gray-900 dark:text-white">
+                  {inventoryMetrics.totalItems} produtos
+                </h4>
+                <p className="text-[10px] text-gray-400">
+                  {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} unidades físicas
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 uppercase">Valor a Custo</span>
+                <h4 className="text-lg font-bold text-gray-900 dark:text-white">
+                  {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
+                </h4>
+                <p className="text-[10px] text-gray-400">Investimento imobilizado</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 uppercase">Valor a Venda</span>
+                <h4 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                  {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+                </h4>
+                <p className="text-[10px] text-gray-400">
+                  Lucro proj.: {formatCurrency(inventoryMetrics.potentialProfit.toFixed(2))} ({inventoryMetrics.avgMargin.toFixed(1)}%)
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 uppercase">Alertas Reposição</span>
+                <h4 className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                  {inventoryMetrics.lowCount + inventoryMetrics.outCount} produtos
+                </h4>
+                <p className="text-[10px] text-gray-400">
+                  {inventoryMetrics.outCount} zerados • {inventoryMetrics.lowCount} abaixo do mín.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* TABELA OFICIAL DE ITENS FORMATADA PARA TELA E IMPRESSÃO A4 */}
+        <div className="space-y-4">
+          {filteredInventory.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center bg-white dark:bg-slate-900/40">
+              <Boxes className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                Nenhum produto encontrado no estoque
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                Não foram localizados itens com os critérios e filtros selecionados. Tente ajustar os parâmetros.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-3">Código / SKU</th>
+                      <th className="py-3 px-3">Produto / Descrição</th>
+                      <th className="py-3 px-3">Categoria</th>
+                      <th className="py-3 px-3 text-center">Status</th>
+                      <th className="py-3 px-3 text-right">Qtd. Atual</th>
+                      <th className="py-3 px-3 text-right">Mínimo</th>
+                      <th className="py-3 px-3 text-right">Custo Unit.</th>
+                      <th className="py-3 px-3 text-right">Venda Unit.</th>
+                      <th className="py-3 px-3 text-right">Total Custo</th>
+                      <th className="py-3 px-3 text-right">Total Venda</th>
+                      <th className="py-3 px-3 text-center">Curva ABC</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {filteredInventory.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
+                      >
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                          {item.sku || item.barcode || '—'}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-semibold text-slate-900 dark:text-white block">
+                            {item.name}
+                          </span>
+                          {(item.brand || item.model || item.location) && (
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              {[item.brand, item.model, item.location ? `Loc: ${item.location}` : null]
+                                .filter(Boolean)
+                                .join(' • ')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {item.category || 'Sem Categoria'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${item.statusBadgeColor}`}
+                          >
+                            {item.statusLabel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          {item.qty} <span className="text-[10px] text-slate-400 font-normal">{item.unit || 'UN'}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-slate-500 whitespace-nowrap">
+                          {item.minQty}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {formatCurrency(item.cost.toFixed(2))}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                          {formatCurrency(item.price.toFixed(2))}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {formatCurrency(item.totalCostValue.toFixed(2))}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                          {formatCurrency(item.totalSaleValue.toFixed(2))}
+                        </td>
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <span
+                            className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-black ${
+                              item.abcClass === 'A'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                : item.abcClass === 'B'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            }`}
+                          >
+                            {item.abcClass}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
+                    <tr>
+                      <td colSpan={4} className="py-3 px-3 uppercase text-slate-700 dark:text-slate-300">
+                        Totais Consolidados ({filteredInventory.length} itens)
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        {inventoryMetrics.totalUnits.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-3 text-right text-slate-400">—</td>
+                      <td className="py-3 px-3 text-right text-slate-400">—</td>
+                      <td className="py-3 px-3 text-right text-slate-400">—</td>
+                      <td className="py-3 px-3 text-right font-mono text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                        {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
+                        {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+                      </td>
+                      <td className="py-3 px-3 text-center text-slate-400">—</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Relatório Oficial de Auditoria & Balanço de Estoque"
         />
       </div>
     )
