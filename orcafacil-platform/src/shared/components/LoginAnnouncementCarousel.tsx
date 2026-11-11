@@ -8,14 +8,14 @@ import { BrandLogo } from './BrandLogo'
 
 export interface LoginAnnouncementCarouselProps {
   /**
-   * Callback invocado quando os anúncios terminam de carregar.
+   * Callback opcional invocado quando os anúncios terminam de carregar.
    * Informa se há anúncios de login cadastrados e ativos.
    */
   onStatusChange?: (hasAnnouncements: boolean) => void
 
   /**
    * Modo de renderização:
-   * - 'fullscreen' (padrão): ocupa a tela inteira (100% largura e altura da lateral da tela de login, sem margens).
+   * - 'fullscreen' (padrão): ocupa a lateral inteira da tela de login, sem margens ou textos indesejados.
    * - 'contained': modo contido com cantos arredondados, usado para pré-visualização em painéis administrativos.
    */
   variant?: 'fullscreen' | 'contained'
@@ -91,7 +91,7 @@ export function LoginAnnouncementCarousel({
     }
   }, [onStatusChange])
 
-  // Transição automática a cada 8 segundos (conforme solicitado pelo usuário)
+  // Transição automática a cada 8 segundos
   useEffect(() => {
     if (announcements.length <= 1 || isPaused) {
       if (timerRef.current) clearInterval(timerRef.current)
@@ -117,7 +117,59 @@ export function LoginAnnouncementCarousel({
     setCurrentIndex((prev) => (prev + 1) % announcements.length)
   }
 
-  if (isLoading || announcements.length === 0) {
+  const isFullscreen = variant === 'fullscreen'
+
+  // Quando for abrir a página e carregar a foto: exibe a bolinha rodando para que carregue
+  if (isLoading) {
+    if (isFullscreen) {
+      return (
+        <div className="relative flex h-full min-h-screen w-full flex-col justify-between overflow-hidden bg-slate-950 p-8 xl:p-10 select-none">
+          <div className="relative z-30">
+            <BrandLogo dark />
+          </div>
+          <div className="my-auto flex flex-col items-center justify-center gap-4">
+            <div
+              className="h-12 w-12 animate-spin rounded-full border-4 border-slate-700 border-t-sky-400"
+              role="status"
+              aria-label="Carregando"
+            />
+            <span className="text-xs font-medium tracking-wide text-slate-400">Carregando novidades...</span>
+          </div>
+          <div className="h-6" />
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex h-full w-full items-center justify-center p-8">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-3 border-slate-700 border-t-sky-400"
+          role="status"
+          aria-label="Carregando"
+        />
+      </div>
+    )
+  }
+
+  // Se não houver fotos cadastradas, mantém a tela limpa com apenas o logo
+  if (announcements.length === 0) {
+    if (isFullscreen) {
+      return (
+        <div className="relative flex h-full min-h-screen w-full flex-col justify-between overflow-hidden bg-[#0F172A] p-8 xl:p-10 select-none">
+          <div className="pointer-events-none absolute -left-20 -top-20 h-72 w-72 rounded-full bg-blue-600/20 blur-3xl" />
+          <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-indigo-600/15 blur-3xl" />
+          <div className="relative z-30">
+            <BrandLogo dark />
+          </div>
+          <div className="my-auto text-center max-w-sm mx-auto">
+            <p className="text-sm font-semibold text-blue-300">ControleSoft</p>
+            <p className="mt-2 text-xs text-slate-400">Potencialize a administração da sua empresa</p>
+          </div>
+          <div className="h-6" />
+        </div>
+      )
+    }
+
     return null
   }
 
@@ -128,8 +180,6 @@ export function LoginAnnouncementCarousel({
       window.open(current.linkUrl.trim(), '_blank', 'noopener,noreferrer')
     }
   }
-
-  const isFullscreen = variant === 'fullscreen'
 
   return (
     <div
@@ -157,11 +207,13 @@ export function LoginAnnouncementCarousel({
           className="h-full w-full object-cover object-center transition-all duration-700 ease-out group-hover:scale-[1.02]"
         />
 
-        {/* Gradiente superior para proteger logo e badges */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-slate-950/90 via-slate-950/40 to-transparent z-10" />
+        {/* Gradiente superior suave para proteger o logo */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-slate-950/80 via-slate-950/30 to-transparent z-10" />
 
-        {/* Gradiente inferior para proteger textos, paginação e rodapé */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-transparent z-10" />
+        {/* Gradiente inferior suave (apenas se houver mais de 1 anúncio para as bolinhas) */}
+        {announcements.length > 1 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/80 via-slate-950/40 to-transparent z-10" />
+        )}
       </div>
 
       {/* Topo: Logo ControleSoft e Link externo */}
@@ -216,8 +268,8 @@ export function LoginAnnouncementCarousel({
         </>
       )}
 
-      {/* Rodapé: Paginação e barra de tempo (apenas quando houver mais de 1 anúncio) */}
-      {announcements.length > 1 && (
+      {/* Rodapé: Apenas bolinhas e contador de tempo (quando houver mais de 1 anúncio, sem textos nem títulos sobrepostos) */}
+      {announcements.length > 1 ? (
         <div
           className={`relative z-30 flex items-center justify-between ${
             isFullscreen ? 'p-8 xl:p-10' : 'p-6'
@@ -245,6 +297,8 @@ export function LoginAnnouncementCarousel({
             {isPaused ? 'Pausado' : 'Passa a cada 8s'}
           </span>
         </div>
+      ) : (
+        <div className="h-4" />
       )}
     </div>
   )
