@@ -16,17 +16,25 @@ import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import {
+  AlertTriangle,
+  Ban,
   Boxes,
   Briefcase,
+  Calendar,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   FileBarChart,
+  FileEdit,
+  FileText,
   Package,
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
   ShieldCheck,
+  TrendingUp,
   Truck,
   UserCheck,
   Users,
@@ -631,6 +639,31 @@ export function ReportsPage() {
       maintenance_pending: osInPeriod.filter((r) => r.status === 'pending' || r.status === 'in_maintenance').length,
       ready: osInPeriod.filter((r) => r.status === 'ready').length,
       closed: osInPeriod.filter((r) => r.status === 'closed').length,
+    }
+  }, [allUnifiedRecords, qoPeriodMode, qoSelectedDay, qoSelectedMonth, qoCustomStartDate, qoCustomEndDate])
+
+  // Contadores de Status para Orçamentos (conforme filtro de período)
+  const quoteStatusCounts = useMemo(() => {
+    const quotesInPeriod = allUnifiedRecords.filter((rec) => {
+      if (rec.kind !== 'quote') return false
+      const recDate = rec.date.slice(0, 10)
+      if (qoPeriodMode === 'day') {
+        if (recDate !== qoSelectedDay) return false
+      } else if (qoPeriodMode === 'month') {
+        if (recDate.slice(0, 7) !== qoSelectedMonth) return false
+      } else if (qoPeriodMode === 'custom') {
+        if (qoCustomStartDate && recDate < qoCustomStartDate) return false
+        if (qoCustomEndDate && recDate > qoCustomEndDate) return false
+      }
+      return true
+    })
+
+    return {
+      total: quotesInPeriod.length,
+      draft: quotesInPeriod.filter((r) => r.status === 'draft').length,
+      approved: quotesInPeriod.filter((r) => r.status === 'approved' || r.status === 'completed').length,
+      sent: quotesInPeriod.filter((r) => r.status === 'sent').length,
+      rejected: quotesInPeriod.filter((r) => r.status === 'rejected').length,
     }
   }, [allUnifiedRecords, qoPeriodMode, qoSelectedDay, qoSelectedMonth, qoCustomStartDate, qoCustomEndDate])
 
@@ -1586,6 +1619,339 @@ export function ReportsPage() {
           </CardContent>
         </Card>
 
+        {/* CARDS DE MÉTRICAS VISUAIS (EXIBIÇÃO EM TELA, OCULTOS NA IMPRESSÃO A4) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 print:hidden">
+          {qoTab === 'quotes' ? (
+            <>
+              {/* 1. Total de Orçamentos */}
+              <Card
+                onClick={() => setQoStatus('all')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
+                  qoStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Total de Orçamentos
+                    </p>
+                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                      {quoteStatusCounts.total} cadastrado(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 2. Em Rascunho */}
+              <Card
+                onClick={() => setQoStatus('draft')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
+                  qoStatus === 'draft' ? 'ring-2 ring-amber-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Em Rascunho
+                    </p>
+                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
+                      {quoteStatusCounts.draft} rascunho(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+                    <FileEdit className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3. Aprovados */}
+              <Card
+                onClick={() => setQoStatus('approved')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
+                  qoStatus === 'approved' ? 'ring-2 ring-emerald-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Orçamentos Aprovados
+                    </p>
+                    <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                      {quoteStatusCounts.approved} aprovado(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 4. Enviado ao Cliente */}
+              <Card
+                onClick={() => setQoStatus('sent')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
+                  qoStatus === 'sent' ? 'ring-2 ring-blue-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Enviado ao Cliente
+                    </p>
+                    <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
+                      {quoteStatusCounts.sent} enviado(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
+                    <Send className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 5. Recusados */}
+              <Card
+                onClick={() => setQoStatus('rejected')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-rose-100 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/50 to-white dark:from-rose-950/30 dark:to-slate-900 ${
+                  qoStatus === 'rejected' ? 'ring-2 ring-rose-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Recusados
+                    </p>
+                    <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5">
+                      {quoteStatusCounts.rejected} recusado(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
+                    <Ban className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          ) : qoTab === 'orders' ? (
+            <>
+              {/* 1. Total O.S */}
+              <Card
+                onClick={() => setQoStatus('all')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
+                  qoStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Total de O.S
+                    </p>
+                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                      {queueCounts.all} cadastrada(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
+                    <Wrench className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 2. Fila de Atendimento */}
+              <Card
+                onClick={() => setQoStatus('queue')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
+                  qoStatus === 'queue' ? 'ring-2 ring-blue-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Fila de Atendimento
+                    </p>
+                    <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
+                      {queueCounts.queue} na fila
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3. Manutenção Pendente */}
+              <Card
+                onClick={() => setQoStatus('maintenance_pending')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
+                  qoStatus === 'maintenance_pending' ? 'ring-2 ring-amber-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Manutenção Pendente
+                    </p>
+                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
+                      {queueCounts.maintenance_pending} em serviço
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+                    <Wrench className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 4. Pronto */}
+              <Card
+                onClick={() => setQoStatus('ready')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
+                  qoStatus === 'ready' ? 'ring-2 ring-emerald-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Pronto p/ Retirada
+                    </p>
+                    <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                      {queueCounts.ready} pronto(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 5. O.S Encerrada */}
+              <Card
+                onClick={() => setQoStatus('closed')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-slate-200 dark:border-slate-800 bg-gradient-to-br from-slate-100 to-white dark:from-slate-900 dark:to-slate-950 ${
+                  qoStatus === 'closed' ? 'ring-2 ring-slate-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      O.S. Encerradas
+                    </p>
+                    <p className="text-xl font-extrabold text-slate-800 dark:text-slate-200 mt-0.5">
+                      {queueCounts.closed} encerrada(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-slate-200 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
+              {/* 1. Total Geral */}
+              <Card
+                onClick={() => setQoStatus('all')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
+                  qoStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Total Registros
+                    </p>
+                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                      {qoMetrics.totalCount} cadastrado(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
+                    <ClipboardList className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 2. Ordens de Serviço */}
+              <Card
+                onClick={() => {
+                  setQoTab('orders')
+                  setQoStatus('all')
+                }}
+                className="cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900"
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Ordens de Serviço
+                    </p>
+                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
+                      {qoMetrics.ordersCount} O.S
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+                    <Wrench className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3. Orçamentos */}
+              <Card
+                onClick={() => {
+                  setQoTab('quotes')
+                  setQoStatus('all')
+                }}
+                className="cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900"
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Orçamentos
+                    </p>
+                    <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
+                      {qoMetrics.quotesCount} proposta(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 4. Total Consolidado */}
+              <Card className="transition-all rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Total Consolidado
+                    </p>
+                    <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 font-mono">
+                      {formatCurrency(qoMetrics.grandTotal.toFixed(2))}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 5. Período */}
+              <Card className="transition-all rounded-xl shadow-xs border-slate-200 dark:border-slate-800 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-950">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Período Auditado
+                    </p>
+                    <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200 mt-0.5 truncate max-w-[120px]">
+                      {qoPeriodInfo.rangeText}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-slate-200 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300">
+                    <Calendar className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+
         {/* LISTAGEM EM TABELA OFICIAL FORMATADA PARA TELA E IMPRESSÃO A4 */}
         <div className="space-y-4">
           {filteredQoRecords.length === 0 ? (
@@ -1931,6 +2297,109 @@ export function ReportsPage() {
           </CardContent>
         </Card>
 
+        {/* CARDS DE MÉTRICAS VISUAIS (EXIBIÇÃO EM TELA, OCULTOS NA IMPRESSÃO A4) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 print:hidden">
+          {/* 1. Total Itens */}
+          <Card
+            onClick={() => setInvStatus('all')}
+            className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
+              invStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
+            }`}
+          >
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Total de Produtos
+                </p>
+                <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                  {inventoryMetrics.totalItems} produto(s)
+                </p>
+              </div>
+              <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
+                <Package className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 2. Em Falta (Zerados) */}
+          <Card
+            onClick={() => setInvStatus('out')}
+            className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-rose-100 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/50 to-white dark:from-rose-950/30 dark:to-slate-900 ${
+              invStatus === 'out' ? 'ring-2 ring-rose-500/50' : ''
+            }`}
+          >
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Em Falta (Zerado)
+                </p>
+                <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5">
+                  {inventoryMetrics.outCount} zerado(s)
+                </p>
+              </div>
+              <div className="rounded-xl bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
+                <Ban className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 3. Estoque Baixo */}
+          <Card
+            onClick={() => setInvStatus('low')}
+            className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
+              invStatus === 'low' ? 'ring-2 ring-amber-500/50' : ''
+            }`}
+          >
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Abaixo do Mínimo
+                </p>
+                <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
+                  {inventoryMetrics.lowCount} alerta(s)
+                </p>
+              </div>
+              <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 4. Valor a Custo */}
+          <Card className="transition-all rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Valor a Custo
+                </p>
+                <p className="text-lg font-extrabold text-blue-700 dark:text-blue-300 mt-0.5 font-mono">
+                  {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
+                <FileText className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 5. Valor a Venda */}
+          <Card className="transition-all rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Valor a Venda
+                </p>
+                <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 font-mono">
+                  {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+                </p>
+              </div>
+              <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* TABELA OFICIAL DE ITENS FORMATADA PARA TELA E IMPRESSÃO A4 */}
         <div className="space-y-4">
           {filteredInventory.length === 0 ? (
@@ -2223,6 +2692,118 @@ export function ReportsPage() {
             className="w-48 sm:w-64 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
+      </div>
+
+      {/* CARDS DE MÉTRICAS VISUAIS (EXIBIÇÃO EM TELA, OCULTOS NA IMPRESSÃO A4) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 print:hidden">
+        {/* 1. Usuários */}
+        <Card
+          onClick={() => handleTabChange('users')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-purple-100 dark:border-purple-900/50 bg-gradient-to-br from-purple-50/50 to-white dark:from-purple-950/30 dark:to-slate-900 ${
+            registrationsTab === 'users' ? 'ring-2 ring-purple-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Usuários Acesso
+              </p>
+              <p className="text-xl font-extrabold text-purple-700 dark:text-purple-300 mt-0.5">
+                {filteredUsers.length} usuário(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-purple-100 dark:bg-purple-900/60 p-2 text-purple-700 dark:text-purple-300">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 2. Funcionários */}
+        <Card
+          onClick={() => handleTabChange('employees')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
+            registrationsTab === 'employees' ? 'ring-2 ring-indigo-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Funcionários
+              </p>
+              <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                {filteredEmployees.length} funcionário(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
+              <Briefcase className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 3. Fornecedores */}
+        <Card
+          onClick={() => handleTabChange('suppliers')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
+            registrationsTab === 'suppliers' ? 'ring-2 ring-blue-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Fornecedores
+              </p>
+              <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
+                {filteredSuppliers.length} fornecedor(es)
+              </p>
+            </div>
+            <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
+              <Truck className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 4. Clientes */}
+        <Card
+          onClick={() => handleTabChange('customers')}
+          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
+            registrationsTab === 'customers' ? 'ring-2 ring-emerald-500/50' : ''
+          }`}
+        >
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Clientes
+              </p>
+              <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                {filteredCustomers.length} cliente(s)
+              </p>
+            </div>
+            <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
+              <Users className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 5. Total Compras Clientes */}
+        <Card className="transition-all rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Faturamento Clientes
+              </p>
+              <p className="text-lg font-extrabold text-amber-700 dark:text-amber-300 mt-0.5 font-mono">
+                {formatCurrency(
+                  filteredCustomers
+                    .reduce((sum, c) => sum + (customerMetricsMap.get(c.id)?.totalSpent || 0), 0)
+                    .toFixed(2),
+                )}
+              </p>
+            </div>
+            <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+              <FileText className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* CONTEÚDO DAS ABAS DE CADASTROS */}
