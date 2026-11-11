@@ -7,12 +7,17 @@ import type { CashSession } from '@modules/cash/domain/cash-session'
 import {
   reportsService,
   exportRowsToCsv,
+  exportRowsToExcel,
+  exportRowsToXml,
   getPresetDateRange,
   isDateInRange,
   type DateRangeFilter,
   type ReportPeriodPreset,
   type ReportsDataset,
 } from '../services/reports.service'
+import { ReportPrintHeader } from '../components/ReportPrintHeader'
+import { ReportPrintFooter } from '../components/ReportPrintFooter'
+import { ReportActionBar } from '../components/ReportActionBar'
 import { formatCurrency } from '@shared/utils/monetary'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
@@ -20,7 +25,6 @@ import { Button } from '@shared/components/ui/Button'
 import {
   AlertTriangle,
   ArrowDownRight,
-  ArrowLeft,
   ArrowUpRight,
   Award,
   BarChart3,
@@ -32,9 +36,7 @@ import {
   ChevronRight,
   ClipboardList,
   DollarSign,
-  Download,
   FileBarChart,
-  FileSpreadsheet,
   FileText,
   Layers,
   Package,
@@ -146,6 +148,17 @@ export function ReportsPage() {
 
   // Filtros da view de cadastros gerais (Usuários, Funcionários, Fornecedores, Clientes)
   const [registrationsTab, setRegistrationsTab] = useState<'users' | 'employees' | 'suppliers' | 'customers'>('users')
+
+  // Metadados padronizados para cabeçalhos e rodapés oficiais de impressão
+  const now = new Date()
+  const rawWeekday = now.toLocaleDateString('pt-BR', { weekday: 'long' })
+  const emissionWeekday = rawWeekday.charAt(0).toUpperCase() + rawWeekday.slice(1)
+  const emissionDate = now.toLocaleDateString('pt-BR')
+  const emissionTime = now.toLocaleTimeString('pt-BR')
+  const periodRangeText =
+    dateFilter.startDate && dateFilter.endDate
+      ? `${dateFilter.startDate.split('-').reverse().join('/')} a ${dateFilter.endDate.split('-').reverse().join('/')}`
+      : ''
 
   const loadData = useCallback(async () => {
     if (!currentOrganization) return
@@ -359,8 +372,8 @@ export function ReportsPage() {
     const totalSalesCount = closedSessions.reduce((acc, s) => acc + (s.salesCount || 0), 0)
     const balancedCount = closedSessions.filter((s) => (s.difference || '0.00') === '0.00').length
 
-    const handleExportSessionsCsv = () => {
-      exportRowsToCsv(
+    const handleExportSessionsExcel = () => {
+      exportRowsToExcel(
         `relatorio-turnos-caixa-${new Date().toISOString().slice(0, 10)}.csv`,
         [
           'Terminal',
@@ -393,56 +406,81 @@ export function ReportsPage() {
       )
     }
 
+    const handleExportSessionsXml = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      exportRowsToXml(
+        `relatorio-turnos-caixa-${todayIso}.xml`,
+        'relatorio_turnos_caixa',
+        'turno',
+        [
+          'Terminal',
+          'Operador',
+          'Status',
+          'Abertura',
+          'Fechamento',
+          'Saldo Inicial',
+          'Qtd Vendas',
+          'Total Vendas',
+          'Dinheiro Esperado',
+          'Dinheiro Contado',
+          'Divergencia',
+          'Justificativa',
+        ],
+        filteredSessions.map((s) => [
+          s.registerId,
+          s.operatorName,
+          s.status === 'closed' ? 'Fechado' : 'Aberto',
+          new Date(s.openedAt).toLocaleString('pt-BR'),
+          s.closedAt ? new Date(s.closedAt).toLocaleString('pt-BR') : 'Em aberto',
+          s.openingBalance,
+          s.salesCount || 0,
+          s.totalSales,
+          s.expectedMoney,
+          s.countedMoney || '0.00',
+          s.difference || '0.00',
+          s.discrepancyJustification || '',
+        ]),
+        {
+          empresa: currentOrganization?.name || 'ControleSoft',
+          periodo: PERIOD_LABELS[dateFilter.preset],
+          total_turnos: filteredSessions.length,
+          faturamento_total: totalSessionSales.toFixed(2),
+        },
+      )
+    }
+
     return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateToView('home')}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs transition-colors"
-              title="Voltar à Central de Relatórios"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  Relatório do Usuário — Resumos de Caixa
-                </h1>
-                <span className="rounded-md bg-teal-50 dark:bg-teal-950/60 px-2.5 py-0.5 text-xs font-bold text-teal-700 dark:text-teal-300 ring-1 ring-teal-600/20">
-                  PDV &amp; Turnos
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Histórico consolidado de fechamentos de caixa, conciliações físicas da gaveta e turnos de operadores.
-              </p>
-            </div>
-          </div>
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório de Turnos de Caixa & Fechamentos"
+          moduleTitle="PDV & Operadores"
+          totalRecords={filteredSessions.length}
+          totalAmountLabel="Faturamento Total"
+          totalAmountValue={formatCurrency(totalSessionSales.toFixed(2))}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportSessionsCsv}
-              disabled={filteredSessions.length === 0}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <Download className="h-4 w-4" />
-              <span>Exportar CSV</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void loadData()}
-              disabled={isLoading}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Atualizar</span>
-            </Button>
-          </div>
-        </div>
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR */}
+        <ReportActionBar
+          title="Relatório do Usuário — Resumos de Caixa"
+          badgeText="PDV & Turnos"
+          badgeColorClass="bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 ring-1 ring-teal-600/20"
+          description="Histórico consolidado de fechamentos de caixa, conciliações físicas da gaveta e turnos de operadores."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportSessionsExcel}
+          onExportXml={handleExportSessionsXml}
+          onPrint={() => window.print()}
+          onRefresh={() => void loadData()}
+          isRefreshing={isLoading}
+          disableExport={filteredSessions.length === 0}
+        />
 
         {renderPeriodToolbar()}
 
@@ -681,6 +719,14 @@ export function ReportsPage() {
           </div>
         </Card>
 
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Auditoria de Fechamentos de Caixa & PDV"
+        />
+
         {showSessionModal && selectedSession && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto print:hidden">
             <div className="w-full max-w-lg rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl space-y-4 my-8">
@@ -786,8 +832,8 @@ export function ReportsPage() {
 
     const maxDailyTotal = Math.max(...salesAnalytics.dailyEvolution.map((d) => d.total), 1)
 
-    const handleExportSalesCsv = () => {
-      exportRowsToCsv(
+    const handleExportSalesExcel = () => {
+      exportRowsToExcel(
         `relatorio-vendas-${new Date().toISOString().slice(0, 10)}.csv`,
         [
           'Numero Venda',
@@ -820,54 +866,79 @@ export function ReportsPage() {
       )
     }
 
+    const handleExportSalesXml = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      exportRowsToXml(
+        `relatorio-vendas-${todayIso}.xml`,
+        'relatorio_vendas',
+        'venda',
+        [
+          'Numero Venda',
+          'Data Hora',
+          'Cliente',
+          'CPF CNPJ',
+          'Canal',
+          'Vendedor Operador',
+          'Forma de Pagamento',
+          'Qtd Itens',
+          'Subtotal',
+          'Desconto',
+          'Total Liquido',
+          'Nota Fiscal',
+        ],
+        filteredSalesList.map((s) => [
+          s.saleNumber,
+          new Date(s.createdAt).toLocaleString('pt-BR'),
+          s.customerName,
+          s.customerDocument || '',
+          s.isPdv ? 'PDV' : 'Balcao',
+          s.sellerName || s.creatorName || 'Padrao',
+          PAYMENT_METHOD_LABELS[s.paymentMethod] || s.paymentMethod,
+          s.itemsCount,
+          s.subtotal,
+          s.discount,
+          s.total,
+          s.hasFiscalInvoice ? `${s.fiscalInvoice?.type?.toUpperCase()} ${s.fiscalInvoice?.number}` : 'Nao emitida',
+        ]),
+        {
+          empresa: currentOrganization?.name || 'ControleSoft',
+          periodo: PERIOD_LABELS[dateFilter.preset],
+          total_vendas: filteredSalesList.length,
+          faturamento_total: salesAnalytics.totalRevenue.toFixed(2),
+        },
+      )
+    }
+
     return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateToView('home')}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  Relatório de Vendas &amp; Faturamento
-                </h1>
-                <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:text-blue-300">
-                  Comercial &amp; PDV
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Análise detalhada de receita bruta, descontos, meios de pagamento, desempenho de vendedores e evolução diária.
-              </p>
-            </div>
-          </div>
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório Consolidado de Vendas & Faturamento"
+          moduleTitle="Comercial & PDV"
+          totalRecords={filteredSalesList.length}
+          totalAmountLabel="Receita Líquida"
+          totalAmountValue={formatCurrency(salesAnalytics.totalRevenue.toFixed(2))}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportSalesCsv}
-              disabled={filteredSalesList.length === 0}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Exportar Excel (CSV)</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Imprimir / PDF</span>
-            </Button>
-          </div>
-        </div>
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR */}
+        <ReportActionBar
+          title="Relatório de Vendas & Faturamento"
+          badgeText="Comercial & PDV"
+          badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+          description="Análise detalhada de receita bruta, descontos, meios de pagamento, desempenho de vendedores e evolução diária."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportSalesExcel}
+          onExportXml={handleExportSalesXml}
+          onPrint={() => window.print()}
+          disableExport={filteredSalesList.length === 0}
+        />
 
         {renderPeriodToolbar()}
 
@@ -1165,6 +1236,14 @@ export function ReportsPage() {
             </table>
           </div>
         </Card>
+
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Demonstrativo de Faturamento Comercial"
+        />
       </div>
     )
   }
@@ -1187,8 +1266,8 @@ export function ReportsPage() {
       )
     })
 
-    const handleExportInventoryCsv = () => {
-      exportRowsToCsv(
+    const handleExportInventoryExcel = () => {
+      exportRowsToExcel(
         `relatorio-estoque-curva-abc-${new Date().toISOString().slice(0, 10)}.csv`,
         [
           'Classe ABC',
@@ -1227,54 +1306,85 @@ export function ReportsPage() {
       )
     }
 
+    const handleExportInventoryXml = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      exportRowsToXml(
+        `relatorio-estoque-curva-abc-${todayIso}.xml`,
+        'relatorio_estoque_curva_abc',
+        'item_estoque',
+        [
+          'Classe ABC',
+          'SKU',
+          'Produto',
+          'Categoria',
+          'Unidade',
+          'Saldo Atual',
+          'Estoque Minimo',
+          'Status Estoque',
+          'Custo Unitario',
+          'Preco Venda',
+          'Custo Total Estoque',
+          'Valor Venda Estoque',
+          'Lucro Potencial',
+          'Margem Percentual',
+          'Participacao Percentual',
+        ],
+        filteredAbcItems.map((i) => [
+          i.abcClass,
+          i.sku || '',
+          i.name,
+          i.category,
+          i.unit,
+          i.quantityOnHand,
+          i.minimumQuantity,
+          i.stockStatus === 'out' ? 'Zerado' : i.stockStatus === 'low' ? 'Abaixo do Minimo' : 'Normal',
+          i.purchasePrice.toFixed(2),
+          i.unitPrice.toFixed(2),
+          i.totalCostValue.toFixed(2),
+          i.totalSaleValue.toFixed(2),
+          i.potentialProfit.toFixed(2),
+          i.marginPercent.toFixed(1),
+          i.sharePercent.toFixed(2),
+        ]),
+        {
+          empresa: currentOrganization?.name || 'ControleSoft',
+          total_itens: filteredAbcItems.length,
+          custo_imobilizado: inventoryAnalytics.grandTotalCostValue.toFixed(2),
+          potencial_venda: inventoryAnalytics.grandTotalSaleValue.toFixed(2),
+        },
+      )
+    }
+
     return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateToView('home')}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  Relatório de Estoque, Valorização &amp; Curva ABC
-                </h1>
-                <span className="rounded-md bg-amber-50 dark:bg-amber-950/60 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
-                  Inventário &amp; Giro
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Capital imobilizado a preço de custo, potencial de venda, margem bruta e classificação ABC de relevância financeira.
-              </p>
-            </div>
-          </div>
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório de Estoque, Valorização & Curva ABC"
+          moduleTitle="Inventário & Giro"
+          totalRecords={filteredAbcItems.length}
+          totalAmountLabel="Custo Imobilizado"
+          totalAmountValue={formatCurrency(inventoryAnalytics.grandTotalCostValue.toFixed(2))}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportInventoryCsv}
-              disabled={filteredAbcItems.length === 0}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Exportar Planilha ABC</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Imprimir</span>
-            </Button>
-          </div>
-        </div>
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR */}
+        <ReportActionBar
+          title="Relatório de Estoque, Valorização & Curva ABC"
+          badgeText="Inventário & Giro"
+          badgeColorClass="bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300"
+          description="Capital imobilizado a preço de custo, potencial de venda, margem bruta e classificação ABC de relevância financeira."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportInventoryExcel}
+          onExportXml={handleExportInventoryXml}
+          onPrint={() => window.print()}
+          disableExport={filteredAbcItems.length === 0}
+        />
 
         {/* KPIs DE ESTOQUE */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1479,6 +1589,14 @@ export function ReportsPage() {
             </table>
           </div>
         </Card>
+
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Inventário Físico & Auditoria de Ativos"
+        />
       </div>
     )
   }
@@ -1502,8 +1620,8 @@ export function ReportsPage() {
       )
     })
 
-    const handleExportFinancialCsv = () => {
-      exportRowsToCsv(
+    const handleExportFinancialExcel = () => {
+      exportRowsToExcel(
         `relatorio-financeiro-contas-${new Date().toISOString().slice(0, 10)}.csv`,
         [
           'Descricao',
@@ -1530,54 +1648,73 @@ export function ReportsPage() {
       )
     }
 
+    const handleExportFinancialXml = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      exportRowsToXml(
+        `relatorio-financeiro-contas-${todayIso}.xml`,
+        'relatorio_financeiro',
+        'conta',
+        [
+          'Descricao',
+          'Categoria',
+          'Fornecedor Beneficiario',
+          'Vencimento',
+          'Status',
+          'Valor Original',
+          'Valor Pago',
+          'Data Pagamento',
+          'Meio de Pagamento',
+        ],
+        filteredBills.map((b) => [
+          b.description,
+          b.category,
+          b.supplierName || b.beneficiaryName || '',
+          b.dueDate,
+          b.status === 'paid' ? 'Pago' : b.status === 'pending' ? 'Pendente' : 'Cancelado',
+          b.amount,
+          b.paidAmount || '',
+          b.paidAt ? new Date(b.paidAt).toLocaleString('pt-BR') : '',
+          b.paymentMethod || '',
+        ]),
+        {
+          empresa: currentOrganization?.name || 'ControleSoft',
+          total_contas: filteredBills.length,
+          total_despesas: financialAnalytics.totalOutflows.toFixed(2),
+          resultado_liquido: financialAnalytics.netResult.toFixed(2),
+        },
+      )
+    }
+
     return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateToView('home')}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  Relatório Financeiro, DRE &amp; Contas a Pagar
-                </h1>
-                <span className="rounded-md bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                  Fluxo de Caixa
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Balanço entre receitas operacionais e despesas pagas, análise por categoria e controle de boletos a vencer.
-              </p>
-            </div>
-          </div>
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório Financeiro, DRE & Contas a Pagar"
+          moduleTitle="Fluxo de Caixa & DRE"
+          totalRecords={filteredBills.length}
+          totalAmountLabel="Total de Despesas"
+          totalAmountValue={formatCurrency(financialAnalytics.totalOutflows.toFixed(2))}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportFinancialCsv}
-              disabled={filteredBills.length === 0}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Exportar Contas (CSV)</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Imprimir DRE</span>
-            </Button>
-          </div>
-        </div>
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR */}
+        <ReportActionBar
+          title="Relatório Financeiro, DRE & Contas a Pagar"
+          badgeText="Fluxo de Caixa"
+          badgeColorClass="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
+          description="Balanço entre receitas operacionais e despesas pagas, análise por categoria e controle de boletos a vencer."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportFinancialExcel}
+          onExportXml={handleExportFinancialXml}
+          onPrint={() => window.print()}
+          disableExport={filteredBills.length === 0}
+        />
 
         {renderPeriodToolbar()}
 
@@ -1792,6 +1929,14 @@ export function ReportsPage() {
             </table>
           </div>
         </Card>
+
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Demonstrativo de Resultados & Auditoria Financeira"
+        />
       </div>
     )
   }
@@ -1800,9 +1945,9 @@ export function ReportsPage() {
   // VIEW 5: RELATÓRIO DE ORÇAMENTOS & ORDENS DE SERVIÇO (quotes-os)
   // ============================================================================
   if (currentView === 'quotes-os') {
-    const handleExportQuotesOsCsv = () => {
+    const handleExportQuotesOsExcel = () => {
       if (quotesOsTab === 'quotes') {
-        exportRowsToCsv(
+        exportRowsToExcel(
           `relatorio-orcamentos-${new Date().toISOString().slice(0, 10)}.csv`,
           ['Numero Orcamento', 'Data', 'Cliente', 'Vendedor', 'Status', 'Total', 'Venda Gerada'],
           periodFilteredQuotes.map((q) => [
@@ -1816,7 +1961,7 @@ export function ReportsPage() {
           ]),
         )
       } else {
-        exportRowsToCsv(
+        exportRowsToExcel(
           `relatorio-ordens-servico-${new Date().toISOString().slice(0, 10)}.csv`,
           ['Numero OS', 'Data', 'Cliente', 'Equipamento', 'Tecnico', 'Status', 'Total'],
           periodFilteredServiceOrders.map((os) => [
@@ -1832,53 +1977,87 @@ export function ReportsPage() {
       }
     }
 
+    const handleExportQuotesOsXml = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      if (quotesOsTab === 'quotes') {
+        exportRowsToXml(
+          `relatorio-orcamentos-${todayIso}.xml`,
+          'relatorio_orcamentos',
+          'orcamento',
+          ['Numero Orcamento', 'Data', 'Cliente', 'Vendedor', 'Status', 'Total', 'Venda Gerada'],
+          periodFilteredQuotes.map((q) => [
+            q.quoteNumber,
+            new Date(q.createdAt).toLocaleString('pt-BR'),
+            q.customerName,
+            q.sellerName || q.creatorName || '',
+            q.status,
+            q.total,
+            q.saleNumber || 'Nao',
+          ]),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_orcamentos: periodFilteredQuotes.length,
+            valor_total_cotado: quotesOsAnalytics.totalQuotedValue.toFixed(2),
+          },
+        )
+      } else {
+        exportRowsToXml(
+          `relatorio-ordens-servico-${todayIso}.xml`,
+          'relatorio_ordens_servico',
+          'ordem_servico',
+          ['Numero OS', 'Data', 'Cliente', 'Equipamento', 'Tecnico', 'Status', 'Total'],
+          periodFilteredServiceOrders.map((os) => [
+            os.orderNumber,
+            new Date(os.createdAt).toLocaleString('pt-BR'),
+            os.customerName,
+            os.equipmentName,
+            os.technicianName || '',
+            os.status,
+            os.total,
+          ]),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_ordens_servico: periodFilteredServiceOrders.length,
+            valor_total_os: quotesOsAnalytics.totalOsValue.toFixed(2),
+          },
+        )
+      }
+    }
+
     return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateToView('home')}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  Relatório de Orçamentos &amp; Ordens de Serviço
-                </h1>
-                <span className="rounded-md bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 text-xs font-bold text-indigo-700 dark:text-indigo-300">
-                  Conversão &amp; Oficina
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Taxa de aprovação de orçamentos comerciais e produtividade de Ordens de Serviço técnicas.
-              </p>
-            </div>
-          </div>
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório de Orçamentos & Ordens de Serviço"
+          moduleTitle={quotesOsTab === 'quotes' ? 'Orçamentos Comerciais' : 'Ordens de Serviço Técnicas'}
+          totalRecords={quotesOsTab === 'quotes' ? periodFilteredQuotes.length : periodFilteredServiceOrders.length}
+          totalAmountLabel={quotesOsTab === 'quotes' ? 'Total Orçado' : 'Total OS'}
+          totalAmountValue={formatCurrency(
+            (quotesOsTab === 'quotes' ? quotesOsAnalytics.totalQuotedValue : quotesOsAnalytics.totalOsValue).toFixed(2),
+          )}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportQuotesOsCsv}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Exportar CSV</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Imprimir</span>
-            </Button>
-          </div>
-        </div>
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR */}
+        <ReportActionBar
+          title="Relatório de Orçamentos & Ordens de Serviço"
+          badgeText="Conversão & Oficina"
+          badgeColorClass="bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300"
+          description="Taxa de aprovação de orçamentos comerciais e produtividade de Ordens de Serviço técnicas."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportQuotesOsExcel}
+          onExportXml={handleExportQuotesOsXml}
+          onPrint={() => window.print()}
+          disableExport={
+            quotesOsTab === 'quotes' ? periodFilteredQuotes.length === 0 : periodFilteredServiceOrders.length === 0
+          }
+        />
 
         {renderPeriodToolbar()}
 
@@ -2069,6 +2248,14 @@ export function ReportsPage() {
             )}
           </div>
         </Card>
+
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Relatório Operacional de Propostas & Serviços"
+        />
       </div>
     )
   }
@@ -2097,9 +2284,9 @@ export function ReportsPage() {
       )
     })
 
-    const handleExportCrmCsv = () => {
+    const handleExportCrmExcel = () => {
       if (crmTab === 'customers') {
-        exportRowsToCsv(
+        exportRowsToExcel(
           `relatorio-ranking-clientes-${new Date().toISOString().slice(0, 10)}.csv`,
           [
             'Cliente',
@@ -2127,7 +2314,7 @@ export function ReportsPage() {
           ]),
         )
       } else {
-        exportRowsToCsv(
+        exportRowsToExcel(
           `relatorio-fornecedores-${new Date().toISOString().slice(0, 10)}.csv`,
           ['Fornecedor', 'CNPJ/CPF', 'Contato', 'Telefone', 'E-mail', 'Endereco'],
           filteredSuppliers.map((s) => [
@@ -2142,53 +2329,98 @@ export function ReportsPage() {
       }
     }
 
+    const handleExportCrmXml = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      if (crmTab === 'customers') {
+        exportRowsToXml(
+          `relatorio-ranking-clientes-${todayIso}.xml`,
+          'relatorio_ranking_clientes',
+          'cliente',
+          [
+            'Cliente',
+            'Tipo',
+            'CPF CNPJ',
+            'Telefone',
+            'Email',
+            'Qtd Compras',
+            'Qtd Orcamentos',
+            'Qtd OS',
+            'Ticket Medio',
+            'Total Comprado',
+          ],
+          filteredCustomers.map((c) => [
+            c.customerName,
+            c.personType === 'company' ? 'PJ' : 'PF',
+            c.document || '',
+            c.phone || '',
+            c.email || '',
+            c.salesCount,
+            c.quotesCount,
+            c.serviceOrdersCount,
+            c.averageTicket.toFixed(2),
+            c.totalSpent.toFixed(2),
+          ]),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_clientes: filteredCustomers.length,
+          },
+        )
+      } else {
+        exportRowsToXml(
+          `relatorio-fornecedores-${todayIso}.xml`,
+          'relatorio_fornecedores',
+          'fornecedor',
+          ['Fornecedor', 'CNPJ CPF', 'Contato', 'Telefone', 'Email', 'Endereco'],
+          filteredSuppliers.map((s) => [
+            s.name,
+            s.document || '',
+            s.contactName || '',
+            s.phone || '',
+            s.email || '',
+            s.address || '',
+          ]),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_fornecedores: filteredSuppliers.length,
+          },
+        )
+      }
+    }
+
     return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateToView('home')}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  Relatório de Clientes &amp; Fornecedores
-                </h1>
-                <span className="rounded-md bg-purple-50 dark:bg-purple-950/60 px-2.5 py-0.5 text-xs font-bold text-purple-700 dark:text-purple-300">
-                  CRM &amp; Parceiros
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Ranking VIP de clientes por faturamento, frequência de compras, ticket médio e base de fornecedores.
-              </p>
-            </div>
-          </div>
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório de CRM, Clientes & Fornecedores"
+          moduleTitle={crmTab === 'customers' ? 'Ranking VIP de Clientes' : 'Base de Fornecedores'}
+          totalRecords={crmTab === 'customers' ? filteredCustomers.length : filteredSuppliers.length}
+          totalAmountLabel={crmTab === 'customers' ? 'Total Comprado' : undefined}
+          totalAmountValue={
+            crmTab === 'customers'
+              ? formatCurrency(filteredCustomers.reduce((acc, c) => acc + c.totalSpent, 0).toFixed(2))
+              : undefined
+          }
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportCrmCsv}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Exportar CSV</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Imprimir</span>
-            </Button>
-          </div>
-        </div>
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR */}
+        <ReportActionBar
+          title="Relatório de Clientes & Fornecedores"
+          badgeText="CRM & Parceiros"
+          badgeColorClass="bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300"
+          description="Ranking VIP de clientes por faturamento, frequência de compras, ticket médio e base de fornecedores."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportCrmExcel}
+          onExportXml={handleExportCrmXml}
+          onPrint={() => window.print()}
+          disableExport={crmTab === 'customers' ? filteredCustomers.length === 0 : filteredSuppliers.length === 0}
+        />
 
         {renderPeriodToolbar()}
 
@@ -2354,6 +2586,14 @@ export function ReportsPage() {
             )}
           </div>
         </Card>
+
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Auditoria de Parceiros Comerciais & CRM"
+        />
       </div>
     )
   }
@@ -2502,11 +2742,101 @@ export function ReportsPage() {
       }
     }
 
-    const now = new Date()
-    const rawWeekday = now.toLocaleDateString('pt-BR', { weekday: 'long' })
-    const emissionWeekday = rawWeekday.charAt(0).toUpperCase() + rawWeekday.slice(1)
-    const emissionDate = now.toLocaleDateString('pt-BR')
-    const emissionTime = now.toLocaleTimeString('pt-BR')
+    const handleExportRegistrationsXml = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      if (registrationsTab === 'users') {
+        exportRowsToXml(
+          `relatorio-cadastros-usuarios-${todayIso}.xml`,
+          'relatorio_cadastros_usuarios',
+          'usuario',
+          ['Nome Usuario', 'Email', 'Perfil', 'Cargo', 'Telefone', 'Ultimo Acesso', 'Data Cadastro', 'Status'],
+          filteredUsers.map((u) => [
+            u.displayName,
+            u.email,
+            u.role === 'admin' ? 'Administrador' : u.role === 'owner' ? 'Proprietário' : 'Membro',
+            u.jobTitle || 'Não informado',
+            u.phone ? formatPhoneNumber(u.phone) : '',
+            u.lastAccessAt ? new Date(u.lastAccessAt).toLocaleString('pt-BR') : 'Sem registros',
+            u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '',
+            'Ativo',
+          ]),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_usuarios: filteredUsers.length,
+          },
+        )
+      } else if (registrationsTab === 'employees') {
+        exportRowsToXml(
+          `relatorio-cadastros-funcionarios-${todayIso}.xml`,
+          'relatorio_cadastros_funcionarios',
+          'funcionario',
+          ['Funcionario', 'Cargo Funcao', 'Perfil', 'Email', 'Telefone', 'Modulos Autorizados', 'Data Cadastro'],
+          filteredEmployees.map((e) => [
+            e.displayName,
+            e.jobTitle || 'Colaborador',
+            e.role === 'admin' ? 'Administrador' : 'Membro',
+            e.email,
+            e.phone ? formatPhoneNumber(e.phone) : '',
+            e.dashboardModules ? `${e.dashboardModules.length} módulos` : 'Padrão',
+            e.createdAt ? new Date(e.createdAt).toLocaleDateString('pt-BR') : '',
+          ]),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_funcionarios: filteredEmployees.length,
+          },
+        )
+      } else if (registrationsTab === 'suppliers') {
+        exportRowsToXml(
+          `relatorio-cadastros-fornecedores-${todayIso}.xml`,
+          'relatorio_cadastros_fornecedores',
+          'fornecedor',
+          ['Fornecedor Razao Social', 'CNPJ CPF', 'Contato Responsavel', 'Telefone', 'Email', 'Endereco', 'Despesas Registradas', 'Total em Despesas', 'Data Cadastro'],
+          filteredSuppliers.map((s) => {
+            const billInfo = supplierBillsMap.get(s.name.trim().toLowerCase())
+            return [
+              s.name,
+              s.document || '',
+              s.contactName || '',
+              s.phone ? formatPhoneNumber(s.phone) : '',
+              s.email || '',
+              s.address || '',
+              billInfo?.count || 0,
+              (billInfo?.total || 0).toFixed(2),
+              s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '',
+            ]
+          }),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_fornecedores: filteredSuppliers.length,
+          },
+        )
+      } else {
+        exportRowsToXml(
+          `relatorio-cadastros-clientes-${todayIso}.xml`,
+          'relatorio_cadastros_clientes',
+          'cliente',
+          ['Cliente Razao Social', 'Tipo', 'CPF CNPJ', 'Telefone WhatsApp', 'Email', 'Endereco', 'Compras Faturadas', 'Total Comprado', 'Data Cadastro'],
+          filteredCustomers.map((c) => {
+            const metrics = customerMetricsMap.get(c.id)
+            return [
+              c.name,
+              c.personType === 'company' ? 'Pessoa Jurídica' : 'Pessoa Física',
+              c.document || '',
+              c.phone ? formatPhoneNumber(c.phone) : '',
+              c.email || '',
+              c.address || '',
+              metrics?.salesCount || 0,
+              (metrics?.totalSpent || 0).toFixed(2),
+              c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '',
+            ]
+          }),
+          {
+            empresa: currentOrganization?.name || 'ControleSoft',
+            total_clientes: filteredCustomers.length,
+          },
+        )
+      }
+    }
 
     const activeTabTitle =
       registrationsTab === 'users'
@@ -2529,100 +2859,31 @@ export function ReportsPage() {
     return (
       <div className="space-y-6">
         {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO (PRINT MEDIA) */}
-        <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6">
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <img
-                src={currentOrganization?.logoUrl || '/controlesoft-logo.png'}
-                alt="Logo da Empresa"
-                className="h-14 max-h-16 max-w-[180px] object-contain"
-              />
-              <div>
-                <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">
-                  {currentOrganization?.name || 'ControleSoft Gestão Empresarial'}
-                </h2>
-                <p className="text-xs font-semibold text-slate-600">
-                  Central de Relatórios • Relatório Geral de Cadastros
-                </p>
-              </div>
-            </div>
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório Geral de Cadastros"
+          moduleTitle={activeTabTitle}
+          totalRecords={activeTabRecordsCount}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
 
-            <div className="text-right text-[11px] text-slate-700 leading-tight space-y-0.5 border-l border-slate-300 pl-4">
-              <div>
-                <span className="font-bold">Dia da Semana:</span> {emissionWeekday}
-              </div>
-              <div>
-                <span className="font-bold">Data de Emissão:</span> {emissionDate}
-              </div>
-              <div>
-                <span className="font-bold">Horário:</span> {emissionTime}
-              </div>
-              <div>
-                <span className="font-bold">Filtro de Período:</span> {PERIOD_LABELS[dateFilter.preset]}
-                {dateFilter.startDate && dateFilter.endDate
-                  ? ` (${dateFilter.startDate.split('-').reverse().join('/')} a ${dateFilter.endDate.split('-').reverse().join('/')})`
-                  : ''}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
-            <div className="font-bold uppercase tracking-wider text-blue-900 bg-blue-50 px-2.5 py-1 rounded border border-blue-200">
-              MÓDULO: {activeTabTitle}
-            </div>
-            <div className="font-semibold text-slate-700">
-              Total de Registros Listados: <span className="font-bold text-slate-900">{activeTabRecordsCount}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* CABEÇALHO EM TELA */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateToView('home')}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs"
-              title="Voltar para a Central"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  Relatório Geral de Cadastros
-                </h1>
-                <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:text-blue-300">
-                  Cadastros &amp; Equipe
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Auditoria cadastral completa de usuários do sistema, equipe de funcionários, fornecedores homologados e carteira de clientes.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportRegistrationsCsv}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Exportar CSV</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Imprimir</span>
-            </Button>
-          </div>
-        </div>
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR */}
+        <ReportActionBar
+          title="Relatório Geral de Cadastros"
+          badgeText="Cadastros & Equipe"
+          badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+          description="Auditoria cadastral completa de usuários do sistema, equipe de funcionários, fornecedores homologados e carteira de clientes."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportRegistrationsCsv}
+          onExportXml={handleExportRegistrationsXml}
+          onPrint={() => window.print()}
+          disableExport={activeTabRecordsCount === 0}
+        />
 
         {renderPeriodToolbar()}
 
@@ -3290,18 +3551,13 @@ export function ReportsPage() {
           )}
         </div>
 
-        {/* RODAPÉ EXCLUSIVO DE IMPRESSÃO */}
-        <div className="hidden print:flex items-center justify-between border-t-2 border-slate-900 pt-4 mt-8 text-xs text-slate-600">
-          <div>
-            <span className="font-bold">ControleSoft Gestão Empresarial</span> • Documento Oficial de Auditoria Cadastral
-            <div className="text-[10px] text-slate-500">
-              Emitido em {emissionDate} às {emissionTime} ({emissionWeekday})
-            </div>
-          </div>
-          <div className="border-t border-slate-500 pt-1 w-64 text-center text-slate-700 text-[11px] font-semibold">
-            Visto / Assinatura do Responsável
-          </div>
-        </div>
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Documento Oficial de Auditoria Cadastral"
+        />
       </div>
     )
   }

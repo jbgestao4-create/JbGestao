@@ -170,6 +170,83 @@ export function exportRowsToCsv(filename: string, headers: string[], rows: Array
   URL.revokeObjectURL(url)
 }
 
+export function exportRowsToExcel(
+  filename: string,
+  headers: string[],
+  rows: Array<Array<string | number | null | undefined>>
+): void {
+  const finalName = filename.endsWith('.csv') ? filename : `${filename}.csv`
+  exportRowsToCsv(finalName, headers, rows)
+}
+
+export function exportRowsToXml(
+  filename: string,
+  rootElement: string,
+  itemElement: string,
+  headers: string[],
+  rows: Array<Array<string | number | null | undefined>>,
+  metadata?: Record<string, string | number | null | undefined>
+): void {
+  const sanitizeTag = (tag: string): string => {
+    const clean = tag
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase()
+    if (!clean) return 'campo'
+    return clean[0] >= '0' && clean[0] <= '9' ? `campo_${clean}` : clean
+  }
+
+  const escapeXml = (unsafe: string | number | null | undefined): string => {
+    if (unsafe === null || unsafe === undefined) return ''
+    return String(unsafe)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+  }
+
+  const tags = headers.map(sanitizeTag)
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+  xml += `<${rootElement}>\n`
+
+  if (metadata && Object.keys(metadata).length > 0) {
+    xml += '  <metadados>\n'
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value !== undefined) {
+        const tag = sanitizeTag(key)
+        xml += `    <${tag}>${escapeXml(value)}</${tag}>\n`
+      }
+    }
+    xml += '  </metadados>\n'
+  }
+
+  xml += '  <registros>\n'
+  for (const row of rows) {
+    xml += `    <${itemElement}>\n`
+    row.forEach((val, idx) => {
+      const tag = tags[idx] || `campo_${idx + 1}`
+      xml += `      <${tag}>${escapeXml(val)}</${tag}>\n`
+    })
+    xml += `    </${itemElement}>\n`
+  }
+  xml += '  </registros>\n'
+  xml += `</${rootElement}>\n`
+
+  const blob = new Blob([xml], { type: 'application/xml;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', filename.endsWith('.xml') ? filename : `${filename}.xml`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 export const reportsService = {
   async loadAllReportData(organizationId: UUID): Promise<ReportsDataset> {
     const [
