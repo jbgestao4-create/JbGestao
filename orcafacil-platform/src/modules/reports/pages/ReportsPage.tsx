@@ -2414,21 +2414,16 @@ export function ReportsPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="w-full">
+                <table className="w-full text-left text-xs print:text-[10px]">
                   <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="py-3 px-3">Código / SKU</th>
-                      <th className="py-3 px-3">Produto / Descrição</th>
-                      <th className="py-3 px-3">Categoria</th>
-                      <th className="py-3 px-3 text-center">Status</th>
-                      <th className="py-3 px-3 text-right">Qtd. Atual</th>
-                      <th className="py-3 px-3 text-right">Mínimo</th>
-                      <th className="py-3 px-3 text-right">Custo Unit.</th>
-                      <th className="py-3 px-3 text-right">Venda Unit.</th>
-                      <th className="py-3 px-3 text-right">Total Custo</th>
-                      <th className="py-3 px-3 text-right">Total Venda</th>
-                      <th className="py-3 px-3 text-center">Curva ABC</th>
+                      <th className="py-2.5 px-3">Produto & Identificação</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 text-right">Estoque / Mín.</th>
+                      <th className="py-2.5 px-3 text-right">Preço Unit. (Venda / Custo)</th>
+                      <th className="py-2.5 px-3 text-right">Total (Venda / Custo)</th>
+                      <th className="py-2.5 px-3 text-center">Curva ABC</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -2437,23 +2432,17 @@ export function ReportsPage() {
                         key={item.id}
                         className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
                       >
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                          {item.sku || item.barcode || '—'}
-                        </td>
                         <td className="py-2.5 px-3">
                           <span className="font-semibold text-slate-900 dark:text-white block">
                             {item.name}
                           </span>
-                          {(item.brand || item.model || item.location) && (
-                            <span className="text-[10px] text-slate-400 block mt-0.5">
-                              {[item.brand, item.model, item.location ? `Loc: ${item.location}` : null]
-                                .filter(Boolean)
-                                .join(' • ')}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          {item.category || 'Sem Categoria'}
+                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                            SKU: {item.sku || item.barcode || '—'}
+                            {item.category && ` • ${item.category}`}
+                            {(item.brand || item.model || item.location) && (
+                              ` • ${[item.brand, item.model, item.location ? `Loc: ${item.location}` : null].filter(Boolean).join(' • ')}`
+                            )}
+                          </span>
                         </td>
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
                           <span
@@ -2462,23 +2451,29 @@ export function ReportsPage() {
                             {item.statusLabel}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                          {item.qty} <span className="text-[10px] text-slate-400 font-normal">{item.unit || 'UN'}</span>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          <span className="font-bold text-slate-900 dark:text-white block">
+                            {item.qty} <span className="text-[10px] text-slate-400 font-normal">{item.unit || 'UN'}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500 block">
+                            Mín: {item.minQty}
+                          </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right text-slate-500 whitespace-nowrap">
-                          {item.minQty}
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          <span className="font-mono font-semibold text-slate-900 dark:text-white block">
+                            {formatCurrency(item.price.toFixed(2))}
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-500 block">
+                            Custo: {formatCurrency(item.cost.toFixed(2))}
+                          </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {formatCurrency(item.cost.toFixed(2))}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-900 dark:text-white whitespace-nowrap">
-                          {formatCurrency(item.price.toFixed(2))}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {formatCurrency(item.totalCostValue.toFixed(2))}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                          {formatCurrency(item.totalSaleValue.toFixed(2))}
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 block">
+                            {formatCurrency(item.totalSaleValue.toFixed(2))}
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-500 block">
+                            Custo: {formatCurrency(item.totalCostValue.toFixed(2))}
+                          </span>
                         </td>
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
                           <span
@@ -2498,20 +2493,20 @@ export function ReportsPage() {
                   </tbody>
                   <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                     <tr>
-                      <td colSpan={4} className="py-3 px-3 uppercase text-slate-700 dark:text-slate-300">
+                      <td colSpan={2} className="py-3 px-3 uppercase text-slate-700 dark:text-slate-300">
                         Totais Consolidados ({filteredInventory.length} itens)
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        {inventoryMetrics.totalUnits.toLocaleString('pt-BR')}
+                        {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} un.
                       </td>
                       <td className="py-3 px-3 text-right text-slate-400">—</td>
-                      <td className="py-3 px-3 text-right text-slate-400">—</td>
-                      <td className="py-3 px-3 text-right text-slate-400">—</td>
-                      <td className="py-3 px-3 text-right font-mono text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                        {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
-                        {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+                      <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">
+                        <span className="text-emerald-700 dark:text-emerald-300 block">
+                          Venda: {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+                        </span>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-400 block font-normal">
+                          Custo: {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
+                        </span>
                       </td>
                       <td className="py-3 px-3 text-center text-slate-400">—</td>
                     </tr>

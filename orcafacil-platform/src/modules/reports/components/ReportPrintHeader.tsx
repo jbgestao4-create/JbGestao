@@ -3,7 +3,7 @@ interface ReportPrintHeaderProps {
   organizationLogoUrl?: string | null
   reportTitle: string
   reportSubtitle?: string
-  moduleTitle: string
+  moduleTitle?: string
   totalRecords: number
   totalAmountLabel?: string
   totalAmountValue?: string
@@ -19,7 +19,7 @@ export function ReportPrintHeader({
   organizationLogoUrl,
   reportTitle,
   reportSubtitle = 'Central de Relatórios • Gestão Empresarial',
-  moduleTitle,
+  moduleTitle: _moduleTitle,
   totalRecords,
   totalAmountLabel,
   totalAmountValue,
@@ -65,10 +65,7 @@ export function ReportPrintHeader({
         </div>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
-        <div className="font-bold uppercase tracking-wider text-blue-900 bg-blue-50 px-2.5 py-1 rounded border border-blue-200">
-          MÓDULO: {moduleTitle}
-        </div>
+      <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-end text-xs">
         <div className="flex items-center gap-4 font-semibold text-slate-700">
           {totalAmountLabel && totalAmountValue && (
             <span>
