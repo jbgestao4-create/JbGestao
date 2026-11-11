@@ -2184,6 +2184,109 @@ export function ReportsPage() {
               )}
             </div>
 
+            {/* CARDS DE MÉTRICAS VISUAIS (DIRETAMENTE ABAIXO DO STATUS) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-1">
+              {/* 1. Total Itens */}
+              <Card
+                onClick={() => setInvStatus('all')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
+                  invStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Total de Produtos
+                    </p>
+                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                      {inventoryMetrics.totalItems} produto(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
+                    <Package className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 2. Em Falta (Zerados) */}
+              <Card
+                onClick={() => setInvStatus('out')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-rose-100 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/50 to-white dark:from-rose-950/30 dark:to-slate-900 ${
+                  invStatus === 'out' ? 'ring-2 ring-rose-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Em Falta (Zerado)
+                    </p>
+                    <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5">
+                      {inventoryMetrics.outCount} zerado(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
+                    <Ban className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3. Estoque Baixo */}
+              <Card
+                onClick={() => setInvStatus('low')}
+                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
+                  invStatus === 'low' ? 'ring-2 ring-amber-500/50' : ''
+                }`}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Abaixo do Mínimo
+                    </p>
+                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
+                      {inventoryMetrics.lowCount} alerta(s)
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 4. Valor a Custo */}
+              <Card className="transition-all rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Valor a Custo
+                    </p>
+                    <p className="text-lg font-extrabold text-blue-700 dark:text-blue-300 mt-0.5 font-mono">
+                      {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 5. Valor a Venda */}
+              <Card className="transition-all rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                      Valor a Venda
+                    </p>
+                    <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 font-mono">
+                      {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
+                    <TrendingUp className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Linha 2: Dropdowns de Categoria, Fornecedor, Curva ABC, Situação, Ordenação e Busca */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
               {/* Filtro de Categoria */}
@@ -2296,109 +2399,6 @@ export function ReportsPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* CARDS DE MÉTRICAS VISUAIS (EXIBIÇÃO EM TELA, OCULTOS NA IMPRESSÃO A4) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 print:hidden">
-          {/* 1. Total Itens */}
-          <Card
-            onClick={() => setInvStatus('all')}
-            className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
-              invStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
-            }`}
-          >
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                  Total de Produtos
-                </p>
-                <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
-                  {inventoryMetrics.totalItems} produto(s)
-                </p>
-              </div>
-              <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
-                <Package className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 2. Em Falta (Zerados) */}
-          <Card
-            onClick={() => setInvStatus('out')}
-            className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-rose-100 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/50 to-white dark:from-rose-950/30 dark:to-slate-900 ${
-              invStatus === 'out' ? 'ring-2 ring-rose-500/50' : ''
-            }`}
-          >
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                  Em Falta (Zerado)
-                </p>
-                <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5">
-                  {inventoryMetrics.outCount} zerado(s)
-                </p>
-              </div>
-              <div className="rounded-xl bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
-                <Ban className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 3. Estoque Baixo */}
-          <Card
-            onClick={() => setInvStatus('low')}
-            className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
-              invStatus === 'low' ? 'ring-2 ring-amber-500/50' : ''
-            }`}
-          >
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                  Abaixo do Mínimo
-                </p>
-                <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
-                  {inventoryMetrics.lowCount} alerta(s)
-                </p>
-              </div>
-              <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 4. Valor a Custo */}
-          <Card className="transition-all rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                  Valor a Custo
-                </p>
-                <p className="text-lg font-extrabold text-blue-700 dark:text-blue-300 mt-0.5 font-mono">
-                  {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
-                </p>
-              </div>
-              <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
-                <FileText className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 5. Valor a Venda */}
-          <Card className="transition-all rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                  Valor a Venda
-                </p>
-                <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 font-mono">
-                  {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
-                </p>
-              </div>
-              <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-                <TrendingUp className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* TABELA OFICIAL DE ITENS FORMATADA PARA TELA E IMPRESSÃO A4 */}
         <div className="space-y-4">
