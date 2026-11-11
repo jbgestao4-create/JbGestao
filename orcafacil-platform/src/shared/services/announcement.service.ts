@@ -41,6 +41,12 @@ function setLocalCache(items: SystemAnnouncement[]): void {
 }
 
 export const announcementService = {
+  getCachedActive(targetPage: AnnouncementTargetPage = 'dashboard'): SystemAnnouncement[] {
+    return getLocalCache().filter(
+      (a) => a.isActive && (a.targetPage || 'dashboard') === targetPage,
+    )
+  },
+
   async listActive(
     targetPage: AnnouncementTargetPage = 'dashboard',
   ): Promise<ServiceResult<SystemAnnouncement[]>> {

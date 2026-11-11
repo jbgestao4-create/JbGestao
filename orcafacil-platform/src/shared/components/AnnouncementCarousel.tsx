@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { LayoutDashboard, ChevronLeft, ChevronRight, Image as ImageIcon, Settings, ExternalLink } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Image as ImageIcon, Settings, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { announcementService, type SystemAnnouncement } from '../services/announcement.service'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -47,7 +47,7 @@ function preloadImage(src: string, timeoutMs = 6000): Promise<void> {
 }
 
 export function AnnouncementCarousel({
-  firstName,
+  firstName: _firstName,
   onManageAnnouncements,
   initialAnnouncements,
   onReady,
@@ -55,9 +55,10 @@ export function AnnouncementCarousel({
   const { user } = useAuth()
   const isDev = isSystemOwner(user)
 
-  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>(
-    initialAnnouncements ?? [],
-  )
+  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>(() => {
+    if (initialAnnouncements !== undefined) return initialAnnouncements
+    return announcementService.getCachedActive('dashboard')
+  })
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -67,53 +68,55 @@ export function AnnouncementCarousel({
     let isMounted = true
 
     const syncAnnouncements = async () => {
-      // Caso a lista venha por prop
-      if (initialAnnouncements !== undefined) {
-        if (initialAnnouncements.length > 0 && initialAnnouncements[0].imageUrl) {
-          setIsLoading(true)
-          await preloadImage(initialAnnouncements[0].imageUrl)
-          if (isMounted) {
-            setAnnouncements(initialAnnouncements)
-            setIsLoading(false)
-            onReady?.()
-          }
-          // Pré-carrega demais imagens em segundo plano
-          initialAnnouncements.slice(1).forEach((item) => {
-            if (item.imageUrl) void preloadImage(item.imageUrl)
-          })
-        } else {
-          if (isMounted) {
-            setAnnouncements(initialAnnouncements)
-            setIsLoading(false)
-            onReady?.()
-          }
+      // Prioridade: se recebemos lista ou já temos em cache
+      const listToLoad =
+        initialAnnouncements !== undefined
+          ? initialAnnouncements
+          : announcementService.getCachedActive('dashboard')
+
+      if (listToLoad.length > 0 && listToLoad[0].imageUrl) {
+        setIsLoading(true)
+        await preloadImage(listToLoad[0].imageUrl)
+        if (isMounted) {
+          setAnnouncements(listToLoad)
+          setIsLoading(false)
+          onReady?.()
         }
-        return
+        // Pré-carrega demais imagens em segundo plano
+        listToLoad.slice(1).forEach((item) => {
+          if (item.imageUrl) void preloadImage(item.imageUrl)
+        })
       }
 
-      // Caso precise buscar diretamente do serviço
-      setIsLoading(true)
-      try {
-        const res = await announcementService.listActive()
-        const activeList = res.success && res.data ? res.data : []
-        if (activeList.length > 0 && activeList[0].imageUrl) {
-          await preloadImage(activeList[0].imageUrl)
-          if (isMounted) {
-            setAnnouncements(activeList)
-            setIsLoading(false)
-            onReady?.()
+      // Se initialAnnouncements não foi passado, busca da API
+      if (initialAnnouncements === undefined) {
+        try {
+          const res = await announcementService.listActive()
+          const activeList = res.success && res.data ? res.data : []
+          if (activeList.length > 0 && activeList[0].imageUrl) {
+            await preloadImage(activeList[0].imageUrl)
+            if (isMounted) {
+              setAnnouncements(activeList)
+              setIsLoading(false)
+              onReady?.()
+            }
+            activeList.slice(1).forEach((item) => {
+              if (item.imageUrl) void preloadImage(item.imageUrl)
+            })
+          } else {
+            if (isMounted) {
+              setAnnouncements(activeList)
+              setIsLoading(false)
+              onReady?.()
+            }
           }
-          activeList.slice(1).forEach((item) => {
-            if (item.imageUrl) void preloadImage(item.imageUrl)
-          })
-        } else {
+        } catch {
           if (isMounted) {
-            setAnnouncements(activeList)
             setIsLoading(false)
             onReady?.()
           }
         }
-      } catch {
+      } else if (listToLoad.length === 0) {
         if (isMounted) {
           setAnnouncements([])
           setIsLoading(false)
@@ -127,7 +130,7 @@ export function AnnouncementCarousel({
     return () => {
       isMounted = false
     }
-  }, [initialAnnouncements])
+  }, [initialAnnouncements, onReady])
 
   // Cycle every 3 seconds unless hovered/paused
   useEffect(() => {
@@ -325,47 +328,24 @@ export function AnnouncementCarousel({
     )
   }
 
-  // Default state when no announcement images are uploaded yet
+  // Fallback limpo quando nenhum anúncio/banner estiver cadastrado
   return (
-    <div className="relative flex flex-col justify-between h-full min-h-[310px] sm:min-h-[340px] rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 text-slate-800 dark:text-white shadow-sm">
-      <div>
-        <div className="flex items-center justify-between">
-          <span className="inline-flex items-center gap-2 rounded-md border border-blue-200 dark:border-blue-300/20 bg-blue-50 dark:bg-blue-300/10 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-100">
-            <LayoutDashboard aria-hidden="true" className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
-            Painel Principal do Sistema
-          </span>
-
-          {isDev && (
-            <Link
-              to="/admin/announcements"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-300 hover:underline transition"
-            >
-              <ImageIcon className="h-3.5 w-3.5" />
-              + Inserir Anúncios
-            </Link>
-          )}
-        </div>
-
-        <h2 className="mt-5 text-2xl font-bold leading-tight sm:text-3xl text-slate-900 dark:text-white">
-          Bem-vindo ao Sistema JB, <span className="text-blue-600 dark:text-blue-400">{firstName}</span>!
-        </h2>
-        <p className="mt-3 text-xs sm:text-sm leading-6 text-slate-600 dark:text-slate-300 max-w-xl">
-          Selecione uma das opções abaixo para gerenciar as rotinas comerciais, operacionais e
-          cadastrais da sua empresa.
-        </p>
+    <div className="relative flex flex-col items-center justify-center h-full min-h-[310px] sm:min-h-[340px] rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 text-center shadow-xs select-none">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 mb-3">
+        <ImageIcon className="h-6 w-6" />
       </div>
-
-      <div className="mt-6 flex items-center justify-between border-t border-slate-100 dark:border-white/10 pt-3 text-xs text-slate-500 dark:text-slate-400">
-        <span>ControleSoft • Solução Empresarial Completa</span>
-        {isDev && (
-          <Link
-            to="/admin/announcements"
-            className="text-blue-600 dark:text-blue-400 hover:underline font-bold"
-          >
-            Configurar Banners do Desenvolvedor →
-          </Link>
-        )}
-      </div>
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        Nenhum banner ou anúncio em exibição.
+      </p>
+      {isDev && (
+        <Link
+          to="/admin/announcements"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold transition shadow-xs"
+        >
+          <ImageIcon className="h-3.5 w-3.5" />
+          + Inserir Anúncios
+        </Link>
+      )}
     </div>
   )
 }

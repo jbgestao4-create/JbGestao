@@ -82,7 +82,7 @@ export function DashboardPage() {
   )
   const [isModulesExpanded, setIsModulesExpanded] = useState(true)
   const [initialAnnouncements, setInitialAnnouncements] = useState<SystemAnnouncement[] | undefined>(
-    undefined,
+    () => announcementService.getCachedActive('dashboard'),
   )
 
   useEffect(() => {

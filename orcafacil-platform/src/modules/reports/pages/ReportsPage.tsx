@@ -16,22 +16,17 @@ import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import {
-  AlertTriangle,
   Boxes,
   Briefcase,
-  Calendar,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   FileBarChart,
-  FileText,
   Package,
   RefreshCw,
   RotateCcw,
   Search,
   ShieldCheck,
-  TrendingUp,
   Truck,
   UserCheck,
   Users,
@@ -1591,190 +1586,93 @@ export function ReportsPage() {
           </CardContent>
         </Card>
 
-        {/* INDICADORES RESUMIDOS DO PERÍODO SELECIONADO */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                <Wrench className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Ordens de Serviço</span>
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(qoMetrics.ordersTotal.toFixed(2))}
-                </h4>
-                <p className="text-[10px] text-gray-400">{qoMetrics.ordersCount} O.S filtradas</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
-                <FileText className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Orçamentos</span>
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(qoMetrics.quotesTotal.toFixed(2))}
-                </h4>
-                <p className="text-[10px] text-gray-400">{qoMetrics.quotesCount} orçamentos filtrados</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Total Consolidado</span>
-                <h4 className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(qoMetrics.grandTotal.toFixed(2))}
-                </h4>
-                <p className="text-[10px] text-gray-400">{qoMetrics.totalCount} registros totais</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
-                <Calendar className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Período Auditado</span>
-                <h4 className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                  {qoPeriodInfo.rangeText}
-                </h4>
-                <p className="text-[10px] text-gray-400">{qoPeriodInfo.label}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* LISTAGEM DETALHADA DE REGISTROS FORMATADOS PARA TELA E IMPRESSÃO A4 */}
+        {/* LISTAGEM EM TABELA OFICIAL FORMATADA PARA TELA E IMPRESSÃO A4 */}
         <div className="space-y-4">
           {filteredQoRecords.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center bg-white dark:bg-slate-900/40">
               <ClipboardList className="h-10 w-10 text-slate-400 mx-auto mb-2" />
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Nenhuma Ordem de Serviço ou Orçamento encontrado
+                Nenhum registro encontrado
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-                Não foram localizados registros para o período ({qoPeriodInfo.rangeText}) com os filtros selecionados.
+                Não foram localizadas Ordens de Serviço ou Orçamentos para os filtros selecionados.
               </p>
             </div>
           ) : (
-            filteredQoRecords.map((item) => (
-              <div
-                key={`${item.kind}-${item.id}`}
-                className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-              >
-                {/* Linha Superior: Tipo, Número, Status e Valor Total */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                        item.kind === 'order'
-                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                          : 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
-                      }`}
-                    >
-                      {item.kind === 'order' ? <Wrench className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-base font-black text-slate-900 dark:text-white font-mono">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs print:text-[11px]">
+                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-2.5 px-3">Número</th>
+                      <th className="py-2.5 px-3">Tipo</th>
+                      <th className="py-2.5 px-3">Data</th>
+                      <th className="py-2.5 px-3">Cliente</th>
+                      <th className="py-2.5 px-3">Telefone</th>
+                      <th className="py-2.5 px-3">Equipamento / Descrição</th>
+                      <th className="py-2.5 px-3">Responsável</th>
+                      <th className="py-2.5 px-3 text-center">Status / Fila</th>
+                      <th className="py-2.5 px-3 text-right">Valor Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {filteredQoRecords.map((item) => (
+                      <tr
+                        key={`${item.kind}-${item.id}`}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
+                      >
+                        <td className="py-2 px-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                           {item.number}
-                        </span>
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${item.statusBadgeColor}`}
-                        >
-                          {item.statusLabel}
-                        </span>
-                        <span className="text-[11px] font-bold text-slate-400 uppercase">
-                          • {item.kind === 'order' ? 'Ordem de Serviço' : 'Orçamento'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Emissão: {item.date ? new Date(item.date).toLocaleString('pt-BR') : '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Valor Total</span>
-                    <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                      {formatCurrency(item.total)}
-                    </span>
-                    {parseFloat(item.discount) > 0 && (
-                      <span className="text-[10px] text-rose-500 block">
-                        Desconto: {formatCurrency(item.discount)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Grade de Detalhes do Registro */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase">Cliente</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {item.customerName}
-                    </span>
-                    {item.customerDocument && (
-                      <span className="block text-[11px] text-slate-400 font-mono mt-0.5">
-                        {item.customerDocument}
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase">Contato</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {item.customerPhone ? formatPhoneNumber(item.customerPhone) : 'Telefone não informado'}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase">
-                      {item.kind === 'order' ? 'Técnico Responsável' : 'Vendedor / Criador'}
-                    </span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {item.responsiblePerson || '—'}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase">
-                      {item.kind === 'order' ? 'Previsão de Entrega' : 'Validade da Proposta'}
-                    </span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {item.kind === 'order'
-                        ? item.estimatedDelivery
-                          ? new Date(item.estimatedDelivery).toLocaleDateString('pt-BR')
-                          : 'Não especificada'
-                        : item.validUntil
-                          ? new Date(item.validUntil).toLocaleDateString('pt-BR')
-                          : 'Sem data limite'}
-                    </span>
-                  </div>
-
-                  {item.description && (
-                    <div className="sm:col-span-2 lg:col-span-4 pt-1">
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">
-                        {item.kind === 'order' ? 'Equipamento & Diagnóstico' : 'Observações'}
-                      </span>
-                      <p className="text-slate-700 dark:text-slate-300 text-xs bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 mt-1">
-                        {item.description}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                        </td>
+                        <td className="py-2 px-3 whitespace-nowrap font-medium text-slate-600 dark:text-slate-300">
+                          {item.kind === 'order' ? 'O.S' : 'Orçamento'}
+                        </td>
+                        <td className="py-2 px-3 whitespace-nowrap text-slate-500">
+                          {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                        <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">
+                          <span>{item.customerName}</span>
+                          {item.customerDocument && (
+                            <span className="block text-[10px] text-slate-400 font-mono">
+                              {item.customerDocument}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {item.customerPhone ? formatPhoneNumber(item.customerPhone) : '—'}
+                        </td>
+                        <td className="py-2 px-3 text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                          {item.description}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {item.responsiblePerson || '—'}
+                        </td>
+                        <td className="py-2 px-3 text-center whitespace-nowrap">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${item.statusBadgeColor}`}
+                          >
+                            {item.statusLabel}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                          {formatCurrency(item.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
+                    <tr>
+                      <td colSpan={8} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                        Total Geral ({filteredQoRecords.length} registros)
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
+                        {formatCurrency(qoMetrics.grandTotal.toFixed(2))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
-            ))
+            </div>
           )}
         </div>
 
@@ -2032,75 +1930,6 @@ export function ReportsPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* INDICADORES RESUMIDOS DE AUDITORIA DO ESTOQUE (KPIS) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                <Package className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Itens / SKUs</span>
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                  {inventoryMetrics.totalItems} produtos
-                </h4>
-                <p className="text-[10px] text-gray-400">
-                  {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} unidades físicas
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
-                <FileText className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Valor a Custo</span>
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
-                </h4>
-                <p className="text-[10px] text-gray-400">Investimento imobilizado</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
-                <TrendingUp className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Valor a Venda</span>
-                <h4 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-                  {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
-                </h4>
-                <p className="text-[10px] text-gray-400">
-                  Lucro proj.: {formatCurrency(inventoryMetrics.potentialProfit.toFixed(2))} ({inventoryMetrics.avgMargin.toFixed(1)}%)
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 uppercase">Alertas Reposição</span>
-                <h4 className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                  {inventoryMetrics.lowCount + inventoryMetrics.outCount} produtos
-                </h4>
-                <p className="text-[10px] text-gray-400">
-                  {inventoryMetrics.outCount} zerados • {inventoryMetrics.lowCount} abaixo do mín.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* TABELA OFICIAL DE ITENS FORMATADA PARA TELA E IMPRESSÃO A4 */}
         <div className="space-y-4">
@@ -2401,66 +2230,69 @@ export function ReportsPage() {
         {registrationsTab === 'users' && (
           <div className="space-y-4">
             {filteredUsers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
                 Nenhum usuário encontrado.
               </div>
             ) : (
-              filteredUsers.map((u) => (
-                <div
-                  key={u.userId}
-                  className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                >
-                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 font-bold text-sm">
-                        <ShieldCheck className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                          {u.displayName || u.email.split('@')[0]}
-                        </h4>
-                        <span className="font-mono text-xs text-slate-500">{u.email}</span>
-                      </div>
-                    </div>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
-                        u.isOwner
-                          ? 'bg-purple-100 text-purple-800'
-                          : u.isAdmin
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-800'
-                      }`}
-                    >
-                      {u.isOwner ? 'Proprietário' : u.isAdmin ? 'Administrador' : 'Usuário Padrão'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail de Acesso</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono truncate block">
-                        {u.email}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Papel no Sistema</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {u.role === 'owner' ? 'Proprietário' : u.role === 'admin' ? 'Administrador' : 'Operador'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Nível de Permissão</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {u.isOwner ? 'Acesso Total (Owner)' : u.isAdmin ? 'Acesso Administrativo' : 'Acesso Operacional'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Status da Conta</span>
-                      <span className="font-semibold text-emerald-600">Ativo</span>
-                    </div>
-                  </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-3 px-3">Usuário / Exibição</th>
+                        <th className="py-3 px-3">E-mail de Acesso</th>
+                        <th className="py-3 px-3">Papel no Sistema</th>
+                        <th className="py-3 px-3">Nível de Permissão</th>
+                        <th className="py-3 px-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {filteredUsers.map((u) => (
+                        <tr
+                          key={u.userId}
+                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
+                        >
+                          <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                            {u.displayName || u.email.split('@')[0]}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                            {u.email}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                            {u.role === 'owner' ? 'Proprietário' : u.role === 'admin' ? 'Administrador' : 'Operador'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                            {u.isOwner ? 'Acesso Total (Owner)' : u.isAdmin ? 'Acesso Administrativo' : 'Acesso Operacional'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <span
+                              className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
+                                u.isOwner
+                                  ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                  : u.isAdmin
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                    : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                              }`}
+                            >
+                              Ativo
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
+                      <tr>
+                        <td colSpan={4} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                          Total de Usuários Cadastrados
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                          {filteredUsers.length}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-              ))
+              </div>
             )}
           </div>
         )}
@@ -2468,56 +2300,61 @@ export function ReportsPage() {
         {registrationsTab === 'employees' && (
           <div className="space-y-4">
             {filteredEmployees.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
                 Nenhum funcionário cadastrado.
               </div>
             ) : (
-              filteredEmployees.map((e) => (
-                <div
-                  key={e.userId}
-                  className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                >
-                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm">
-                        <Briefcase className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-base font-bold text-slate-900 dark:text-white">{e.name}</h4>
-                        <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                          {e.jobTitle}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                      {e.role === 'owner' ? 'Proprietário' : e.role === 'admin' ? 'Administrador' : 'Colaborador'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Cargo / Função</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{e.jobTitle}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail Corporativo</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono truncate block">
-                        {e.email}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Atribuição</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {e.role === 'owner' ? 'Gestão Geral' : e.role === 'admin' ? 'Supervisão' : 'Operação'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Situação Cadastral</span>
-                      <span className="font-semibold text-emerald-600">Ativo na Organização</span>
-                    </div>
-                  </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-3 px-3">Nome do Funcionário</th>
+                        <th className="py-3 px-3">Cargo / Função</th>
+                        <th className="py-3 px-3">E-mail Corporativo</th>
+                        <th className="py-3 px-3">Atribuição</th>
+                        <th className="py-3 px-3 text-center">Situação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {filteredEmployees.map((e) => (
+                        <tr
+                          key={e.userId}
+                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
+                        >
+                          <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                            {e.name}
+                          </td>
+                          <td className="py-2.5 px-3 text-indigo-600 dark:text-indigo-400 font-medium">
+                            {e.jobTitle}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                            {e.email}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                            {e.role === 'owner' ? 'Gestão Geral' : e.role === 'admin' ? 'Supervisão' : 'Operação'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Ativo
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
+                      <tr>
+                        <td colSpan={4} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                          Total de Funcionários
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                          {filteredEmployees.length}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-              ))
+              </div>
             )}
           </div>
         )}
@@ -2525,60 +2362,63 @@ export function ReportsPage() {
         {registrationsTab === 'suppliers' && (
           <div className="space-y-4">
             {filteredSuppliers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
                 Nenhum fornecedor cadastrado.
               </div>
             ) : (
-              filteredSuppliers.map((s) => (
-                <div
-                  key={s.id}
-                  className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                >
-                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-bold text-sm">
-                        <Truck className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-base font-bold text-slate-900 dark:text-white">{s.name}</h4>
-                        <span className="font-mono text-xs text-slate-500">
-                          {s.document || 'Documento não informado'}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 px-3 py-1 text-xs font-semibold">
-                      Fornecedor Homologado
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {s.phone ? formatPhoneNumber(s.phone) : '—'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail Comercial</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
-                        {s.email || '—'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—'}
-                      </span>
-                    </div>
-                    {s.address && (
-                      <div className="col-span-2 sm:col-span-4 pt-1">
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Endereço Completo</span>
-                        <span className="text-slate-700 dark:text-slate-300">{s.address}</span>
-                      </div>
-                    )}
-                  </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-3 px-3">Razão Social / Nome</th>
+                        <th className="py-3 px-3">CNPJ / CPF</th>
+                        <th className="py-3 px-3">Telefone / WhatsApp</th>
+                        <th className="py-3 px-3">E-mail Comercial</th>
+                        <th className="py-3 px-3">Endereço</th>
+                        <th className="py-3 px-3 text-center">Data Cadastro</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {filteredSuppliers.map((s) => (
+                        <tr
+                          key={s.id}
+                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
+                        >
+                          <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                            {s.name}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                            {s.document || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {s.phone ? formatPhoneNumber(s.phone) : '—'}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                            {s.email || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                            {s.address || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap text-slate-500">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
+                      <tr>
+                        <td colSpan={5} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                          Total de Fornecedores Homologados
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                          {filteredSuppliers.length}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-              ))
+              </div>
             )}
           </div>
         )}
@@ -2586,76 +2426,81 @@ export function ReportsPage() {
         {registrationsTab === 'customers' && (
           <div className="space-y-4">
             {filteredCustomers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
                 Nenhum cliente cadastrado.
               </div>
             ) : (
-              filteredCustomers.map((c) => {
-                const metrics = customerMetricsMap.get(c.id)
-                return (
-                  <div
-                    key={c.id}
-                    className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                  >
-                    <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 font-bold text-sm">
-                          <Users className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                            {c.name}
-                          </h4>
-                          <div className="flex items-center gap-2 text-xs text-slate-500">
-                            <span className="font-semibold uppercase text-emerald-700 dark:text-emerald-400">
-                              {c.personType === 'company' ? 'Pessoa Jurídica' : 'Pessoa Física'}
-                            </span>
-                            <span>•</span>
-                            <span className="font-mono">{c.document || 'Sem documento'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Total em Compras</span>
-                        <span className="text-sm font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                          {formatCurrency((metrics?.totalSpent || 0).toFixed(2))}
-                        </span>
-                        <span className="text-[10px] text-slate-400 block">
-                          {metrics?.salesCount || 0} faturamentos
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone / WhatsApp</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {c.phone ? formatPhoneNumber(c.phone) : '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono truncate block">
-                          {c.email || '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Classificação</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {c.personType === 'company' ? 'PJ - Empresarial' : 'PF - Individual'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
+              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-3 px-3">Cliente / Razão Social</th>
+                        <th className="py-3 px-3 text-center">Tipo</th>
+                        <th className="py-3 px-3">Documento (CPF/CNPJ)</th>
+                        <th className="py-3 px-3">Telefone / WhatsApp</th>
+                        <th className="py-3 px-3">E-mail</th>
+                        <th className="py-3 px-3 text-right">Total Compras</th>
+                        <th className="py-3 px-3 text-center">Faturamentos</th>
+                        <th className="py-3 px-3 text-center">Data Cadastro</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {filteredCustomers.map((c) => {
+                        const metrics = customerMetricsMap.get(c.id)
+                        return (
+                          <tr
+                            key={c.id}
+                            className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
+                          >
+                            <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                              {c.name}
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              <span className="inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                {c.personType === 'company' ? 'PJ' : 'PF'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                              {c.document || '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                              {c.phone ? formatPhoneNumber(c.phone) : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                              {c.email || '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                              {formatCurrency((metrics?.totalSpent || 0).toFixed(2))}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                              {metrics?.salesCount || 0}
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap text-slate-500">
+                              {c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
+                      <tr>
+                        <td colSpan={5} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                          Total de Clientes ({filteredCustomers.length})
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
+                          {formatCurrency(
+                            filteredCustomers
+                              .reduce((sum, c) => sum + (customerMetricsMap.get(c.id)?.totalSpent || 0), 0)
+                              .toFixed(2),
+                          )}
+                        </td>
+                        <td colSpan={2} className="py-2.5 px-3 text-center text-slate-400">—</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
             )}
           </div>
         )}
