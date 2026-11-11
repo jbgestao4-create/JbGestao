@@ -7,6 +7,7 @@ interface AppointmentFormModalProps {
   open: boolean
   appointment?: Appointment | null
   initialDate?: string
+  initialTime?: string
   organizationId: string
   userId?: string
   operatorName?: string
@@ -18,6 +19,7 @@ export function AppointmentFormModal({
   open,
   appointment,
   initialDate,
+  initialTime,
   organizationId,
   userId,
   operatorName,
@@ -53,7 +55,7 @@ export function AppointmentFormModal({
       const today = new Date().toISOString().split('T')[0]
       setTitle('')
       setAppointmentDate(initialDate || today)
-      setStartTime('09:00')
+      setStartTime(initialTime || '09:00')
       setCustomerName('')
       setCustomerPhone('')
       setType('general')
@@ -63,7 +65,7 @@ export function AppointmentFormModal({
       setDescription('')
     }
     setError('')
-  }, [appointment, initialDate, open])
+  }, [appointment, initialDate, initialTime, open])
 
   if (!open) return null
 

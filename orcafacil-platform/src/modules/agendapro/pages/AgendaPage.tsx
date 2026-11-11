@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -9,6 +9,7 @@ import {
   Search,
   MapPin,
   CalendarDays,
+  Clock,
 } from 'lucide-react'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -29,30 +30,41 @@ function getStatusTheme(status: AppointmentStatus | string) {
       return {
         pill: 'bg-emerald-50 dark:bg-emerald-950/70 border-l-4 border-l-emerald-500 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/60',
         dot: 'bg-emerald-500',
+        cardBorder: 'border-l-emerald-500',
       }
     case 'in_progress':
       return {
         pill: 'bg-amber-50 dark:bg-amber-950/70 border-l-4 border-l-amber-500 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60',
         dot: 'bg-amber-500',
+        cardBorder: 'border-l-amber-500',
       }
     case 'completed':
       return {
         pill: 'bg-indigo-50 dark:bg-indigo-950/70 border-l-4 border-l-indigo-500 text-indigo-900 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60',
         dot: 'bg-indigo-500',
+        cardBorder: 'border-l-indigo-500',
       }
     case 'cancelled':
       return {
         pill: 'bg-rose-50/60 dark:bg-rose-950/60 border-l-4 border-l-rose-400 text-rose-800 dark:text-rose-300 line-through hover:bg-rose-100 dark:hover:bg-rose-900/60',
         dot: 'bg-rose-400',
+        cardBorder: 'border-l-rose-400',
       }
     case 'scheduled':
     default:
       return {
         pill: 'bg-blue-50 dark:bg-blue-950/70 border-l-4 border-l-blue-500 text-blue-900 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/60',
         dot: 'bg-blue-500',
+        cardBorder: 'border-l-blue-500',
       }
   }
 }
+
+// Horas da grade diária / semanal (07:00 até 22:00)
+const GRID_START_HOUR = 7
+const GRID_END_HOUR = 22
+const HOURS_COUNT = GRID_END_HOUR - GRID_START_HOUR + 1
+const HOUR_HEIGHT_PX = 64
 
 export function AgendaPage() {
   const { currentOrganization } = useOrganization()
@@ -61,7 +73,8 @@ export function AgendaPage() {
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     return new Date().toISOString().split('T')[0]
   })
-  const [viewMode, setViewMode] = useState<'day' | 'month' | 'upcoming'>('day')
+  const [viewMode, setViewMode] = useState<'days' | 'month' | 'upcoming'>('days')
+  const [daysMode, setDaysMode] = useState<'5d' | '7d' | '1d'>('5d')
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -72,8 +85,25 @@ export function AgendaPage() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null)
+  const [formInitialTime, setFormInitialTime] = useState<string>('09:00')
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  const timelineContainerRef = useRef<HTMLDivElement>(null)
+
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  // Hora e minuto atuais para a linha vermelha / indicador de tempo
+  const [currentTimeMinutes, setCurrentTimeMinutes] = useState<number>(() => {
+    const now = new Date()
+    return now.getHours() * 60 + now.getMinutes()
+  })
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date()
+      setCurrentTimeMinutes(now.getHours() * 60 + now.getMinutes())
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Cálculos do Mês
   const monthDate = useMemo(() => new Date(selectedDate + 'T12:00:00'), [selectedDate])
@@ -116,13 +146,84 @@ export function AgendaPage() {
     return days
   }, [currentYear, currentMonth, todayStr, selectedDate])
 
+  // Colunas de Dias para a Visualização em Dias (Estilo Microsoft Teams da captura)
+  const weekDays = useMemo(() => {
+    const sel = new Date(selectedDate + 'T12:00:00')
+    const dayOfWeek = sel.getDay() // 0 = Dom, 1 = Seg, 2 = Ter, 3 = Qua, 4 = Qui, 5 = Sex, 6 = Sáb
+
+    // Segunda-feira da semana de trabalho
+    const monday = new Date(sel)
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+    monday.setDate(sel.getDate() + diffToMonday)
+
+    if (daysMode === '1d') {
+      const dateStr = sel.toISOString().split('T')[0]
+      const dayNum = String(sel.getDate()).padStart(2, '0')
+      const wName = sel.toLocaleDateString('pt-BR', { weekday: 'long' })
+      return [
+        {
+          dateStr,
+          dayNumber: dayNum,
+          weekdayName: wName.charAt(0).toUpperCase() + wName.slice(1),
+          isToday: dateStr === todayStr,
+          isSelected: true,
+        },
+      ]
+    }
+
+    const count = daysMode === '5d' ? 5 : 7
+    const startDate = new Date(monday)
+    if (daysMode === '7d') {
+      startDate.setDate(startDate.getDate() - 1) // Domingo
+    }
+
+    const list = []
+    for (let i = 0; i < count; i++) {
+      const d = new Date(startDate)
+      d.setDate(startDate.getDate() + i)
+      const dateStr = d.toISOString().split('T')[0]
+      const dayNum = String(d.getDate()).padStart(2, '0')
+      const wName = d.toLocaleDateString('pt-BR', { weekday: 'long' })
+      list.push({
+        dateStr,
+        dayNumber: dayNum,
+        weekdayName: wName.charAt(0).toUpperCase() + wName.slice(1),
+        isToday: dateStr === todayStr,
+        isSelected: dateStr === selectedDate,
+      })
+    }
+
+    return list
+  }, [selectedDate, daysMode, todayStr])
+
+  // Intervalo textual para o cabeçalho (ex: "09 a 13 de Novembro de 2026")
+  const weekRangeLabel = useMemo(() => {
+    if (weekDays.length === 0) return ''
+    if (daysMode === '1d') {
+      const d = new Date(selectedDate + 'T12:00:00')
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+    }
+    const first = new Date(weekDays[0].dateStr + 'T12:00:00')
+    const last = new Date(weekDays[weekDays.length - 1].dateStr + 'T12:00:00')
+    const m1 = first.toLocaleDateString('pt-BR', { month: 'short' })
+    const m2 = last.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    if (first.getMonth() === last.getMonth()) {
+      return `${String(first.getDate()).padStart(2, '0')} a ${String(last.getDate()).padStart(2, '0')} de ${m2}`
+    }
+    return `${String(first.getDate()).padStart(2, '0')} de ${m1} a ${String(last.getDate()).padStart(2, '0')} de ${m2}`
+  }, [weekDays, daysMode, selectedDate])
+
   const loadData = async () => {
     if (!currentOrganization) return
     setIsLoading(true)
     try {
-      if (viewMode === 'day') {
-        const res = await appointmentService.listByDate(currentOrganization.id, selectedDate)
-        if (res.success && res.data) setAppointments(res.data)
+      if (viewMode === 'days') {
+        if (weekDays.length > 0) {
+          const startDate = weekDays[0].dateStr
+          const endDate = weekDays[weekDays.length - 1].dateStr
+          const res = await appointmentService.listByDateRange(currentOrganization.id, startDate, endDate)
+          if (res.success && res.data) setAppointments(res.data)
+        }
       } else if (viewMode === 'month') {
         if (calendarDays.length > 0) {
           const startDate = calendarDays[0].dateStr
@@ -141,34 +242,49 @@ export function AgendaPage() {
 
   useEffect(() => {
     void loadData()
-  }, [currentOrganization?.id, selectedDate, viewMode, currentYear, currentMonth])
+  }, [currentOrganization?.id, selectedDate, viewMode, daysMode, currentYear, currentMonth])
 
-  const handlePrevDay = () => {
+  // Scroll automático para a hora atual ou 08:00 ao abrir
+  useEffect(() => {
+    if (viewMode === 'days' && timelineContainerRef.current) {
+      const now = new Date()
+      const hour = Math.max(GRID_START_HOUR, Math.min(GRID_END_HOUR, now.getHours() - 1))
+      const scrollPos = (hour - GRID_START_HOUR) * HOUR_HEIGHT_PX
+      timelineContainerRef.current.scrollTop = scrollPos
+    }
+  }, [viewMode])
+
+  const handlePrevPeriod = () => {
     const d = new Date(selectedDate + 'T12:00:00')
-    d.setDate(d.getDate() - 1)
+    if (viewMode === 'month') {
+      d.setMonth(d.getMonth() - 1)
+    } else {
+      const step = daysMode === '1d' ? 1 : 7
+      d.setDate(d.getDate() - step)
+    }
     setSelectedDate(d.toISOString().split('T')[0])
   }
 
-  const handleNextDay = () => {
+  const handleNextPeriod = () => {
     const d = new Date(selectedDate + 'T12:00:00')
-    d.setDate(d.getDate() + 1)
-    setSelectedDate(d.toISOString().split('T')[0])
-  }
-
-  const handlePrevMonth = () => {
-    const d = new Date(selectedDate + 'T12:00:00')
-    d.setMonth(d.getMonth() - 1)
-    setSelectedDate(d.toISOString().split('T')[0])
-  }
-
-  const handleNextMonth = () => {
-    const d = new Date(selectedDate + 'T12:00:00')
-    d.setMonth(d.getMonth() + 1)
+    if (viewMode === 'month') {
+      d.setMonth(d.getMonth() + 1)
+    } else {
+      const step = daysMode === '1d' ? 1 : 7
+      d.setDate(d.getDate() + step)
+    }
     setSelectedDate(d.toISOString().split('T')[0])
   }
 
   const handleToday = () => {
     setSelectedDate(todayStr)
+  }
+
+  const handleSlotClick = (dateStr: string, timeStr: string) => {
+    setSelectedDate(dateStr)
+    setFormInitialTime(timeStr)
+    setEditingAppointment(null)
+    setIsFormModalOpen(true)
   }
 
   const filteredAppointments = useMemo(() => {
@@ -197,11 +313,19 @@ export function AgendaPage() {
     return map
   }, [filteredAppointments])
 
+  // Posição da linha vermelha/laranja de tempo atual (Teams style)
+  const currentTimeTopPx = useMemo(() => {
+    const startMinutes = GRID_START_HOUR * 60
+    const endMinutes = (GRID_END_HOUR + 1) * 60
+    if (currentTimeMinutes < startMinutes || currentTimeMinutes > endMinutes) return null
+    return ((currentTimeMinutes - startMinutes) / 60) * HOUR_HEIGHT_PX
+  }, [currentTimeMinutes])
+
   const operatorName = profile?.displayName || user?.email?.split('@')[0] || 'Usuário'
 
   return (
     <div className="space-y-6 max-w-full">
-      {/* Top Header */}
+      {/* Cabeçalho Superior */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
@@ -218,6 +342,7 @@ export function AgendaPage() {
             type="button"
             onClick={() => {
               setEditingAppointment(null)
+              setFormInitialTime('09:00')
               setIsFormModalOpen(true)
             }}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-sm font-bold text-white shadow-md transition"
@@ -228,20 +353,20 @@ export function AgendaPage() {
         </div>
       </div>
 
-      {/* Control bar: Tabs, Date Navigation, and Filters */}
+      {/* Barra de Controles: Modos de Visualização, Navegação e Filtros */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
-        {/* Toggle DIA / MÊS / PRÓXIMOS */}
+        {/* Toggle DIAS / MÊS / PRÓXIMOS */}
         <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
           <button
             type="button"
-            onClick={() => setViewMode('day')}
+            onClick={() => setViewMode('days')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              viewMode === 'day'
+              viewMode === 'days'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Por Dia
+            Dias (Semana)
           </button>
           <button
             type="button"
@@ -263,78 +388,84 @@ export function AgendaPage() {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Próximos
+            Lista / Próximos
           </button>
         </div>
 
-        {/* Date Navigator */}
-        {viewMode === 'day' && (
-          <div className="flex items-center gap-2">
+        {/* Sub-toggle de dias (5 dias / 7 dias / 1 dia) quando em visualização de Dias */}
+        {viewMode === 'days' && (
+          <div className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-lg text-[11px] font-semibold">
             <button
               type="button"
-              onClick={handlePrevDay}
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              title="Dia anterior"
+              onClick={() => setDaysMode('5d')}
+              className={`px-2.5 py-1 rounded-md transition ${
+                daysMode === '5d'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 font-bold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
             >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <button
-              type="button"
-              onClick={handleNextDay}
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              title="Próximo dia"
-            >
-              <ChevronRight className="h-4 w-4" />
+              5 Dias (Seg-Sex)
             </button>
             <button
               type="button"
-              onClick={handleToday}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300"
+              onClick={() => setDaysMode('7d')}
+              className={`px-2.5 py-1 rounded-md transition ${
+                daysMode === '7d'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 font-bold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
             >
-              Hoje
-            </button>
-          </div>
-        )}
-
-        {viewMode === 'month' && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrevMonth}
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              title="Mês anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 min-w-[150px] text-center">
-              {monthLabel}
-            </div>
-            <button
-              type="button"
-              onClick={handleNextMonth}
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-              title="Próximo mês"
-            >
-              <ChevronRight className="h-4 w-4" />
+              Semana (7d)
             </button>
             <button
               type="button"
-              onClick={handleToday}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300"
+              onClick={() => setDaysMode('1d')}
+              className={`px-2.5 py-1 rounded-md transition ${
+                daysMode === '1d'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 font-bold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
             >
-              Hoje
+              1 Dia
             </button>
           </div>
         )}
 
+        {/* Navegador de Datas */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePrevPeriod}
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
+            title="Anterior"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          <div className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 min-w-[170px] text-center select-none">
+            {viewMode === 'month' ? monthLabel : weekRangeLabel}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleNextPeriod}
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
+            title="Próximo"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToday}
+            className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition"
+          >
+            Hoje
+          </button>
+        </div>
+
+        {/* Filtros e Busca */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <input
@@ -346,40 +477,239 @@ export function AgendaPage() {
             />
           </div>
 
-          {/* Filter Type */}
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
           >
             <option value="all">Todos os tipos</option>
-            <option value="general">Compromisso Geral</option>
-            <option value="quote">Orçamento</option>
             <option value="service_order">Ordem de Serviço</option>
+            <option value="quote_visit">Visita Orçamento</option>
+            <option value="delivery">Entrega</option>
             <option value="technical_visit">Visita Técnica</option>
-            <option value="sale">Venda / Entrega</option>
+            <option value="general">Geral</option>
           </select>
 
-          {/* Filter Status */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
           >
             <option value="all">Todos os status</option>
-            <option value="scheduled">Agendados</option>
-            <option value="confirmed">Confirmados</option>
+            <option value="scheduled">Agendado</option>
+            <option value="confirmed">Confirmado</option>
             <option value="in_progress">Em Andamento</option>
-            <option value="completed">Concluídos</option>
-            <option value="cancelled">Cancelados</option>
+            <option value="completed">Concluído</option>
+            <option value="cancelled">Cancelado</option>
           </select>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* VISUALIZAÇÃO POR MÊS (ESTILO MICROSOFT TEAMS) */}
+      {/* VISUALIZAÇÃO POR DIAS / SEMANA COM GRADE DE HORÁRIOS (ESTILO TEAMS DA IMAGEM) */}
       {/* ========================================================================= */}
-      {viewMode === 'month' ? (
+      {viewMode === 'days' ? (
+        isLoading ? (
+          <div className="flex items-center justify-center p-16 text-sm text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mr-2" />
+            Carregando agenda semanal...
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+            {/* CABEÇALHO DOS DIAS (COLUNAS IGUAIS À IMAGEM DO MICROSOFT TEAMS) */}
+            <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 select-none">
+              {/* Célula em branco sobre os rótulos de horas */}
+              <div className="w-14 sm:w-16 shrink-0 border-r border-slate-200 dark:border-slate-800 flex items-center justify-center p-2 text-slate-400">
+                <Clock className="h-4 w-4" />
+              </div>
+
+              {/* Colunas para cada dia */}
+              <div
+                className="flex-1 grid"
+                style={{ gridTemplateColumns: `repeat(${weekDays.length}, minmax(0, 1fr))` }}
+              >
+                {weekDays.map((day) => (
+                  <div
+                    key={day.dateStr}
+                    onClick={() => setSelectedDate(day.dateStr)}
+                    className={`py-3 px-2 sm:px-3 border-r border-slate-200 dark:border-slate-800 last:border-r-0 cursor-pointer transition-colors ${
+                      day.isToday
+                        ? 'border-t-2 border-t-indigo-600 dark:border-t-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/30'
+                        : 'border-t-2 border-t-transparent hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <div className="flex flex-col items-start">
+                      <span
+                        className={`text-2xl sm:text-3xl font-extrabold tracking-tight leading-none ${
+                          day.isToday
+                            ? 'text-indigo-600 dark:text-indigo-400'
+                            : 'text-slate-800 dark:text-slate-200'
+                        }`}
+                      >
+                        {day.dayNumber}
+                      </span>
+                      <span
+                        className={`text-xs mt-1 font-semibold truncate ${
+                          day.isToday
+                            ? 'text-indigo-600 dark:text-indigo-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        {day.weekdayName}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* CORPO DA GRADE DE HORÁRIOS (ROLA VERTICALMENTE) */}
+            <div
+              ref={timelineContainerRef}
+              className="relative max-h-[640px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700"
+            >
+              <div className="flex relative" style={{ height: `${HOURS_COUNT * HOUR_HEIGHT_PX}px` }}>
+                {/* Coluna das Horas no Eixo Esquerdo (07, 08, 09, ..., 22) */}
+                <div className="w-14 sm:w-16 shrink-0 border-r border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-950/40 select-none">
+                  {Array.from({ length: HOURS_COUNT }).map((_, idx) => {
+                    const hour = GRID_START_HOUR + idx
+                    const hourStr = String(hour).padStart(2, '0')
+                    return (
+                      <div
+                        key={hour}
+                        className="relative border-t border-slate-200 dark:border-slate-800 text-right pr-2 pt-1"
+                        style={{ height: `${HOUR_HEIGHT_PX}px` }}
+                      >
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
+                          {hourStr}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Colunas dos Dias com Slots e Agendamentos */}
+                <div
+                  className="flex-1 grid relative"
+                  style={{ gridTemplateColumns: `repeat(${weekDays.length}, minmax(0, 1fr))` }}
+                >
+                  {/* Linha Vermelha / Laranja do Horário Atual (Across all columns) */}
+                  {currentTimeTopPx !== null && (
+                    <div
+                      className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+                      style={{ top: `${currentTimeTopPx}px` }}
+                    >
+                      <div className="w-full border-t border-dashed border-amber-500 dark:border-amber-400 opacity-80" />
+                    </div>
+                  )}
+
+                  {weekDays.map((day) => {
+                    const dayAppointments = appointmentsByDate.get(day.dateStr) || []
+                    return (
+                      <div
+                        key={day.dateStr}
+                        className="relative border-r border-slate-200 dark:border-slate-800 last:border-r-0"
+                      >
+                        {/* Linha sólida destacada no dia atual com marcador */}
+                        {day.isToday && currentTimeTopPx !== null && (
+                          <div
+                            className="absolute left-0 right-0 z-20 pointer-events-none"
+                            style={{ top: `${currentTimeTopPx}px` }}
+                          >
+                            <div className="relative border-t-2 border-amber-500 dark:border-amber-400">
+                              <span className="absolute -left-1 -top-1.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900" />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Grade Horária do Dia (cada hora tem linha sólida no topo e tracejada no meio) */}
+                        {Array.from({ length: HOURS_COUNT }).map((_, idx) => {
+                          const hour = GRID_START_HOUR + idx
+                          const hourStr = String(hour).padStart(2, '0')
+                          return (
+                            <div
+                              key={hour}
+                              className="relative border-t border-slate-200 dark:border-slate-800"
+                              style={{ height: `${HOUR_HEIGHT_PX}px` }}
+                            >
+                              {/* Linha tracejada dos 30 minutos */}
+                              <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-100 dark:border-slate-800/70 pointer-events-none" />
+
+                              {/* Slot 1: :00 às :30 */}
+                              <div
+                                onClick={() => handleSlotClick(day.dateStr, `${hourStr}:00`)}
+                                className="absolute inset-x-0 top-0 h-1/2 cursor-pointer transition-colors hover:ring-2 hover:ring-blue-500/80 dark:hover:ring-white/80 hover:bg-blue-50/20 dark:hover:bg-slate-800/40 rounded-xs z-0"
+                                title={`Agendar para ${day.dayNumber}/${monthDate.getMonth() + 1} às ${hourStr}:00`}
+                              />
+
+                              {/* Slot 2: :30 às :00 */}
+                              <div
+                                onClick={() => handleSlotClick(day.dateStr, `${hourStr}:30`)}
+                                className="absolute inset-x-0 bottom-0 h-1/2 cursor-pointer transition-colors hover:ring-2 hover:ring-blue-500/80 dark:hover:ring-white/80 hover:bg-blue-50/20 dark:hover:bg-slate-800/40 rounded-xs z-0"
+                                title={`Agendar para ${day.dayNumber}/${monthDate.getMonth() + 1} às ${hourStr}:30`}
+                              />
+                            </div>
+                          )
+                        })}
+
+                        {/* Agendamentos do Dia Renderizados na Posição do Horário */}
+                        <div className="absolute inset-0 pointer-events-none p-1">
+                          {dayAppointments.map((appt) => {
+                            const theme = getStatusTheme(appt.status)
+
+                            // Cálculo da posição vertical baseado na hora de início
+                            let topPx = 0
+                            let heightPx = 54
+                            if (appt.startTime) {
+                              const [hPart, mPart] = appt.startTime.split(':').map((v) => parseInt(v, 10))
+                              const validHour = isNaN(hPart) ? 9 : hPart
+                              const validMin = isNaN(mPart) ? 0 : mPart
+                              const minutesFromStart = (validHour - GRID_START_HOUR) * 60 + validMin
+                              topPx = Math.max(0, (minutesFromStart / 60) * HOUR_HEIGHT_PX)
+                            }
+
+                            return (
+                              <div
+                                key={appt.id}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedAppointment(appt)
+                                  setIsDetailsModalOpen(true)
+                                }}
+                                style={{ top: `${topPx}px`, minHeight: `${heightPx}px` }}
+                                className={`absolute inset-x-1 z-10 pointer-events-auto p-2 rounded-lg text-xs shadow-xs cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md flex flex-col justify-between ${theme.pill}`}
+                                title={`${appt.startTime ? `${appt.startTime} - ` : ''}${appt.title}${appt.customerName ? ` (${appt.customerName})` : ''}`}
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                                    <span className="font-mono font-bold text-[11px] shrink-0 opacity-90">
+                                      {appt.startTime || '—'}
+                                    </span>
+                                    <span className={`h-2 w-2 rounded-full shrink-0 ${theme.dot}`} />
+                                  </div>
+                                  <h4 className="font-bold text-xs truncate leading-tight">
+                                    {formatAppointmentTitle(appt.title)}
+                                  </h4>
+                                </div>
+                                {appt.customerName && (
+                                  <p className="text-[10px] opacity-80 truncate mt-1">
+                                    {appt.customerName}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      ) : viewMode === 'month' ? (
+        /* VISUALIZAÇÃO POR MÊS (GRADE DE 42 DIAS) */
         isLoading ? (
           <div className="flex items-center justify-center p-16 text-sm text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
             <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mr-2" />
@@ -404,10 +734,14 @@ export function AgendaPage() {
                 return (
                   <div
                     key={day.dateStr}
-                    onClick={() => setSelectedDate(day.dateStr)}
+                    onClick={() => {
+                      setSelectedDate(day.dateStr)
+                      setViewMode('days')
+                    }}
                     onDoubleClick={() => {
                       setSelectedDate(day.dateStr)
                       setEditingAppointment(null)
+                      setFormInitialTime('09:00')
                       setIsFormModalOpen(true)
                     }}
                     className={`group relative min-h-[115px] sm:min-h-[135px] p-1.5 sm:p-2 transition-colors flex flex-col justify-between ${
@@ -443,6 +777,7 @@ export function AgendaPage() {
                           e.stopPropagation()
                           setSelectedDate(day.dateStr)
                           setEditingAppointment(null)
+                          setFormInitialTime('09:00')
                           setIsFormModalOpen(true)
                         }}
                         className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-900/40 text-slate-400 hover:text-blue-600 transition"
@@ -452,7 +787,7 @@ export function AgendaPage() {
                       </button>
                     </div>
 
-                    {/* Lista de compromissos no dia (Cards estilo Teams) */}
+                    {/* Lista de compromissos no dia */}
                     <div className="flex-1 space-y-1 overflow-y-auto max-h-[85px] sm:max-h-[95px] scrollbar-none">
                       {dayAppointments.slice(0, 3).map((appt) => {
                         const theme = getStatusTheme(appt.status)
@@ -477,11 +812,6 @@ export function AgendaPage() {
                                 {appt.title}
                               </span>
                             </div>
-                            {appt.customerName && (
-                              <span className="text-[9px] opacity-75 truncate max-w-[60px] hidden md:inline">
-                                {appt.customerName.split(' ')[0]}
-                              </span>
-                            )}
                           </div>
                         )
                       })}
@@ -492,7 +822,7 @@ export function AgendaPage() {
                           onClick={(e) => {
                             e.stopPropagation()
                             setSelectedDate(day.dateStr)
-                            setViewMode('day')
+                            setViewMode('days')
                           }}
                           className="w-full text-left px-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
                         >
@@ -507,7 +837,7 @@ export function AgendaPage() {
           </div>
         )
       ) : (
-        /* VISUALIZAÇÃO POR DIA OU PRÓXIMOS (CARDS DETALHADOS) */
+        /* VISUALIZAÇÃO EM LISTA / PRÓXIMOS */
         <div className="space-y-3">
           {isLoading ? (
             <div className="flex items-center justify-center p-12 text-sm text-slate-500">
@@ -528,6 +858,7 @@ export function AgendaPage() {
                 type="button"
                 onClick={() => {
                   setEditingAppointment(null)
+                  setFormInitialTime('09:00')
                   setIsFormModalOpen(true)
                 }}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs font-bold text-white shadow-xs transition"
@@ -635,7 +966,7 @@ export function AgendaPage() {
         </div>
       )}
 
-      {/* Appointment Details Modal */}
+      {/* Modal de Detalhes do Agendamento */}
       {selectedAppointment && (
         <AppointmentDetailsModal
           open={isDetailsModalOpen}
@@ -651,16 +982,18 @@ export function AgendaPage() {
           onEdit={(appt) => {
             setIsDetailsModalOpen(false)
             setEditingAppointment(appt)
+            setFormInitialTime(appt.startTime || '09:00')
             setIsFormModalOpen(true)
           }}
         />
       )}
 
-      {/* Appointment Form Modal (New / Edit) */}
+      {/* Modal de Criação / Edição de Agendamento */}
       <AppointmentFormModal
         open={isFormModalOpen}
         appointment={editingAppointment}
         initialDate={selectedDate}
+        initialTime={formInitialTime}
         organizationId={currentOrganization?.id || ''}
         userId={user?.id}
         operatorName={operatorName}
