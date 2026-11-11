@@ -34,7 +34,6 @@ import {
   Search,
   Send,
   ShieldCheck,
-  TrendingUp,
   Truck,
   UserCheck,
   Users,
@@ -1285,22 +1284,16 @@ export function ReportsPage() {
           organizationName={currentOrganization?.name}
           organizationLogoUrl={currentOrganization?.logoUrl}
           reportTitle="Relatório de Ordens de Serviço & Orçamentos"
-          moduleTitle={
-            qoStatus === 'queue'
-              ? 'O.S - Fila de Atendimento'
-              : qoStatus === 'maintenance_pending'
-                ? 'O.S - Manutenção Pendente'
-                : qoStatus === 'ready'
-                  ? 'O.S - Pronto'
-                  : qoStatus === 'closed'
-                    ? 'O.S - Encerrada'
-                    : qoTab === 'orders'
-                      ? 'Ordens de Serviço (O.S)'
-                      : qoTab === 'quotes'
-                        ? 'Orçamentos Comerciais'
-                        : 'Visão Consolidada (O.S & Orçamentos)'
+          reportType={
+            qoTab === 'orders'
+              ? 'Ordens de Serviço (O.S)'
+              : qoTab === 'quotes'
+                ? 'Orçamentos & Propostas'
+                : 'Ordens de Serviço & Orçamentos'
           }
           totalRecords={filteredQoRecords.length}
+          totalAmountLabel="Valor Consolidado"
+          totalAmountValue={formatCurrency(qoMetrics.grandTotal.toFixed(2))}
           emissionWeekday={emissionWeekday}
           emissionDate={emissionDate}
           emissionTime={emissionTime}
@@ -1471,62 +1464,96 @@ export function ReportsPage() {
               )}
             </div>
 
-            {/* Linha Secundária de Filtros: Sub-aba (Todos / O.S / Orçamentos), Status e Busca */}
+            {/* Linha de Seleção Principal: Ordens de Serviço / Orçamentos / Todas, Status e Busca */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
-              <div className="flex items-center gap-2">
+              {/* Botões Principais de Seleção: Todas, O.S e Orçamentos */}
+              <div className="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
                 <button
                   type="button"
-                  onClick={() => setQoTab('all')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  onClick={() => {
+                    setQoTab('all')
+                    setQoStatus('all')
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     qoTab === 'all'
-                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  Todos ({allUnifiedRecords.length})
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Todas as Operações ({allUnifiedRecords.length})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQoTab('orders')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  onClick={() => {
+                    setQoTab('orders')
+                    setQoStatus('all')
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     qoTab === 'orders'
-                      ? 'bg-amber-600 text-white shadow-xs'
+                      ? 'bg-amber-500 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
+                  <Wrench className="h-3.5 w-3.5" />
                   Ordens de Serviço ({dataset.serviceOrders.length})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQoTab('quotes')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  onClick={() => {
+                    setQoTab('quotes')
+                    setQoStatus('all')
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     qoTab === 'quotes'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
+                  <FileText className="h-3.5 w-3.5" />
                   Orçamentos ({dataset.quotes.length})
                 </button>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* Filtro de Status */}
+                {/* Filtro de Status contextualizado */}
                 <select
                   value={qoStatus}
                   onChange={(e) => setQoStatus(e.target.value)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none"
                 >
-                  <option value="all">Fila de Todas (O.S &amp; Orçamentos)</option>
-                  <option value="queue">Fila de Atendimento (O.S)</option>
-                  <option value="maintenance_pending">Manutenção Pendente (O.S)</option>
-                  <option value="in_maintenance">Em Manutenção (O.S)</option>
-                  <option value="pending">Pendente (O.S)</option>
-                  <option value="ready">Pronto (O.S)</option>
-                  <option value="closed">O.S. Encerrada</option>
-                  <option value="draft">Rascunho (Orçamento)</option>
-                  <option value="approved">Aprovado (Orçamento)</option>
-                  <option value="rejected">Rejeitado (Orçamento)</option>
-                  <option value="expired">Expirado (Orçamento)</option>
+                  {qoTab === 'orders' ? (
+                    <>
+                      <option value="all">Todas as O.S ({queueCounts.all})</option>
+                      <option value="queue">Fila de Atendimento ({queueCounts.queue})</option>
+                      <option value="maintenance_pending">Manutenção Pendente ({queueCounts.maintenance_pending})</option>
+                      <option value="in_maintenance">Em Manutenção</option>
+                      <option value="pending">Pendente</option>
+                      <option value="ready">Pronto p/ Retirada ({queueCounts.ready})</option>
+                      <option value="closed">O.S. Encerrada ({queueCounts.closed})</option>
+                    </>
+                  ) : qoTab === 'quotes' ? (
+                    <>
+                      <option value="all">Todos os Orçamentos ({quoteStatusCounts.total})</option>
+                      <option value="draft">Em Rascunho ({quoteStatusCounts.draft})</option>
+                      <option value="approved">Aprovados ({quoteStatusCounts.approved})</option>
+                      <option value="sent">Enviados ao Cliente ({quoteStatusCounts.sent})</option>
+                      <option value="rejected">Recusados ({quoteStatusCounts.rejected})</option>
+                      <option value="expired">Expirados</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="all">Todas as Operações ({allUnifiedRecords.length})</option>
+                      <option value="queue">Fila de Atendimento (O.S)</option>
+                      <option value="maintenance_pending">Manutenção Pendente (O.S)</option>
+                      <option value="ready">Pronto p/ Retirada (O.S)</option>
+                      <option value="closed">O.S. Encerrada</option>
+                      <option value="draft">Rascunho (Orçamento)</option>
+                      <option value="approved">Aprovado (Orçamento)</option>
+                      <option value="sent">Enviado ao Cliente (Orçamento)</option>
+                      <option value="rejected">Recusado (Orçamento)</option>
+                    </>
+                  )}
                 </select>
 
                 {/* Campo de Busca */}
@@ -1541,80 +1568,6 @@ export function ReportsPage() {
                   />
                 </div>
               </div>
-            </div>
-
-            {/* LINHA DE FILAS RÁPIDAS DE O.S */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-gray-100 dark:border-slate-800/80">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
-                Fila de O.S:
-              </span>
-              <button
-                type="button"
-                onClick={() => setQoStatus('all')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  qoStatus === 'all'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                Fila de Todas ({queueCounts.all})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setQoStatus('queue')
-                  if (qoTab === 'quotes') setQoTab('orders')
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  qoStatus === 'queue'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
-                }`}
-              >
-                Fila de Atendimento ({queueCounts.queue})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setQoStatus('maintenance_pending')
-                  if (qoTab === 'quotes') setQoTab('orders')
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  qoStatus === 'maintenance_pending'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60'
-                }`}
-              >
-                Manutenção Pendente ({queueCounts.maintenance_pending})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setQoStatus('ready')
-                  if (qoTab === 'quotes') setQoTab('orders')
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  qoStatus === 'ready'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
-                }`}
-              >
-                Pronto ({queueCounts.ready})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setQoStatus('closed')
-                  if (qoTab === 'quotes') setQoTab('orders')
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  qoStatus === 'closed'
-                    ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                O.S. Encerrada ({queueCounts.closed})
-              </button>
             </div>
           </CardContent>
         </Card>
@@ -1966,18 +1919,17 @@ export function ReportsPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs print:text-[11px]">
+              <div className="w-full">
+                <table className="w-full text-left text-xs print:text-[10px]">
                   <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="py-2.5 px-3">Número</th>
                       <th className="py-2.5 px-3">Tipo</th>
                       <th className="py-2.5 px-3">Data</th>
-                      <th className="py-2.5 px-3">Cliente</th>
-                      <th className="py-2.5 px-3">Telefone</th>
+                      <th className="py-2.5 px-3">Cliente / Contato</th>
                       <th className="py-2.5 px-3">Equipamento / Descrição</th>
                       <th className="py-2.5 px-3">Responsável</th>
-                      <th className="py-2.5 px-3 text-center">Status / Fila</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
                       <th className="py-2.5 px-3 text-right">Valor Total</th>
                     </tr>
                   </thead>
@@ -1996,16 +1948,11 @@ export function ReportsPage() {
                         <td className="py-2 px-3 whitespace-nowrap text-slate-500">
                           {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '—'}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">
-                          <span>{item.customerName}</span>
-                          {item.customerDocument && (
-                            <span className="block text-[10px] text-slate-400 font-mono">
-                              {item.customerDocument}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          {item.customerPhone ? formatPhoneNumber(item.customerPhone) : '—'}
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-slate-900 dark:text-white block">{item.customerName}</span>
+                          <span className="text-[10px] text-slate-500 block">
+                            {[item.customerPhone ? formatPhoneNumber(item.customerPhone) : null, item.customerDocument].filter(Boolean).join(' • ')}
+                          </span>
                         </td>
                         <td className="py-2 px-3 text-slate-700 dark:text-slate-300 max-w-xs truncate">
                           {item.description}
@@ -2028,7 +1975,7 @@ export function ReportsPage() {
                   </tbody>
                   <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                     <tr>
-                      <td colSpan={8} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                      <td colSpan={7} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
                         Total Geral ({filteredQoRecords.length} registros)
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
@@ -2064,15 +2011,15 @@ export function ReportsPage() {
           organizationName={currentOrganization?.name}
           organizationLogoUrl={currentOrganization?.logoUrl}
           reportTitle="Relatório Analítico de Estoque"
-          moduleTitle={`Balanço de Estoque • ${inventoryStatusLabel}`}
+          reportType="Produtos em Estoque"
           totalRecords={filteredInventory.length}
-          totalAmountLabel="Valor Total de Venda"
-          totalAmountValue={formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+          totalAmountLabel="Valor Total a Custo"
+          totalAmountValue={formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
           emissionWeekday={emissionWeekday}
           emissionDate={emissionDate}
           emissionTime={emissionTime}
           periodLabel="Posição Atual do Estoque"
-          periodRange={invCategory !== 'all' ? `Categoria: ${invCategory}` : 'Todas as Categorias'}
+          periodRange={invCategory !== 'all' ? `${inventoryStatusLabel} • Categoria: ${invCategory}` : inventoryStatusLabel}
         />
 
         {/* BARRA DE AÇÃO COM VOLTAR, EXCEL, XML E IMPRESSÃO */}
@@ -2080,7 +2027,7 @@ export function ReportsPage() {
           title="Relatório de Estoque"
           badgeText="Inventário & Balanço Físico"
           badgeColorClass="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
-          description="Auditoria analítica e controle de estoque com filtros de reposição mínima, itens zerados/esgotados, valorização a custo e venda, e Curva ABC."
+          description="Auditoria analítica e controle de estoque com filtros de reposição mínima, itens zerados/esgotados, fornecedores e valorização a custo."
           onBack={() => navigateToView('home')}
           onExportExcel={handleExportInventoryExcel}
           onExportXml={handleExportInventoryXml}
@@ -2269,26 +2216,26 @@ export function ReportsPage() {
                 </CardContent>
               </Card>
 
-              {/* 5. Valor a Venda */}
+              {/* 5. Total de Unidades Físicas */}
               <Card className="transition-all rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Valor a Venda
+                      Total Unidades Físicas
                     </p>
-                    <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 font-mono">
-                      {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
+                    <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                      {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} un.
                     </p>
                   </div>
                   <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-                    <TrendingUp className="h-5 w-5" />
+                    <Boxes className="h-5 w-5" />
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Linha 2: Dropdowns de Categoria, Fornecedor, Curva ABC, Situação, Ordenação e Busca */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
+            {/* Linha 2: Dropdowns de Categoria, Fornecedor, Situação, Ordenação e Busca */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
               {/* Filtro de Categoria */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
@@ -2327,23 +2274,6 @@ export function ReportsPage() {
                 </select>
               </div>
 
-              {/* Filtro Curva ABC */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Curva ABC
-                </label>
-                <select
-                  value={invAbcClass}
-                  onChange={(e) => setInvAbcClass(e.target.value as 'all' | 'A' | 'B' | 'C')}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                >
-                  <option value="all">Todas as Classes</option>
-                  <option value="A">Classe A (80% do Valor)</option>
-                  <option value="B">Classe B (15% do Valor)</option>
-                  <option value="C">Classe C (5% do Valor)</option>
-                </select>
-              </div>
-
               {/* Filtro Situação Cadastral */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
@@ -2371,12 +2301,10 @@ export function ReportsPage() {
                   onChange={(e) => setInvSortBy(e.target.value as 'value_desc' | 'cost_desc' | 'qty_asc' | 'qty_desc' | 'name_asc' | 'margin_desc')}
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 >
-                  <option value="value_desc">Maior Valor Venda</option>
                   <option value="cost_desc">Maior Valor Custo</option>
                   <option value="qty_asc">Menor Qtd. (Reposição)</option>
                   <option value="qty_desc">Maior Qtd.</option>
                   <option value="name_asc">Nome (A - Z)</option>
-                  <option value="margin_desc">Maior Margem (%)</option>
                 </select>
               </div>
 
@@ -2418,12 +2346,13 @@ export function ReportsPage() {
                 <table className="w-full text-left text-xs print:text-[10px]">
                   <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="py-2.5 px-3">Produto & Identificação</th>
+                      <th className="py-2.5 px-3">Produto / Identificação</th>
+                      <th className="py-2.5 px-3">Categoria</th>
+                      <th className="py-2.5 px-3">Fornecedor / Localização</th>
                       <th className="py-2.5 px-3 text-center">Status</th>
-                      <th className="py-2.5 px-3 text-right">Estoque / Mín.</th>
-                      <th className="py-2.5 px-3 text-right">Preço Unit. (Venda / Custo)</th>
-                      <th className="py-2.5 px-3 text-right">Total (Venda / Custo)</th>
-                      <th className="py-2.5 px-3 text-center">Curva ABC</th>
+                      <th className="py-2.5 px-3 text-right">Qtd. / Mín.</th>
+                      <th className="py-2.5 px-3 text-right">Custo Unit.</th>
+                      <th className="py-2.5 px-3 text-right">Total Custo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -2437,12 +2366,21 @@ export function ReportsPage() {
                             {item.name}
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                            SKU: {item.sku || item.barcode || '—'}
-                            {item.category && ` • ${item.category}`}
-                            {(item.brand || item.model || item.location) && (
-                              ` • ${[item.brand, item.model, item.location ? `Loc: ${item.location}` : null].filter(Boolean).join(' • ')}`
-                            )}
+                            SKU: {item.sku || '—'} {item.barcode ? `• Barras: ${item.barcode}` : ''}
                           </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {item.category || 'Sem Categoria'}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                          <span className="block font-medium text-slate-800 dark:text-slate-200">
+                            {item.supplierName || '—'}
+                          </span>
+                          {item.location && (
+                            <span className="block text-[10px] text-slate-400">
+                              Loc: {item.location}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
                           <span
@@ -2459,56 +2397,27 @@ export function ReportsPage() {
                             Mín: {item.minQty}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          <span className="font-mono font-semibold text-slate-900 dark:text-white block">
-                            {formatCurrency(item.price.toFixed(2))}
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-500 block">
-                            Custo: {formatCurrency(item.cost.toFixed(2))}
-                          </span>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
+                          {formatCurrency(item.cost.toFixed(2))}
                         </td>
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 block">
-                            {formatCurrency(item.totalSaleValue.toFixed(2))}
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-500 block">
-                            Custo: {formatCurrency(item.totalCostValue.toFixed(2))}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <span
-                            className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-black ${
-                              item.abcClass === 'A'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                : item.abcClass === 'B'
-                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                            }`}
-                          >
-                            {item.abcClass}
-                          </span>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono font-bold text-slate-900 dark:text-white">
+                          {formatCurrency(item.totalCostValue.toFixed(2))}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                     <tr>
-                      <td colSpan={2} className="py-3 px-3 uppercase text-slate-700 dark:text-slate-300">
+                      <td colSpan={4} className="py-3 px-3 uppercase text-slate-700 dark:text-slate-300">
                         Totais Consolidados ({filteredInventory.length} itens)
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} un.
                       </td>
                       <td className="py-3 px-3 text-right text-slate-400">—</td>
-                      <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">
-                        <span className="text-emerald-700 dark:text-emerald-300 block">
-                          Venda: {formatCurrency(inventoryMetrics.totalSaleValue.toFixed(2))}
-                        </span>
-                        <span className="text-[10px] text-slate-600 dark:text-slate-400 block font-normal">
-                          Custo: {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
-                        </span>
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
                       </td>
-                      <td className="py-3 px-3 text-center text-slate-400">—</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -2538,7 +2447,7 @@ export function ReportsPage() {
         organizationName={currentOrganization?.name}
         organizationLogoUrl={currentOrganization?.logoUrl}
         reportTitle="Relatório Geral de Cadastros"
-        moduleTitle={activeTabTitle}
+        reportType={`Cadastro • ${activeTabTitle}`}
         totalRecords={activeTabRecordsCount}
         emissionWeekday={emissionWeekday}
         emissionDate={emissionDate}
