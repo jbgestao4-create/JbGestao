@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, Suspense, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -7,7 +7,7 @@ import { Clock, Lock } from 'lucide-react'
 import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
 import { useTheme } from '@shared/context/ThemeContext'
 import { AppLayout } from '@app/layouts/AppLayout'
-import { Loader2 } from 'lucide-react'
+import { BrandLoadingScreen } from '@shared/components/BrandLoadingScreen'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { useScreenTimeTracker } from '@shared/hooks/useScreenTimeTracker'
@@ -93,12 +93,7 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
   }, [user, setInsideSystem])
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
-        <p className="text-sm text-gray-500">Carregando autenticação...</p>
-      </div>
-    )
+    return <BrandLoadingScreen message="Carregando autenticação..." />
   }
 
   if (!user) {
@@ -211,12 +206,18 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
 
   if (hideLayout) {
     return (
-      <>
+      <Suspense fallback={<BrandLoadingScreen message="Carregando página..." />}>
         {children}
         <FeedbackWidget />
-      </>
+      </Suspense>
     )
   }
 
-  return <AppLayout>{children}</AppLayout>
+  return (
+    <AppLayout>
+      <Suspense fallback={<BrandLoadingScreen message="Carregando página..." fullScreen={false} />}>
+        {children}
+      </Suspense>
+    </AppLayout>
+  )
 }

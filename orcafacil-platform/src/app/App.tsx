@@ -6,6 +6,7 @@ import { OrganizationProvider } from '@modules/organizations/context/Organizatio
 import { ModuleAccessProvider } from '@modules/access-control/context/ModuleAccessContext'
 import { ThemeProvider } from '@shared/context/ThemeContext'
 import { ThemeColorProvider } from '@shared/context/ThemeColorContext'
+import { BrandLoadingScreen } from '@shared/components/BrandLoadingScreen'
 
 export function App() {
   return (
@@ -14,16 +15,7 @@ export function App() {
         <ThemeColorProvider>
           <OrganizationProvider>
             <ModuleAccessProvider>
-              <Suspense
-                fallback={
-                  <div
-                    className="flex min-h-screen items-center justify-center text-sm text-gray-500"
-                    role="status"
-                  >
-                    Carregando página...
-                  </div>
-                }
-              >
+              <Suspense fallback={<BrandLoadingScreen message="Carregando aplicação..." />}>
                 <RouterProvider router={router} />
               </Suspense>
             </ModuleAccessProvider>
