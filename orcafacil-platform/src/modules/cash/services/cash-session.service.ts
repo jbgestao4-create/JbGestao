@@ -652,7 +652,26 @@ export const cashSessionService = {
 
       if (error || !data) {
         logger.error('Erro ao abrir sessão de caixa no Supabase', error)
-        return { success: false, error: 'Não foi possível abrir a sessão de caixa no Supabase.' }
+        if ((error as any)?.code === '23505') {
+          if (sessionType === 'cash_management') {
+            const fallbackOpen = await this.getOpenCashManagementSession(organizationId)
+            if (fallbackOpen.success && fallbackOpen.data) {
+              return { success: true, data: fallbackOpen.data }
+            }
+            return {
+              success: false,
+              error: 'Já existe um Caixa Geral aberto para esta empresa.',
+            }
+          }
+          return {
+            success: false,
+            error: `O caixa "${registerId}" já consta aberto nesta empresa.`,
+          }
+        }
+        return {
+          success: false,
+          error: error?.message || 'Não foi possível abrir a sessão de caixa no Supabase.',
+        }
       }
 
       return { success: true, data: mapSessionRow(data as CashSessionRow) }
