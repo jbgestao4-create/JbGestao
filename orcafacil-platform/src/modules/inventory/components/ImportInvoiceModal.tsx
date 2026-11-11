@@ -114,7 +114,7 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
             const hasSale = existingSalePrice > 0
             return {
               ...item,
-              code: matched.sku || String(baseCode),
+              code: matched.sku || item.invoiceProductCode || String(baseCode),
               existingItemId: matched.id,
               existingQuantity: Number(matched.quantityOnHand) || 0,
               salePrice: hasSale ? existingSalePrice : item.salePrice,
@@ -122,8 +122,10 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
               pendingFields: hasSale ? [] : ['Preço de venda'],
             }
           }
-          const assignedCode = String(nextNewCode)
-          nextNewCode++
+          const assignedCode = item.invoiceProductCode?.trim() || String(nextNewCode)
+          if (!item.invoiceProductCode?.trim()) {
+            nextNewCode++
+          }
           return {
             ...item,
             code: assignedCode,

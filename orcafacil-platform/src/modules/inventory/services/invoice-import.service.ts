@@ -17,6 +17,38 @@ export interface InvoiceImportResult {
   createdItemIds: string[]
 }
 
+export function areCodesMatching(
+  codeA: string | null | undefined,
+  codeB: string | null | undefined,
+): boolean {
+  if (!codeA || !codeB) return false
+  const cleanA = codeA.trim().toLowerCase()
+  const cleanB = codeB.trim().toLowerCase()
+  if (!cleanA || !cleanB) return false
+
+  // Ignore invalid / placeholder barcodes
+  if (
+    cleanA === 'sem gtin' ||
+    cleanA === 'semgtin' ||
+    cleanA === '0' ||
+    cleanB === 'sem gtin' ||
+    cleanB === 'semgtin' ||
+    cleanB === '0'
+  ) {
+    return false
+  }
+
+  // Exact match
+  if (cleanA === cleanB) return true
+
+  // Numeric comparison without leading zeros (e.g. 000000000016005166 vs 16005166)
+  const noZerosA = cleanA.replace(/^0+/, '')
+  const noZerosB = cleanB.replace(/^0+/, '')
+  if (noZerosA && noZerosB && noZerosA === noZerosB) return true
+
+  return false
+}
+
 export function findMatchingInventoryItem(
   item: Pick<
     ParsedInvoiceItem,
@@ -29,50 +61,40 @@ export function findMatchingInventoryItem(
     if (byId) return byId
   }
 
-  const normInvoiceCode = item.invoiceProductCode?.trim().toLowerCase() || ''
-  if (normInvoiceCode) {
-    const byInvoiceCode = existingItems.find((e) => {
-      const suppCode = e.supplierProductCode?.trim().toLowerCase() || ''
-      const fiscCode = e.fiscalProductCode?.trim().toLowerCase() || ''
-      const attrCode = e.attributes?.nfe_product_code?.trim().toLowerCase() || ''
-      const skuCode = e.sku?.trim().toLowerCase() || ''
-      const hasSupplierMatch = e.suppliers?.some(
-        (s) => s.supplierProductCode?.trim().toLowerCase() === normInvoiceCode,
-      )
-      return (
-        suppCode === normInvoiceCode ||
-        fiscCode === normInvoiceCode ||
-        attrCode === normInvoiceCode ||
-        skuCode === normInvoiceCode ||
-        Boolean(hasSupplierMatch)
+  // Candidate codes from invoice
+  const candidateCodes: string[] = [
+    item.invoiceProductCode,
+    item.barcode,
+    item.code && item.code.length > 2 && !/^\d{1,2}$/.test(item.code) ? item.code : undefined,
+  ].filter((c): c is string => Boolean(c && c.trim()))
+
+  if (candidateCodes.length > 0) {
+    const byCode = existingItems.find((e) => {
+      const existingCodes: (string | null | undefined)[] = [
+        e.sku,
+        e.barcode,
+        e.gtin,
+        e.supplierProductCode,
+        e.fiscalProductCode,
+        e.manufacturerReference,
+        e.attributes?.nfe_product_code,
+        ...(e.suppliers || []).map((s) => s.supplierProductCode),
+      ]
+
+      return candidateCodes.some((cand) =>
+        existingCodes.some((exist) => areCodesMatching(cand, exist)),
       )
     })
-    if (byInvoiceCode) return byInvoiceCode
+
+    if (byCode) return byCode
   }
 
-  const normBarcode = item.barcode?.trim() || ''
-  if (normBarcode && normBarcode.toUpperCase() !== 'SEM GTIN') {
-    const byBarcode = existingItems.find(
-      (e) => e.barcode?.trim() === normBarcode || e.gtin?.trim() === normBarcode,
-    )
-    if (byBarcode) return byBarcode
-  }
-
-  const normCode = item.code?.trim().toLowerCase() || ''
+  // Fallback: match by exact normalized name if >= 3 characters
   const normName = item.name?.trim().toLowerCase() || ''
-
-  if (normCode) {
-    const byCodeAndName = existingItems.find(
-      (e) =>
-        e.sku?.trim().toLowerCase() === normCode &&
-        normName.length >= 2 &&
-        e.name?.trim().toLowerCase() === normName,
+  if (normName.length >= 3) {
+    const byName = existingItems.find(
+      (e) => e.name?.trim().toLowerCase() === normName,
     )
-    if (byCodeAndName) return byCodeAndName
-  }
-
-  if (normName.length >= 2) {
-    const byName = existingItems.find((e) => e.name?.trim().toLowerCase() === normName)
     if (byName) return byName
   }
 
@@ -270,6 +292,7 @@ export const invoiceImportService = {
           awaitingCount++
         }
 
+        const itemCode = (item.invoiceProductCode || item.code || '').trim()
         const itemParams = {
           supplierId,
           supplierIds: [supplierId],
@@ -278,7 +301,7 @@ export const invoiceImportService = {
           quantityOnHand: String(item.quantity || '0'),
           minimumQuantity: '0',
           unitPrice: hasSalePrice ? String(item.salePrice) : '0.00',
-          sku: '',
+          sku: itemCode,
           barcode: item.barcode || '',
           description: `Importado de NF-e nº ${parsedData.invoiceNumber} (Série ${parsedData.series})`,
           category: item.category || '',
@@ -286,7 +309,7 @@ export const invoiceImportService = {
           brand: '',
           manufacturer: '',
           model: '',
-          manufacturerReference: '',
+          manufacturerReference: item.invoiceProductCode || '',
           purchasePrice: String(item.unitCost || '0.00'),
           extraPurchaseCost: '0.00',
           supplierProductCode: item.invoiceProductCode || '',

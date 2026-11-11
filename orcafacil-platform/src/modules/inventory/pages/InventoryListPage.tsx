@@ -15,6 +15,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileUp,
+  Layers,
+  Loader2,
   Package,
   Pencil,
   Search,
@@ -48,6 +50,7 @@ export function InventoryListPage() {
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isConsolidating, setIsConsolidating] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState<{
     text: string
     type: 'success' | 'error'
@@ -97,6 +100,40 @@ export function InventoryListPage() {
         text: result.error,
         type: 'error',
       })
+    }
+  }
+
+  const handleConsolidateDuplicates = async () => {
+    if (!currentOrganization) return
+    setIsConsolidating(true)
+    try {
+      const result = await inventoryService.consolidateDuplicates(currentOrganization.id)
+      if (result.success) {
+        const msg =
+          result.data.itemsMerged > 0
+            ? `${result.data.itemsMerged} produto(s) duplicado(s) foram unificados em ${result.data.groupsMerged} código(s) com sucesso.`
+            : 'Nenhum produto duplicado foi encontrado no estoque.'
+        setFeedbackMessage({
+          text: msg,
+          type: 'success',
+        })
+        const refreshed = await inventoryService.list(currentOrganization.id)
+        if (refreshed.success) {
+          setItems(refreshed.data)
+        }
+      } else {
+        setFeedbackMessage({
+          text: result.error || 'Erro ao unificar produtos duplicados.',
+          type: 'error',
+        })
+      }
+    } catch (err: any) {
+      setFeedbackMessage({
+        text: err?.message || 'Erro inesperado ao unificar produtos.',
+        type: 'error',
+      })
+    } finally {
+      setIsConsolidating(false)
     }
   }
 
@@ -151,18 +188,39 @@ export function InventoryListPage() {
           </p>
         </div>
 
-        {canCreateInventoryProduct && (
-          <button
-            type="button"
-            onClick={() => {
-              setIsImportModalOpen(true)
-            }}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
-          >
-            <FileUp className="h-4 w-4" aria-hidden="true" />
-            Importar Nota Fiscal
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canEditInventoryProduct && (
+            <button
+              type="button"
+              disabled={isConsolidating}
+              onClick={() => {
+                void handleConsolidateDuplicates()
+              }}
+              title="Mescla produtos com o mesmo código/SKU, somando quantidades em estoque e unificando o cadastro."
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              {isConsolidating ? (
+                <Loader2 className="h-4 w-4 animate-spin text-blue-600" aria-hidden="true" />
+              ) : (
+                <Layers className="h-4 w-4 text-blue-600" aria-hidden="true" />
+              )}
+              {isConsolidating ? 'Unificando...' : 'Juntar Duplicados'}
+            </button>
+          )}
+
+          {canCreateInventoryProduct && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsImportModalOpen(true)
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+            >
+              <FileUp className="h-4 w-4" aria-hidden="true" />
+              Importar Nota Fiscal
+            </button>
+          )}
+        </div>
       </div>
 
       {feedbackMessage && (

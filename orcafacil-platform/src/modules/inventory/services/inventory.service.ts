@@ -266,10 +266,189 @@ export const inventoryService = {
         .filter((row) => !row.deleted_at)
         .map(mapInventoryItem)
 
+      // Identifica se há produtos duplicados com o mesmo código no estoque para consolidação automática
+      const seenCodes = new Set<string>()
+      let hasDuplicates = false
+      for (const item of activeItems) {
+        const cleanSku = (item.sku || '').trim().toLowerCase().replace(/^0+/, '')
+        const cleanBarcode = (item.barcode || '').trim().toLowerCase()
+        const key = cleanSku
+          ? `sku:${cleanSku}`
+          : cleanBarcode && !cleanBarcode.includes('sem gtin') && cleanBarcode !== '0'
+            ? `barcode:${cleanBarcode}`
+            : ''
+        if (key) {
+          if (seenCodes.has(key)) {
+            hasDuplicates = true
+            break
+          }
+          seenCodes.add(key)
+        }
+      }
+
+      if (hasDuplicates) {
+        void this.consolidateDuplicates(organizationId)
+      }
+
       return { success: true, data: activeItems }
     } catch (error) {
       logger.error('Exceção ao listar materiais do estoque', error)
       return { success: false, error: 'Erro inesperado ao consultar o estoque.' }
+    }
+  },
+
+  async consolidateDuplicates(
+    organizationId: UUID,
+  ): Promise<ServiceResult<{ groupsMerged: number; itemsMerged: number }>> {
+    try {
+      // 1. Tenta executar via RPC no Supabase (garante atomicidade)
+      try {
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('consolidate_duplicate_inventory_items', {
+            p_organization_id: organizationId,
+          })
+
+        if (!rpcError && rpcData) {
+          const parsed = rpcData as { groupsMerged?: number; itemsMerged?: number }
+          return {
+            success: true,
+            data: {
+              groupsMerged: Number(parsed.groupsMerged) || 0,
+              itemsMerged: Number(parsed.itemsMerged) || 0,
+            },
+          }
+        }
+      } catch {
+        // Fallback para consolidação direta via client caso a RPC não tenha sido executada
+      }
+
+      // 2. Fallback direto via Supabase Client
+      const { data: rawItems, error: listErr } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .returns<InventoryItemRow[]>()
+
+      if (listErr || !rawItems || rawItems.length === 0) {
+        return { success: true, data: { groupsMerged: 0, itemsMerged: 0 } }
+      }
+
+      // Agrupa itens por código normalizado (SKU ou Código de Barras)
+      const groupsMap = new Map<string, InventoryItemRow[]>()
+
+      for (const item of rawItems) {
+        const cleanSku = (item.sku || '').trim().toLowerCase().replace(/^0+/, '')
+        const cleanBarcode = (item.barcode || '').trim().toLowerCase()
+        const isValidBarcode = cleanBarcode && !cleanBarcode.includes('sem gtin') && cleanBarcode !== '0'
+
+        let key = ''
+        if (cleanSku) {
+          key = `sku:${cleanSku}`
+        } else if (isValidBarcode) {
+          key = `barcode:${cleanBarcode}`
+        }
+
+        if (key) {
+          if (!groupsMap.has(key)) {
+            groupsMap.set(key, [])
+          }
+          groupsMap.get(key)!.push(item)
+        }
+      }
+
+      let groupsMerged = 0
+      let itemsMerged = 0
+
+      for (const items of groupsMap.values()) {
+        if (items.length <= 1) continue
+
+        // Ordenar: preferir item com maior saldo, ou com preço de venda preenchido, ou mais antigo
+        items.sort((a, b) => {
+          const qtyA = Number(a.quantity_on_hand) || 0
+          const qtyB = Number(b.quantity_on_hand) || 0
+          if (qtyB !== qtyA) return qtyB - qtyA
+          const priceA = Number(a.unit_price) || 0
+          const priceB = Number(b.unit_price) || 0
+          if (priceB !== priceA) return priceB - priceA
+          return a.created_at.localeCompare(b.created_at)
+        })
+
+        const master = items[0]
+        const duplicates = items.slice(1)
+
+        let totalQty = Number(master.quantity_on_hand) || 0
+        let bestPurchasePrice = Number(master.purchase_price) || 0
+        let bestUnitPrice = Number(master.unit_price) || 0
+        let mergedFromDup = 0
+
+        for (const dup of duplicates) {
+          const dupQty = Number(dup.quantity_on_hand) || 0
+          totalQty += dupQty
+          mergedFromDup += dupQty
+          const dupCost = Number(dup.purchase_price) || 0
+          if (dupCost > bestPurchasePrice) bestPurchasePrice = dupCost
+          const dupPrice = Number(dup.unit_price) || 0
+          if (bestUnitPrice <= 0 && dupPrice > 0) bestUnitPrice = dupPrice
+
+          // Reatribuir chaves estrangeiras com segurança
+          try {
+            await Promise.all([
+              supabase.from('inventory_movements').update({ inventory_item_id: master.id }).eq('inventory_item_id', dup.id),
+              supabase.from('quote_items').update({ inventory_item_id: master.id }).eq('inventory_item_id', dup.id),
+              supabase.from('service_materials').update({ material_id: master.id }).eq('material_id', dup.id),
+              supabase.from('service_order_items').update({ inventory_item_id: master.id }).eq('inventory_item_id', dup.id),
+            ])
+          } catch {
+            // ignore foreign update issues if tables not present
+          }
+
+          // Soft delete do item duplicado
+          await supabase
+            .from('inventory_items')
+            .update({
+              is_active: false,
+              deleted_at: new Date().toISOString(),
+              delete_reason: `Unificado automaticamente no produto principal #${master.sku || master.id}`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', dup.id)
+
+          itemsMerged++
+        }
+
+        // Atualizar master com o saldo e valores consolidados
+        await supabase
+          .from('inventory_items')
+          .update({
+            quantity_on_hand: String(totalQty),
+            purchase_price: String(bestPurchasePrice),
+            last_purchase_price: String(bestPurchasePrice),
+            unit_price: String(bestUnitPrice),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', master.id)
+
+        if (mergedFromDup > 0) {
+          await supabase.from('inventory_movements').insert({
+            organization_id: organizationId,
+            inventory_item_id: master.id,
+            movement_type: 'entry',
+            quantity: String(mergedFromDup),
+            unit_price: String(bestPurchasePrice),
+            reason: `Unificação e junção de produtos com o mesmo código`,
+            balance_before: String(master.quantity_on_hand),
+            balance_after: String(totalQty),
+          })
+        }
+
+        groupsMerged++
+      }
+
+      return { success: true, data: { groupsMerged, itemsMerged } }
+    } catch (err) {
+      logger.error('Erro ao consolidar produtos duplicados', err)
+      return { success: false, error: 'Erro inesperado ao unificar produtos duplicados.' }
     }
   },
 
@@ -352,7 +531,116 @@ export const inventoryService = {
     params: InventoryItemParams,
   ): Promise<ServiceResult<InventoryItem>> {
     try {
-      let assignedSku = params.sku.trim()
+      const incomingSku = params.sku.trim()
+      const incomingBarcode = params.barcode?.trim() || ''
+      const incomingSupplierCode = params.supplierProductCode?.trim() || ''
+
+      // 1. REGRA ESSENCIAL: Se já existir um produto com o mesmo código (SKU, Código de Barras ou Fornecedor),
+      // o sistema não cadastra um novo produto duplicado, mas atualiza o já cadastrado, somando quantidade.
+      let existingMatch: InventoryItemRow | null = null
+
+      if (incomingSku) {
+        const { data: bySku } = await supabase
+          .from('inventory_items')
+          .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
+          .eq('organization_id', organizationId)
+          .ilike('sku', incomingSku)
+          .is('deleted_at', null)
+          .maybeSingle()
+        if (bySku) existingMatch = bySku as unknown as InventoryItemRow
+      }
+
+      if (!existingMatch && incomingBarcode && !incomingBarcode.toUpperCase().includes('SEM GTIN')) {
+        const { data: byBarcode } = await supabase
+          .from('inventory_items')
+          .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
+          .eq('organization_id', organizationId)
+          .eq('barcode', incomingBarcode)
+          .is('deleted_at', null)
+          .maybeSingle()
+        if (byBarcode) existingMatch = byBarcode as unknown as InventoryItemRow
+      }
+
+      if (!existingMatch && incomingSupplierCode) {
+        const { data: bySupplierCode } = await supabase
+          .from('inventory_items')
+          .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
+          .eq('organization_id', organizationId)
+          .ilike('supplier_product_code', incomingSupplierCode)
+          .is('deleted_at', null)
+          .maybeSingle()
+        if (bySupplierCode) existingMatch = bySupplierCode as unknown as InventoryItemRow
+      }
+
+      if (existingMatch) {
+        const previousQty = Number(existingMatch.quantity_on_hand) || 0
+        const incomingQty = Number(params.quantityOnHand) || 0
+        const newQty = previousQty + incomingQty
+
+        const hasSalePrice = Number(params.unitPrice) > 0
+        const effectiveUnitPrice = hasSalePrice ? params.unitPrice.trim() : existingMatch.unit_price
+        const effectivePurchasePrice =
+          Number(params.purchasePrice) > 0 ? params.purchasePrice.trim() : existingMatch.purchase_price
+
+        const updatedAttrs = {
+          ...(existingMatch.attributes || {}),
+          ...(params.attributes || {}),
+        }
+
+        const { data: updatedRow, error: updateErr } = await supabase
+          .from('inventory_items')
+          .update({
+            quantity_on_hand: String(newQty),
+            unit_price: String(effectiveUnitPrice || '0'),
+            purchase_price: String(effectivePurchasePrice || '0'),
+            last_purchase_price: String(effectivePurchasePrice || '0'),
+            last_purchase_at: new Date().toISOString(),
+            name: params.name.trim() || existingMatch.name,
+            unit: params.unit.trim() || existingMatch.unit,
+            category: params.category.trim() || existingMatch.category,
+            subcategory: params.subcategory.trim() || existingMatch.subcategory,
+            brand: params.brand.trim() || existingMatch.brand,
+            manufacturer: params.manufacturer.trim() || existingMatch.manufacturer,
+            model: params.model.trim() || existingMatch.model,
+            supplier_id: params.supplierId || existingMatch.supplier_id,
+            barcode: incomingBarcode || existingMatch.barcode,
+            location: params.location.trim() || existingMatch.location,
+            warehouse: params.warehouse.trim() || existingMatch.warehouse,
+            fiscal_ncm: params.fiscalNcm.trim() || existingMatch.fiscal_ncm,
+            can_sell: hasSalePrice ? true : existingMatch.can_sell,
+            attributes: updatedAttrs,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('organization_id', organizationId)
+          .eq('id', existingMatch.id)
+          .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
+          .returns<InventoryItemRow[]>()
+          .single()
+
+        if (updateErr) {
+          logger.error('Erro ao atualizar produto existente por código já cadastrado', updateErr)
+          return { success: false, error: getInventoryError(updateErr, 'atualizar') }
+        }
+
+        if (incomingQty > 0) {
+          await supabase.from('inventory_movements').insert({
+            organization_id: organizationId,
+            inventory_item_id: existingMatch.id,
+            movement_type: 'entry',
+            quantity: String(incomingQty),
+            unit_price: String(effectivePurchasePrice || '0'),
+            reason: `Entrada complementar / Atualização por código já cadastrado (#${incomingSku || incomingBarcode})`,
+            balance_before: String(previousQty),
+            balance_after: String(newQty),
+          })
+        }
+
+        await this.saveSuppliers(organizationId, existingMatch.id, params.supplierIds, params)
+
+        return { success: true, data: mapInventoryItem(updatedRow) }
+      }
+
+      let assignedSku = incomingSku
       if (!assignedSku) {
         const nextCodeResult = await this.getNextCode(organizationId)
         assignedSku = nextCodeResult.success ? nextCodeResult.data : '1'
