@@ -7,9 +7,10 @@ import { quoteService, type QuoteListItem } from '@modules/orcafacil/services/qu
 import { serviceOrderService, type ServiceOrderListItem } from '@modules/service-orders/services/service-order.service'
 import { customerService, type Customer } from '@modules/customers/services/customer.service'
 import { supplierService, type Supplier } from '@modules/suppliers/services/supplier.service'
+import { organizationService } from '@modules/organizations/services/organization.service'
 import type { CashSession } from '@modules/cash/domain/cash-session'
 import type { CashEntry } from '@modules/cash/domain/cash-management'
-import type { InventoryItem, UUID } from '@shared/types/common'
+import type { InventoryItem, OrganizationMemberDetail, UUID } from '@shared/types/common'
 
 export type ReportPeriodPreset = 'today' | '7d' | 'month' | '30d' | 'year' | 'all' | 'custom'
 
@@ -97,6 +98,7 @@ export interface ReportsDataset {
   serviceOrders: ServiceOrderListItem[]
   customers: Customer[]
   suppliers: Supplier[]
+  members: OrganizationMemberDetail[]
 }
 
 export function getPresetDateRange(preset: ReportPeriodPreset): { startDate: string; endDate: string } {
@@ -180,6 +182,7 @@ export const reportsService = {
       osRes,
       customersRes,
       suppliersRes,
+      membersRes,
     ] = await Promise.all([
       salesService.listSales(organizationId),
       inventoryService.list(organizationId),
@@ -190,6 +193,7 @@ export const reportsService = {
       serviceOrderService.list(organizationId),
       customerService.list(organizationId),
       supplierService.list(organizationId),
+      organizationService.getMembersWithDetails(organizationId),
     ])
 
     return {
@@ -202,6 +206,7 @@ export const reportsService = {
       serviceOrders: osRes.success ? osRes.data : [],
       customers: customersRes.success ? customersRes.data : [],
       suppliers: suppliersRes.success ? suppliersRes.data : [],
+      members: membersRes.success ? membersRes.data : [],
     }
   },
 
@@ -577,6 +582,38 @@ export const reportsService = {
       activeBuyersCount: ranking.filter((r) => r.salesCount > 0).length,
       individualCount: customers.filter((c) => c.personType !== 'company').length,
       companyCount: customers.filter((c) => c.personType === 'company').length,
+    }
+  },
+
+  computeRegistrationsAnalytics(dataset: ReportsDataset) {
+    const totalUsers = dataset.members.length
+    const adminUsersCount = dataset.members.filter((m) => m.role === 'admin' || m.role === 'owner').length
+    const standardUsersCount = dataset.members.filter((m) => m.role !== 'admin' && m.role !== 'owner').length
+
+    // Funcionários e colaboradores da organização
+    const employees = dataset.members.filter((m) => Boolean(m.jobTitle?.trim()) || m.role !== 'owner')
+    const employeesCount = employees.length
+    const employeesWithJobTitleCount = dataset.members.filter((m) => Boolean(m.jobTitle?.trim())).length
+
+    const totalSuppliers = dataset.suppliers.length
+    const suppliersWithCnpjCount = dataset.suppliers.filter((s) => Boolean(s.document?.trim())).length
+
+    const totalCustomers = dataset.customers.length
+    const individualCustomersCount = dataset.customers.filter((c) => c.personType !== 'company').length
+    const companyCustomersCount = dataset.customers.filter((c) => c.personType === 'company').length
+
+    return {
+      totalUsers,
+      adminUsersCount,
+      standardUsersCount,
+      employees,
+      employeesCount,
+      employeesWithJobTitleCount,
+      totalSuppliers,
+      suppliersWithCnpjCount,
+      totalCustomers,
+      individualCustomersCount,
+      companyCustomersCount,
     }
   },
 }

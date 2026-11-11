@@ -14,6 +14,7 @@ import {
   type ReportsDataset,
 } from '../services/reports.service'
 import { formatCurrency } from '@shared/utils/monetary'
+import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import {
@@ -24,6 +25,8 @@ import {
   Award,
   BarChart3,
   Boxes,
+  Briefcase,
+  Building2,
   Calendar,
   CheckCircle2,
   ChevronRight,
@@ -40,9 +43,11 @@ import {
   Receipt,
   RefreshCw,
   Search,
+  ShieldCheck,
   ShoppingCart,
   Store,
   TrendingUp,
+  UserCheck,
   Users,
   Wallet,
   Wrench,
@@ -57,6 +62,7 @@ type ReportView =
   | 'financial'
   | 'quotes-os'
   | 'customers'
+  | 'registrations'
 
 const PERIOD_LABELS: Record<ReportPeriodPreset, string> = {
   today: 'Hoje',
@@ -73,7 +79,8 @@ export function ReportsPage() {
   const { canAccessSubFeature } = useModuleAccess()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const rawView = (searchParams.get('view') || 'home') as ReportView
+  const rawParam = searchParams.get('view') || 'home'
+  const normalizedParam = rawParam === 'cadastros' ? 'registrations' : rawParam
   const currentView: ReportView = [
     'home',
     'user-sessions',
@@ -82,8 +89,9 @@ export function ReportsPage() {
     'financial',
     'quotes-os',
     'customers',
-  ].includes(rawView)
-    ? rawView
+    'registrations',
+  ].includes(normalizedParam as ReportView)
+    ? (normalizedParam as ReportView)
     : 'home'
 
   const canViewSalesReport = canAccessSubFeature('MOD-08_SALES')
@@ -109,6 +117,7 @@ export function ReportsPage() {
     serviceOrders: [],
     customers: [],
     suppliers: [],
+    members: [],
   })
   const [isLoading, setIsLoading] = useState(true)
 
@@ -134,6 +143,9 @@ export function ReportsPage() {
 
   // Filtros da view de clientes & fornecedores
   const [crmTab, setCrmTab] = useState<'customers' | 'suppliers'>('customers')
+
+  // Filtros da view de cadastros gerais (Usuários, Funcionários, Fornecedores, Clientes)
+  const [registrationsTab, setRegistrationsTab] = useState<'users' | 'employees' | 'suppliers' | 'customers'>('users')
 
   const loadData = useCallback(async () => {
     if (!currentOrganization) return
@@ -243,6 +255,27 @@ export function ReportsPage() {
         periodFilteredServiceOrders,
       ),
     [dataset.customers, periodFilteredSales, periodFilteredQuotes, periodFilteredServiceOrders],
+  )
+
+  const registrationsAnalytics = useMemo(
+    () => reportsService.computeRegistrationsAnalytics(dataset),
+    [dataset],
+  )
+
+  const REPORT_NAV_ITEMS = useMemo<
+    Array<{ id: ReportView; label: string; icon: any; badge?: string }>
+  >(
+    () => [
+      { id: 'home', label: 'Visão Geral', icon: BarChart3 },
+      ...(canViewSalesReport ? [{ id: 'sales' as ReportView, label: 'Vendas & PDV', icon: ShoppingCart }] : []),
+      ...(canViewInventoryReport ? [{ id: 'inventory' as ReportView, label: 'Estoque & ABC', icon: Boxes }] : []),
+      { id: 'financial', label: 'Financeiro & DRE', icon: Wallet },
+      { id: 'user-sessions', label: 'Resumo de Caixa', icon: Receipt },
+      { id: 'quotes-os', label: 'Orçamentos & OS', icon: ClipboardList },
+      { id: 'customers', label: 'Ranking Clientes', icon: Award },
+      { id: 'registrations', label: 'Relatório de Cadastros', icon: Users, badge: 'Novo' },
+    ],
+    [canViewSalesReport, canViewInventoryReport],
   )
 
   // ============================================================================
@@ -2326,6 +2359,607 @@ export function ReportsPage() {
   }
 
   // ============================================================================
+  // VIEW: RELATÓRIO GERAL DE CADASTROS (USUÁRIOS, FUNCIONÁRIOS, FORNECEDORES, CLIENTES)
+  // ============================================================================
+  if (currentView === 'registrations') {
+    const customerMetricsMap = new Map<string, { salesCount: number; totalSpent: number }>()
+    for (const item of customersAnalytics.ranking) {
+      customerMetricsMap.set(item.customerId, { salesCount: item.salesCount, totalSpent: item.totalSpent })
+    }
+
+    const supplierBillsMap = new Map<string, { count: number; total: number }>()
+    for (const bill of dataset.bills) {
+      if (bill.supplierName) {
+        const key = bill.supplierName.trim().toLowerCase()
+        const current = supplierBillsMap.get(key) || { count: 0, total: 0 }
+        current.count += 1
+        current.total += parseFloat(bill.amount) || 0
+        supplierBillsMap.set(key, current)
+      }
+    }
+
+    const filteredUsers = dataset.members.filter((m) => {
+      if (dateFilter.preset !== 'all' && !isDateInRange(m.createdAt, dateFilter)) return false
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      const roleLabel = m.role === 'admin' ? 'administrador admin' : m.role === 'owner' ? 'proprietário dono' : 'membro'
+      return (
+        m.displayName.toLowerCase().includes(q) ||
+        m.email.toLowerCase().includes(q) ||
+        (m.phone || '').toLowerCase().includes(q) ||
+        (m.jobTitle || '').toLowerCase().includes(q) ||
+        roleLabel.includes(q)
+      )
+    })
+
+    const filteredEmployees = dataset.members.filter((m) => {
+      if (dateFilter.preset !== 'all' && !isDateInRange(m.createdAt, dateFilter)) return false
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      return (
+        m.displayName.toLowerCase().includes(q) ||
+        m.email.toLowerCase().includes(q) ||
+        (m.phone || '').toLowerCase().includes(q) ||
+        (m.jobTitle || '').toLowerCase().includes(q)
+      )
+    })
+
+    const filteredSuppliers = dataset.suppliers.filter((s) => {
+      if (dateFilter.preset !== 'all' && !isDateInRange(s.createdAt, dateFilter)) return false
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.document || '').toLowerCase().includes(q) ||
+        (s.contactName || '').toLowerCase().includes(q) ||
+        (s.phone || '').toLowerCase().includes(q) ||
+        (s.email || '').toLowerCase().includes(q)
+      )
+    })
+
+    const filteredCustomers = dataset.customers.filter((c) => {
+      if (dateFilter.preset !== 'all' && !isDateInRange(c.createdAt, dateFilter)) return false
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.document || '').toLowerCase().includes(q) ||
+        (c.phone || '').toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q) ||
+        (c.address || '').toLowerCase().includes(q)
+      )
+    })
+
+    const handleExportRegistrationsCsv = () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      if (registrationsTab === 'users') {
+        exportRowsToCsv(
+          `relatorio-cadastros-usuarios-${todayIso}.csv`,
+          ['Nome / Usuário', 'E-mail de Login', 'Perfil / Função', 'Cargo', 'Telefone', 'Último Acesso', 'Data de Cadastro', 'Status'],
+          filteredUsers.map((u) => [
+            u.displayName,
+            u.email,
+            u.role === 'admin' ? 'Administrador' : u.role === 'owner' ? 'Proprietário' : 'Membro',
+            u.jobTitle || 'Não informado',
+            u.phone ? formatPhoneNumber(u.phone) : '',
+            u.lastAccessAt ? new Date(u.lastAccessAt).toLocaleString('pt-BR') : 'Sem registros',
+            u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '',
+            'Ativo',
+          ]),
+        )
+      } else if (registrationsTab === 'employees') {
+        exportRowsToCsv(
+          `relatorio-cadastros-funcionarios-${todayIso}.csv`,
+          ['Funcionário', 'Cargo / Função', 'Perfil', 'E-mail', 'Telefone', 'Módulos Autorizados', 'Data de Cadastro'],
+          filteredEmployees.map((e) => [
+            e.displayName,
+            e.jobTitle || 'Colaborador',
+            e.role === 'admin' ? 'Administrador' : 'Membro',
+            e.email,
+            e.phone ? formatPhoneNumber(e.phone) : '',
+            e.dashboardModules ? `${e.dashboardModules.length} módulos` : 'Padrão',
+            e.createdAt ? new Date(e.createdAt).toLocaleDateString('pt-BR') : '',
+          ]),
+        )
+      } else if (registrationsTab === 'suppliers') {
+        exportRowsToCsv(
+          `relatorio-cadastros-fornecedores-${todayIso}.csv`,
+          ['Fornecedor / Razão Social', 'CNPJ / CPF', 'Contato / Responsável', 'Telefone', 'E-mail', 'Endereço', 'Despesas Registradas', 'Total em Despesas', 'Data de Cadastro'],
+          filteredSuppliers.map((s) => {
+            const billInfo = supplierBillsMap.get(s.name.trim().toLowerCase())
+            return [
+              s.name,
+              s.document || '',
+              s.contactName || '',
+              s.phone ? formatPhoneNumber(s.phone) : '',
+              s.email || '',
+              s.address || '',
+              billInfo?.count || 0,
+              (billInfo?.total || 0).toFixed(2),
+              s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '',
+            ]
+          }),
+        )
+      } else {
+        exportRowsToCsv(
+          `relatorio-cadastros-clientes-${todayIso}.csv`,
+          ['Cliente / Razão Social', 'Tipo', 'CPF / CNPJ', 'Telefone / WhatsApp', 'E-mail', 'Endereço', 'Compras Faturadas', 'Total Comprado (R$)', 'Data de Cadastro'],
+          filteredCustomers.map((c) => {
+            const metrics = customerMetricsMap.get(c.id)
+            return [
+              c.name,
+              c.personType === 'company' ? 'Pessoa Jurídica' : 'Pessoa Física',
+              c.document || '',
+              c.phone ? formatPhoneNumber(c.phone) : '',
+              c.email || '',
+              c.address || '',
+              metrics?.salesCount || 0,
+              (metrics?.totalSpent || 0).toFixed(2),
+              c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '',
+            ]
+          }),
+        )
+      }
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* CABEÇALHO */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigateToView('home')}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-xs"
+              title="Voltar para a Central"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+                  Relatório Geral de Cadastros
+                </h1>
+                <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:text-blue-300">
+                  Cadastros &amp; Equipe
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                Auditoria cadastral completa de usuários do sistema, equipe de funcionários, fornecedores homologados e carteira de clientes.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportRegistrationsCsv}
+              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              <span>Exportar CSV</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="rounded-xl flex items-center gap-1.5 text-xs font-semibold"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Imprimir</span>
+            </Button>
+          </div>
+        </div>
+
+        {renderPeriodToolbar()}
+
+        {/* 4 CARDS DE KPIS */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Usuários do Sistema</span>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-0.5">
+                  {registrationsAnalytics.totalUsers}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {registrationsAnalytics.adminUsersCount} Admins • {registrationsAnalytics.standardUsersCount} Membros
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
+                <Briefcase className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Funcionários &amp; Equipe</span>
+                <h3 className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                  {registrationsAnalytics.employeesCount}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {registrationsAnalytics.employeesWithJobTitleCount} com cargo atribuído
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Fornecedores</span>
+                <h3 className="text-2xl font-bold text-teal-600 dark:text-teal-400 mt-0.5">
+                  {registrationsAnalytics.totalSuppliers}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {registrationsAnalytics.suppliersWithCnpjCount} com CNPJ informado
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400">
+                <Users className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Carteira de Clientes</span>
+                <h3 className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                  {registrationsAnalytics.totalCustomers}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  PF: {registrationsAnalytics.individualCustomersCount} • PJ: {registrationsAnalytics.companyCustomersCount}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* BARRA DE NAVEGAÇÃO DE SUB-ABAS E BUSCA */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
+          <div className="inline-flex rounded-xl border border-gray-200 dark:border-slate-700 p-1 bg-white dark:bg-slate-800 text-xs font-bold overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('users')}
+              className={`rounded-lg px-3.5 py-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                registrationsTab === 'users' ? 'bg-blue-600 text-white shadow-xs' : 'text-gray-600 dark:text-slate-300 hover:text-gray-900'
+              }`}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              <span>Usuários ({filteredUsers.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('employees')}
+              className={`rounded-lg px-3.5 py-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                registrationsTab === 'employees' ? 'bg-amber-600 text-white shadow-xs' : 'text-gray-600 dark:text-slate-300 hover:text-gray-900'
+              }`}
+            >
+              <Briefcase className="h-4 w-4" />
+              <span>Funcionários ({filteredEmployees.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('suppliers')}
+              className={`rounded-lg px-3.5 py-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                registrationsTab === 'suppliers' ? 'bg-teal-600 text-white shadow-xs' : 'text-gray-600 dark:text-slate-300 hover:text-gray-900'
+              }`}
+            >
+              <Building2 className="h-4 w-4" />
+              <span>Fornecedores ({filteredSuppliers.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('customers')}
+              className={`rounded-lg px-3.5 py-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                registrationsTab === 'customers' ? 'bg-purple-600 text-white shadow-xs' : 'text-gray-600 dark:text-slate-300 hover:text-gray-900'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>Clientes ({filteredCustomers.length})</span>
+            </button>
+          </div>
+
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nome, cargo, e-mail, telefone ou documento..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-9 pr-3 py-2 text-xs text-gray-900 dark:text-white"
+            />
+          </div>
+        </div>
+
+        {/* TABELAS ESPECÍFICAS DE CADA ABA */}
+        <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            {/* ABA 1: USUÁRIOS */}
+            {registrationsTab === 'users' && (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-800/50 text-[11px] font-bold uppercase text-gray-500">
+                    <th className="px-4 py-3.5">Nome / Usuário</th>
+                    <th className="px-4 py-3.5">E-mail de Login</th>
+                    <th className="px-4 py-3.5 text-center">Perfil de Acesso</th>
+                    <th className="px-4 py-3.5">Cargo / Atribuição</th>
+                    <th className="px-4 py-3.5">Telefone</th>
+                    <th className="px-4 py-3.5">Último Acesso</th>
+                    <th className="px-4 py-3.5">Data Cadastro</th>
+                    <th className="px-4 py-3.5 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-xs">
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                        Nenhum usuário encontrado para os filtros selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((u) => (
+                      <tr key={u.userId} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                        <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-xs">
+                              {(u.displayName || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <span>{u.displayName}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-gray-600 dark:text-slate-300">{u.email}</td>
+                        <td className="px-4 py-3 text-center">
+                          {u.role === 'owner' ? (
+                            <span className="rounded-md bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 text-[11px] font-bold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              Proprietário
+                            </span>
+                          ) : u.role === 'admin' ? (
+                            <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              Administrador
+                            </span>
+                          ) : (
+                            <span className="rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:text-slate-300">
+                              Membro
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-slate-300 font-medium">
+                          {u.jobTitle || '—'}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-gray-600 dark:text-slate-300">
+                          {u.phone ? formatPhoneNumber(u.phone) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                          {u.lastAccessAt ? new Date(u.lastAccessAt).toLocaleString('pt-BR') : 'Sem registro'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Ativo
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {/* ABA 2: FUNCIONÁRIOS */}
+            {registrationsTab === 'employees' && (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-800/50 text-[11px] font-bold uppercase text-gray-500">
+                    <th className="px-4 py-3.5">Funcionário / Nome</th>
+                    <th className="px-4 py-3.5">Cargo / Função</th>
+                    <th className="px-4 py-3.5 text-center">Perfil</th>
+                    <th className="px-4 py-3.5">E-mail Corporativo</th>
+                    <th className="px-4 py-3.5">Telefone / WhatsApp</th>
+                    <th className="px-4 py-3.5 text-center">Módulos Liberados</th>
+                    <th className="px-4 py-3.5">Data de Admissão</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-xs">
+                  {filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                        Nenhum funcionário encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredEmployees.map((e) => (
+                      <tr key={e.userId} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                        <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold text-xs">
+                              {(e.displayName || 'F').charAt(0).toUpperCase()}
+                            </div>
+                            <span>{e.displayName}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex rounded-lg bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            {e.jobTitle || 'Colaborador'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:text-slate-300">
+                            {e.role === 'admin' ? 'Administrador' : e.role === 'owner' ? 'Proprietário' : 'Membro'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-gray-600 dark:text-slate-300">{e.email}</td>
+                        <td className="px-4 py-3 font-mono text-gray-600 dark:text-slate-300">
+                          {e.phone ? formatPhoneNumber(e.phone) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-slate-300">
+                          {e.dashboardModules && e.dashboardModules.length > 0 ? (
+                            <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300">
+                              {e.dashboardModules.length} módulos
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">Padrão</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                          {e.createdAt ? new Date(e.createdAt).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {/* ABA 3: FORNECEDORES */}
+            {registrationsTab === 'suppliers' && (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-800/50 text-[11px] font-bold uppercase text-gray-500">
+                    <th className="px-4 py-3.5">Fornecedor / Razão Social</th>
+                    <th className="px-4 py-3.5">CNPJ / CPF</th>
+                    <th className="px-4 py-3.5">Responsável / Contato</th>
+                    <th className="px-4 py-3.5">Telefone / E-mail</th>
+                    <th className="px-4 py-3.5">Endereço / Localização</th>
+                    <th className="px-4 py-3.5 text-center">Despesas Cadastradas</th>
+                    <th className="px-4 py-3.5">Data Cadastro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-xs">
+                  {filteredSuppliers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                        Nenhum fornecedor encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSuppliers.map((s) => {
+                      const billInfo = supplierBillsMap.get(s.name.trim().toLowerCase())
+                      return (
+                        <tr key={s.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                          <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                              <span>{s.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-gray-600 dark:text-slate-300">
+                            {s.document || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{s.contactName || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                            <div>{s.phone ? formatPhoneNumber(s.phone) : '—'}</div>
+                            {s.email && <div className="text-[11px] text-gray-400">{s.email}</div>}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{s.address || '—'}</td>
+                          <td className="px-4 py-3 text-center">
+                            {billInfo && billInfo.count > 0 ? (
+                              <span className="font-bold text-teal-600 dark:text-teal-400">
+                                {billInfo.count} ({formatCurrency(billInfo.total.toFixed(2))})
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">Nenhuma despesa</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {/* ABA 4: CLIENTES */}
+            {registrationsTab === 'customers' && (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-800/50 text-[11px] font-bold uppercase text-gray-500">
+                    <th className="px-4 py-3.5">Cliente</th>
+                    <th className="px-4 py-3.5 text-center">Tipo</th>
+                    <th className="px-4 py-3.5">CPF / CNPJ</th>
+                    <th className="px-4 py-3.5">Telefone / WhatsApp</th>
+                    <th className="px-4 py-3.5">E-mail</th>
+                    <th className="px-4 py-3.5">Endereço / Cidade</th>
+                    <th className="px-4 py-3.5 text-center">Compras</th>
+                    <th className="px-4 py-3.5 text-right">Total Faturado</th>
+                    <th className="px-4 py-3.5">Data Cadastro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-xs">
+                  {filteredCustomers.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
+                        Nenhum cliente encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCustomers.map((c) => {
+                      const metrics = customerMetricsMap.get(c.id)
+                      return (
+                        <tr key={c.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                          <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                            {c.name}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {c.personType === 'company' ? (
+                              <span className="rounded-md bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 text-[11px] font-bold text-purple-700 dark:text-purple-300">
+                                PJ
+                              </span>
+                            ) : (
+                              <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300">
+                                PF
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-gray-600 dark:text-slate-300">
+                            {c.document || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                            {c.phone ? formatPhoneNumber(c.phone) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{c.email || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                            {c.address ? `${c.address}${c.addressNumber ? `, ${c.addressNumber}` : ''}` : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono font-bold">
+                            {metrics?.salesCount || 0}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency((metrics?.totalSpent || 0).toFixed(2))}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                            {c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  // ============================================================================
   // VIEW PRINCIPAL (HOME): CENTRAL EXECUTIVA DE RELATÓRIOS & BI
   // ============================================================================
   return (
@@ -2356,6 +2990,40 @@ export function ReportsPage() {
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           <span>Atualizar Indicadores</span>
         </Button>
+      </div>
+
+      {/* NAVEGAÇÃO RÁPIDA POR ABAS */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-gray-200 dark:border-slate-800 print:hidden">
+        {REPORT_NAV_ITEMS.map((item) => {
+          const Icon = item.icon
+          const isActive = currentView === item.id
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => navigateToView(item.id)}
+              className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:text-white'
+              }`}
+            >
+              <Icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+              <span>{item.label}</span>
+              {item.badge && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                  }`}
+                >
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* BARRA DE PERÍODO */}
@@ -2665,6 +3333,45 @@ export function ReportsPage() {
                 <span className="inline-flex items-center gap-2">
                   <Users className="h-4 w-4" />
                   Abrir Ranking de Clientes
+                </span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* CARD 7: RELATÓRIO DE CADASTROS (USUÁRIOS, FUNCIONÁRIOS, FORNECEDORES, CLIENTES) */}
+        <Card className="rounded-2xl shadow-xs hover:shadow-md transition-shadow border-gray-200 dark:border-slate-800 border-l-4 border-l-blue-600">
+          <CardContent className="flex h-full flex-col p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-700 dark:text-blue-400">
+                <Users className="h-6 w-6" />
+              </div>
+              <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-800 dark:text-blue-300">
+                CADASTROS &amp; EQUIPE
+              </span>
+            </div>
+            <h2 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
+              RELATÓRIO GERAL DE CADASTROS
+            </h2>
+            <p className="mt-2 flex-1 text-xs leading-5 text-gray-600 dark:text-slate-400">
+              Painel analítico e auditoria de cadastros: usuários de acesso, funcionários com atribuição de cargos, fornecedores parceiros e carteira completa de clientes.
+            </p>
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
+              <span>Usuários: <b>{registrationsAnalytics.totalUsers}</b></span>
+              <span>Funcionários: <b>{registrationsAnalytics.employeesCount}</b></span>
+              <span>Fornecedores: <b>{registrationsAnalytics.totalSuppliers}</b></span>
+              <span>Clientes: <b>{registrationsAnalytics.totalCustomers}</b></span>
+            </div>
+            <div className="mt-4">
+              <Button
+                size="sm"
+                onClick={() => navigateToView('registrations')}
+                className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <UserCheck className="h-4 w-4" />
+                  Abrir Relatório de Cadastros
                 </span>
                 <ChevronRight className="h-4 w-4" />
               </Button>
