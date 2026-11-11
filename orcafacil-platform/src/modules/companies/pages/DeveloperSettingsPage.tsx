@@ -144,11 +144,11 @@ export function DeveloperSettingsPage() {
     },
     {
       id: 'announcements',
-      title: 'Anúncios (Tela Inicial)',
+      title: 'Anúncios',
       badge: activeAnnouncementsCount !== null ? `${activeAnnouncementsCount} ativos` : undefined,
       badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300',
       description:
-        'Crie, edite e organize os comunicados, novidades e anúncios promocionais exibidos no carrossel da tela inicial para todas as empresas da plataforma.',
+        'Crie, edite e organize os comunicados, novidades e anúncios promocionais exibidos no carrossel da tela inicial (3s) e da tela de login (8s).',
       actionText: 'Gerenciar Anúncios',
       path: '/admin/announcements',
       icon: ImageIcon,

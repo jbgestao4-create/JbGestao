@@ -2,6 +2,8 @@ import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult } from '@shared/types/common'
 
+export type AnnouncementTargetPage = 'dashboard' | 'login'
+
 export interface SystemAnnouncement {
   id: string
   title?: string | null
@@ -10,6 +12,7 @@ export interface SystemAnnouncement {
   summary?: string | null
   orderIndex: number
   isActive: boolean
+  targetPage?: AnnouncementTargetPage
   createdAt: string
   updatedAt: string
 }
@@ -38,18 +41,28 @@ function setLocalCache(items: SystemAnnouncement[]): void {
 }
 
 export const announcementService = {
-  async listActive(): Promise<ServiceResult<SystemAnnouncement[]>> {
+  async listActive(
+    targetPage: AnnouncementTargetPage = 'dashboard',
+  ): Promise<ServiceResult<SystemAnnouncement[]>> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('system_announcements')
         .select('*')
         .eq('is_active', true)
+
+      if (targetPage) {
+        query = query.eq('target_page', targetPage)
+      }
+
+      const { data, error } = await query
         .order('order_index', { ascending: true })
         .order('created_at', { ascending: false })
 
       if (error) {
         logger.warn('Erro ao carregar anúncios remotos, usando cache:', { message: error.message })
-        const cached = getLocalCache().filter((a) => a.isActive)
+        const cached = getLocalCache().filter(
+          (a) => a.isActive && (a.targetPage || 'dashboard') === targetPage,
+        )
         return { success: true, data: cached }
       }
 
@@ -61,30 +74,46 @@ export const announcementService = {
         summary: row.summary,
         orderIndex: row.order_index,
         isActive: row.is_active,
+        targetPage: (row.target_page as AnnouncementTargetPage) || 'dashboard',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }))
 
-      setLocalCache(mapped)
+      // Atualiza o cache mesclando
+      const currentCache = getLocalCache().filter(
+        (c) => (c.targetPage || 'dashboard') !== targetPage,
+      )
+      setLocalCache([...currentCache, ...mapped])
       return { success: true, data: mapped }
     } catch (err) {
       logger.error('Exceção ao listar anúncios ativos:', err)
-      const cached = getLocalCache().filter((a) => a.isActive)
+      const cached = getLocalCache().filter(
+        (a) => a.isActive && (a.targetPage || 'dashboard') === targetPage,
+      )
       return { success: true, data: cached }
     }
   },
 
-  async listAll(): Promise<ServiceResult<SystemAnnouncement[]>> {
+  async listAll(
+    targetPage?: AnnouncementTargetPage,
+  ): Promise<ServiceResult<SystemAnnouncement[]>> {
     try {
-      const { data, error } = await supabase
-        .from('system_announcements')
-        .select('*')
+      let query = supabase.from('system_announcements').select('*')
+
+      if (targetPage) {
+        query = query.eq('target_page', targetPage)
+      }
+
+      const { data, error } = await query
         .order('order_index', { ascending: true })
         .order('created_at', { ascending: false })
 
       if (error) {
         logger.warn('Erro ao carregar todos os anúncios remotos:', { message: error.message })
-        return { success: true, data: getLocalCache() }
+        const cached = targetPage
+          ? getLocalCache().filter((a) => (a.targetPage || 'dashboard') === targetPage)
+          : getLocalCache()
+        return { success: true, data: cached }
       }
 
       const mapped: SystemAnnouncement[] = (data || []).map((row) => ({
@@ -95,15 +124,27 @@ export const announcementService = {
         summary: row.summary,
         orderIndex: row.order_index,
         isActive: row.is_active,
+        targetPage: (row.target_page as AnnouncementTargetPage) || 'dashboard',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }))
 
-      setLocalCache(mapped)
+      if (targetPage) {
+        const currentCache = getLocalCache().filter(
+          (c) => (c.targetPage || 'dashboard') !== targetPage,
+        )
+        setLocalCache([...currentCache, ...mapped])
+      } else {
+        setLocalCache(mapped)
+      }
+
       return { success: true, data: mapped }
     } catch (err) {
       logger.error('Exceção ao listar todos os anúncios:', err)
-      return { success: true, data: getLocalCache() }
+      const cached = targetPage
+        ? getLocalCache().filter((a) => (a.targetPage || 'dashboard') === targetPage)
+        : getLocalCache()
+      return { success: true, data: cached }
     }
   },
 
@@ -113,7 +154,9 @@ export const announcementService = {
     linkUrl?: string
     summary?: string
     orderIndex?: number
+    targetPage?: AnnouncementTargetPage
   }): Promise<ServiceResult<SystemAnnouncement>> {
+    const targetPage = params.targetPage || 'dashboard'
     try {
       const { data, error } = await supabase
         .from('system_announcements')
@@ -123,6 +166,7 @@ export const announcementService = {
           link_url: params.linkUrl?.trim() || null,
           summary: params.summary?.trim() || null,
           order_index: params.orderIndex ?? 0,
+          target_page: targetPage,
           is_active: true,
         })
         .select('*')
@@ -139,6 +183,7 @@ export const announcementService = {
           summary: params.summary || null,
           orderIndex: params.orderIndex ?? 0,
           isActive: true,
+          targetPage,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }
@@ -156,6 +201,7 @@ export const announcementService = {
         summary: data.summary,
         orderIndex: data.order_index,
         isActive: data.is_active,
+        targetPage: (data.target_page as AnnouncementTargetPage) || targetPage,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       }
@@ -178,6 +224,7 @@ export const announcementService = {
       linkUrl?: string | null
       summary?: string | null
       isActive?: boolean
+      targetPage?: AnnouncementTargetPage
     }
   ): Promise<ServiceResult<SystemAnnouncement>> {
     try {
@@ -188,6 +235,7 @@ export const announcementService = {
       if (params.linkUrl !== undefined) payload.link_url = params.linkUrl?.trim() || null
       if (params.summary !== undefined) payload.summary = params.summary?.trim() || null
       if (params.isActive !== undefined) payload.is_active = params.isActive
+      if (params.targetPage !== undefined) payload.target_page = params.targetPage
 
       const { data, error } = await supabase
         .from('system_announcements')
@@ -205,6 +253,7 @@ export const announcementService = {
           if (params.linkUrl !== undefined) existing.linkUrl = params.linkUrl
           if (params.summary !== undefined) existing.summary = params.summary
           if (params.isActive !== undefined) existing.isActive = params.isActive
+          if (params.targetPage !== undefined) existing.targetPage = params.targetPage
           existing.updatedAt = new Date().toISOString()
           setLocalCache(cached)
           return { success: true, data: existing }
@@ -220,6 +269,7 @@ export const announcementService = {
         summary: data.summary,
         orderIndex: data.order_index,
         isActive: data.is_active,
+        targetPage: (data.target_page as AnnouncementTargetPage) || 'dashboard',
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       }

@@ -12,9 +12,17 @@ import {
   FileText,
   Save,
   ExternalLink,
+  LayoutDashboard,
+  LogIn,
+  Eye,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { announcementService, type SystemAnnouncement } from '@shared/services/announcement.service'
+import {
+  announcementService,
+  type SystemAnnouncement,
+  type AnnouncementTargetPage,
+} from '@shared/services/announcement.service'
+import { LoginAnnouncementCarousel } from '@shared/components/LoginAnnouncementCarousel'
 
 async function compressImageFile(file: File): Promise<string> {
   // Suporte a GIF: não passa pelo canvas para preservar a animação dos quadros
@@ -65,21 +73,34 @@ async function compressImageFile(file: File): Promise<string> {
 }
 
 export function AnnouncementsAdminPage() {
+  const [activeTab, setActiveTab] = useState<AnnouncementTargetPage>('dashboard')
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
+  const [dashboardCount, setDashboardCount] = useState<number>(0)
+  const [loginCount, setLoginCount] = useState<number>(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedBannerId, setSavedBannerId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [showLivePreview, setShowLivePreview] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const loadData = async () => {
+  const loadData = async (target: AnnouncementTargetPage = activeTab) => {
     setIsLoading(true)
     try {
-      const res = await announcementService.listAll()
-      if (res.success && res.data) {
-        setAnnouncements(res.data)
+      const [targetRes, allRes] = await Promise.all([
+        announcementService.listAll(target),
+        announcementService.listAll(),
+      ])
+
+      if (targetRes.success && targetRes.data) {
+        setAnnouncements(targetRes.data)
+      }
+
+      if (allRes.success && allRes.data) {
+        setDashboardCount(allRes.data.filter((a) => (a.targetPage || 'dashboard') === 'dashboard').length)
+        setLoginCount(allRes.data.filter((a) => a.targetPage === 'login').length)
       }
     } finally {
       setIsLoading(false)
@@ -87,8 +108,14 @@ export function AnnouncementsAdminPage() {
   }
 
   useEffect(() => {
-    void loadData()
-  }, [])
+    void loadData(activeTab)
+  }, [activeTab])
+
+  const handleTabChange = (tab: AnnouncementTargetPage) => {
+    setActiveTab(tab)
+    setError('')
+    setMessage('')
+  }
 
   const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -110,12 +137,14 @@ export function AnnouncementsAdminPage() {
           imageUrl: dataUrl,
           title: file.name.replace(/\.[^/.]+$/, ''),
           orderIndex: currentCount,
+          targetPage: activeTab,
         })
         count++
       }
 
-      setMessage(`${count} imagem(ns) adicionada(s) com sucesso aos anúncios!`)
-      await loadData()
+      const destLabel = activeTab === 'login' ? 'na tela de login' : 'na tela inicial'
+      setMessage(`${count} imagem(ns) adicionada(s) com sucesso aos anúncios ${destLabel}!`)
+      await loadData(activeTab)
     } catch {
       setError('Erro ao processar as imagens selecionadas.')
     } finally {
@@ -128,9 +157,13 @@ export function AnnouncementsAdminPage() {
     try {
       await announcementService.delete(id)
       setAnnouncements((prev) => prev.filter((a) => a.id !== id))
-      setMessage('Anúncio removido com sucesso.')
+      if (activeTab === 'dashboard') {
+        setDashboardCount((c) => Math.max(0, c - 1))
+      } else {
+        setLoginCount((c) => Math.max(0, c - 1))
+      }
     } catch {
-      setError('Erro ao remover anúncio.')
+      setError('Erro ao excluir anúncio.')
     }
   }
 
@@ -139,8 +172,9 @@ export function AnnouncementsAdminPage() {
     if (targetIndex < 0 || targetIndex >= announcements.length) return
 
     const list = [...announcements]
-    const [moved] = list.splice(index, 1)
-    list.splice(targetIndex, 0, moved)
+    const temp = list[index]
+    list[index] = list[targetIndex]
+    list[targetIndex] = temp
 
     const reordered = list.map((item, idx) => ({
       ...item,
@@ -155,7 +189,7 @@ export function AnnouncementsAdminPage() {
 
   const handleFieldChange = (id: string, field: 'linkUrl' | 'summary' | 'title', value: string) => {
     setAnnouncements((prev) =>
-      prev.map((ann) => (ann.id === id ? { ...ann, [field]: value } : ann))
+      prev.map((ann) => (ann.id === id ? { ...ann, [field]: value } : ann)),
     )
   }
 
@@ -167,6 +201,7 @@ export function AnnouncementsAdminPage() {
         title: ann.title,
         linkUrl: ann.linkUrl,
         summary: ann.summary,
+        targetPage: ann.targetPage || activeTab,
       })
       if (res.success) {
         setSavedBannerId(ann.id)
@@ -192,15 +227,16 @@ export function AnnouncementsAdminPage() {
               Voltar ao Início
             </Link>
             <span>/</span>
-            <span>Painel do Desenvolvedor</span>
+            <Link to="/admin/developer-settings" className="hover:underline">
+              Configurações de Desenvolvedor
+            </Link>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <ImageIcon className="h-6 w-6 text-blue-600" />
-            Anúncios e Banners da Tela Inicial
+            Anúncios e Banners do Sistema
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Imagens configuradas aqui são exibidas no banner rotativo de 3 segundos na tela inicial
-            (lado oposto da agenda).
+            Gerencie os comunicados e novidades da Tela Inicial e da Página de Login.
           </p>
         </div>
 
@@ -217,12 +253,72 @@ export function AnnouncementsAdminPage() {
             type="button"
             disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-xs font-bold text-white shadow-md transition disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-xs font-bold text-white shadow-md transition disabled:opacity-50 cursor-pointer"
           >
             <Upload className="h-4 w-4" />
-            {isUploading ? 'Importando Imagens/GIFs...' : 'Importar Imagens / GIFs de Anúncio'}
+            {isUploading
+              ? 'Importando Imagens/GIFs...'
+              : `Importar Imagens (${activeTab === 'login' ? 'Tela de Login' : 'Tela Inicial'})`}
           </button>
         </div>
+      </div>
+
+      {/* SELETOR DE ABAS: TELA INICIAL vs TELA DE LOGIN */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <button
+          type="button"
+          onClick={() => handleTabChange('dashboard')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'dashboard'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-2 ring-blue-400/40'
+              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-blue-400'
+          }`}
+        >
+          <LayoutDashboard className="h-4 w-4" />
+          <span>Tela Inicial</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+              activeTab === 'dashboard'
+                ? 'bg-white/20 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            {dashboardCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('login')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'login'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-500/25 ring-2 ring-purple-400/40'
+              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-purple-400'
+          }`}
+        >
+          <LogIn className="h-4 w-4" />
+          <span>Tela de Login</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+              activeTab === 'login'
+                ? 'bg-white/20 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            {loginCount}
+          </span>
+        </button>
+
+        {activeTab === 'login' && announcements.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowLivePreview((prev) => !prev)}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition cursor-pointer"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            <span>{showLivePreview ? 'Ocultar Pré-visualização' : 'Pré-visualizar na Tela de Login'}</span>
+          </button>
+        )}
       </div>
 
       {message && (
@@ -239,32 +335,61 @@ export function AnnouncementsAdminPage() {
       )}
 
       {/* Regra de Comportamento Card */}
-      <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/60 text-xs text-blue-950 dark:text-blue-200 space-y-1">
-        <div className="font-bold flex items-center gap-1.5">
-          <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          Regra de Exibição na Tela Inicial:
+      {activeTab === 'dashboard' ? (
+        <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/60 text-xs text-blue-950 dark:text-blue-200 space-y-1">
+          <div className="font-bold flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            Regra de Exibição na Tela Inicial:
+          </div>
+          <p>
+            • As imagens passam automaticamente a cada <strong>3 segundos</strong>.
+          </p>
+          <p>
+            • Se o usuário posicionar o mouse em cima da imagem, a rotação é <strong>pausada</strong> mantendo a imagem visível.
+          </p>
+          <p>
+            • Ao retirar o cursor do mouse, a transição retoma o ciclo de 3 segundos.
+          </p>
         </div>
-        <p>
-          • As imagens passam automaticamente a cada <strong>3 segundos</strong>.
-        </p>
-        <p>
-          • Se o usuário posicionar o mouse em cima da imagem, a rotação é <strong>pausada</strong>{' '}
-          mantendo a imagem visível.
-        </p>
-        <p>
-          • Ao retirar o cursor do mouse, a transição retoma o ciclo normal de{' '}
-          <strong>3 segundos</strong>.
-        </p>
-      </div>
+      ) : (
+        <div className="p-4 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-900/60 text-xs text-purple-950 dark:text-purple-200 space-y-1">
+          <div className="font-bold flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            Regra de Exibição na Tela de Login:
+          </div>
+          <p>
+            • As imagens passam automaticamente a cada <strong>8 segundos</strong> (conforme configurado).
+          </p>
+          <p>
+            • Ficam em destaque no painel lateral esquerdo da página de login para todos os visitantes e operadores.
+          </p>
+          <p>
+            • Se o usuário posicionar o cursor sobre a imagem, a rotação é <strong>pausada</strong>.
+          </p>
+        </div>
+      )}
+
+      {/* PRÉ-VISUALIZAÇÃO AO VIVO (TELA DE LOGIN) */}
+      {activeTab === 'login' && showLivePreview && announcements.length > 0 && (
+        <div className="rounded-2xl border-2 border-purple-300 dark:border-purple-800 bg-slate-900 p-6 space-y-3">
+          <div className="flex items-center justify-between text-xs text-purple-300 font-bold">
+            <span>Pré-visualização da Tela de Login (Rotação a cada 8 segundos):</span>
+            <span className="text-[11px] font-normal text-slate-400">Dimensões reais de exibição</span>
+          </div>
+          <div className="h-[360px] w-full max-w-2xl mx-auto">
+            <LoginAnnouncementCarousel />
+          </div>
+        </div>
+      )}
 
       {/* Lista de Imagens de Anúncio */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            Banners Ativos ({announcements.length})
+            {activeTab === 'login' ? 'Banners da Tela de Login' : 'Banners da Tela Inicial'} ({announcements.length})
           </h2>
           <span className="text-xs text-slate-500">
-            Você pode importar várias imagens de uma vez (ex: 6 imagens)
+            Você pode importar várias imagens de uma vez (JPG, PNG, GIF, WebP)
           </span>
         </div>
 
@@ -280,10 +405,12 @@ export function AnnouncementsAdminPage() {
           >
             <Upload className="h-10 w-10 text-slate-400 mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
-              Nenhuma imagem de anúncio importada ainda
+              {activeTab === 'login'
+                ? 'Nenhuma imagem cadastrada para a Tela de Login ainda'
+                : 'Nenhuma imagem de anúncio importada para a Tela Inicial ainda'}
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Clique aqui para selecionar e importar imagens ou animações (GIF, JPG, PNG, WebP)
+              Clique aqui para selecionar e importar imagens para {activeTab === 'login' ? 'a Tela de Login' : 'a Tela Inicial'}
             </p>
           </div>
         ) : (
@@ -337,7 +464,7 @@ export function AnnouncementsAdminPage() {
                         disabled={idx === 0}
                         onClick={() => void handleMove(idx, 'up')}
                         title="Mover para antes"
-                        className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                        className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
                       >
                         <MoveUp className="h-3.5 w-3.5" />
                       </button>
@@ -346,7 +473,7 @@ export function AnnouncementsAdminPage() {
                         disabled={idx === announcements.length - 1}
                         onClick={() => void handleMove(idx, 'down')}
                         title="Mover para depois"
-                        className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                        className="p-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
                       >
                         <MoveDown className="h-3.5 w-3.5" />
                       </button>
@@ -354,7 +481,7 @@ export function AnnouncementsAdminPage() {
                         type="button"
                         onClick={() => void handleDelete(ann.id)}
                         title="Excluir banner"
-                        className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                        className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -400,7 +527,7 @@ export function AnnouncementsAdminPage() {
                           rows={2}
                           value={ann.summary || ''}
                           onChange={(e) => handleFieldChange(ann.id, 'summary', e.target.value)}
-                          placeholder="Digite aqui o texto que será exibido no rodapé do banner..."
+                          placeholder="Texto que será exibido no rodapé do banner..."
                           className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
                         />
                       </div>
@@ -414,7 +541,7 @@ export function AnnouncementsAdminPage() {
                         type="button"
                         disabled={isSaving}
                         onClick={() => void handleSaveBanner(ann)}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs font-bold text-white transition shadow-2xs disabled:opacity-50 ml-auto"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs font-bold text-white transition shadow-2xs disabled:opacity-50 ml-auto cursor-pointer"
                       >
                         <Save className="h-3.5 w-3.5" />
                         {isSaving ? 'Salvando...' : 'Salvar Alterações'}

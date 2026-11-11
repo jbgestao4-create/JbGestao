@@ -24,6 +24,7 @@ import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { SystemMaintenanceScreen } from '@shared/components/SystemMaintenanceScreen'
+import { LoginAnnouncementCarousel } from '@shared/components/LoginAnnouncementCarousel'
 
 export function LoginPage() {
   const { signIn, signOut } = useAuth()
@@ -42,6 +43,7 @@ export function LoginPage() {
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
   const [maintenanceMessage, setMaintenanceMessage] = useState('')
   const [isFullMaintenanceBlocked, setIsFullMaintenanceBlocked] = useState(false)
+  const [hasLoginAnnouncements, setHasLoginAnnouncements] = useState(false)
 
   useEffect(() => {
     // Sempre que acessar a tela de login do zero, limpa qualquer dispensa anterior de alertas de boletos
@@ -144,87 +146,100 @@ export function LoginPage() {
 
         <div className="relative">
           <BrandLogo dark />
-
-          <div className="mt-16 max-w-lg">
-            <p className="mb-5 text-sm font-semibold uppercase text-blue-300">Gestão empresarial</p>
-            <h1 className="text-4xl font-semibold leading-tight">
-              Gestão inteligente para o seu negócio.
-            </h1>
-            <p className="mt-5 max-w-md text-base leading-7 text-slate-300">
-              Tenha mais clareza sobre a operação e tome decisões com confiança, em um só lugar.
-            </p>
-          </div>
-
-          <ul className="mt-8 grid grid-cols-2 gap-x-4 gap-y-4">
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <CircleDollarSign aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Controle Financeiro
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <FileText aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Ordem de Serviço e Orçamentos
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <ShoppingCart aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Vendas Rápidas e Vendas PDV
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Relatório Financeiros e Gerencial
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <Calculator aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Controle Geral do Caixa
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <Users aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Controle de acesso de funcionários
-            </li>
-            <li className="col-span-2 flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <ReceiptText aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Emissão de nota fiscal NFC e NFC-e
-            </li>
-          </ul>
-          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-300">
-            <span className="inline-flex items-center gap-2">
-              <Check aria-hidden="true" className="h-5 w-5 text-emerald-500" />
-              Sem taxa de implantação
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <Check aria-hidden="true" className="h-5 w-5 text-emerald-500" />
-              Sem taxa de cancelamento
-            </span>
-          </div>
-          <div className="mt-6 max-w-md rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4">
-            <p className="text-sm font-semibold text-white">1 mês grátis para sua empresa</p>
-            <p className="mt-1 text-sm leading-6 text-slate-300">
-              Clientes podem solicitar 1 mês grátis de utilização.
-            </p>
-            <a
-              href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20Gostaria%20de%20solicitar%201%20m%C3%AAs%20gr%C3%A1tis%20de%20utiliza%C3%A7%C3%A3o."
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
-            >
-              <MessageCircle aria-hidden="true" className="h-4 w-4" />
-              Fale pelo WhatsApp
-            </a>
-          </div>
         </div>
+
+        {hasLoginAnnouncements ? (
+          <div className="relative my-auto flex h-[520px] w-full max-w-xl flex-col items-center justify-center py-4">
+            <LoginAnnouncementCarousel onStatusChange={setHasLoginAnnouncements} />
+          </div>
+        ) : (
+          <>
+            <div className="hidden">
+              <LoginAnnouncementCarousel onStatusChange={setHasLoginAnnouncements} />
+            </div>
+            <div className="relative my-auto py-8">
+              <div className="max-w-lg">
+                <p className="mb-5 text-sm font-semibold uppercase text-blue-300">Gestão empresarial</p>
+                <h1 className="text-4xl font-semibold leading-tight">
+                  Gestão inteligente para o seu negócio.
+                </h1>
+                <p className="mt-5 max-w-md text-base leading-7 text-slate-300">
+                  Tenha mais clareza sobre a operação e tome decisões com confiança, em um só lugar.
+                </p>
+              </div>
+
+              <ul className="mt-8 grid grid-cols-2 gap-x-4 gap-y-4">
+                <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                    <CircleDollarSign aria-hidden="true" className="h-5 w-5" />
+                  </span>
+                  Controle Financeiro
+                </li>
+                <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                    <FileText aria-hidden="true" className="h-5 w-5" />
+                  </span>
+                  Ordem de Serviço e Orçamentos
+                </li>
+                <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                    <ShoppingCart aria-hidden="true" className="h-5 w-5" />
+                  </span>
+                  Vendas Rápidas e Vendas PDV
+                </li>
+                <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                    <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5" />
+                  </span>
+                  Relatório Financeiros e Gerencial
+                </li>
+                <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                    <Calculator aria-hidden="true" className="h-5 w-5" />
+                  </span>
+                  Controle Geral do Caixa
+                </li>
+                <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                    <Users aria-hidden="true" className="h-5 w-5" />
+                  </span>
+                  Controle de acesso de funcionários
+                </li>
+                <li className="col-span-2 flex items-center gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
+                    <ReceiptText aria-hidden="true" className="h-5 w-5" />
+                  </span>
+                  Emissão de nota fiscal NFC e NFC-e
+                </li>
+              </ul>
+              <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-300">
+                <span className="inline-flex items-center gap-2">
+                  <Check aria-hidden="true" className="h-5 w-5 text-emerald-500" />
+                  Sem taxa de implantação
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Check aria-hidden="true" className="h-5 w-5 text-emerald-500" />
+                  Sem taxa de cancelamento
+                </span>
+              </div>
+              <div className="mt-6 max-w-md rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4">
+                <p className="text-sm font-semibold text-white">1 mês grátis para sua empresa</p>
+                <p className="mt-1 text-sm leading-6 text-slate-300">
+                  Clientes podem solicitar 1 mês grátis de utilização.
+                </p>
+                <a
+                  href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20Gostaria%20de%20solicitar%201%20m%C3%AAs%20gr%C3%A1tis%20de%20utiliza%C3%A7%C3%A3o."
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+                >
+                  <MessageCircle aria-hidden="true" className="h-4 w-4" />
+                  Fale pelo WhatsApp
+                </a>
+              </div>
+            </div>
+          </>
+        )}
 
         <p className="relative text-xs text-slate-400">ControleSoft</p>
       </section>
