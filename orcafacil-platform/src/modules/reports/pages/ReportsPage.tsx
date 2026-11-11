@@ -14,10 +14,14 @@ import {
 import { formatCurrency } from '@shared/utils/monetary'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
+import { Button } from '@shared/components/ui/Button'
 import {
   Briefcase,
   Building2,
   Calendar,
+  ChevronRight,
+  FileBarChart,
+  RefreshCw,
   Search,
   ShieldCheck,
   Truck,
@@ -28,6 +32,7 @@ import { ReportPrintHeader } from '../components/ReportPrintHeader'
 import { ReportPrintFooter } from '../components/ReportPrintFooter'
 import { ReportActionBar } from '../components/ReportActionBar'
 
+type ReportView = 'home' | 'registrations'
 type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
 
 const PERIOD_LABELS: Record<ReportPeriodPreset, string> = {
@@ -43,6 +48,10 @@ const PERIOD_LABELS: Record<ReportPeriodPreset, string> = {
 export function ReportsPage() {
   const { currentOrganization } = useOrganization()
   const [searchParams, setSearchParams] = useSearchParams()
+
+  const rawView = searchParams.get('view')
+  const currentView: ReportView =
+    rawView === 'registrations' || rawView === 'cadastros' ? 'registrations' : 'home'
 
   const rawTab = searchParams.get('tab')
   const initialTab: RegistrationsTab =
@@ -100,6 +109,13 @@ export function ReportsPage() {
     void loadData()
   }, [loadData])
 
+  const navigateToView = (view: ReportView, tab?: RegistrationsTab) => {
+    const next: Record<string, string> = { view }
+    if (tab) next.tab = tab
+    setSearchParams(next)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const handleTabChange = (tab: RegistrationsTab) => {
     setRegistrationsTab(tab)
     setSearchParams((prev) => {
@@ -109,7 +125,7 @@ export function ReportsPage() {
     })
   }
 
-  // Estatísticas gerais
+  // Estatísticas analíticas
   const registrationsAnalytics = useMemo(() => {
     return reportsService.computeRegistrationsAnalytics(dataset)
   }, [dataset])
@@ -491,40 +507,586 @@ export function ReportsPage() {
     </div>
   )
 
+  // ============================================================================
+  // VIEW: RELATÓRIO GERAL DE CADASTROS (DETALHADO)
+  // ============================================================================
+  if (currentView === 'registrations') {
+    return (
+      <div className="space-y-6">
+        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO (PRINT MEDIA) */}
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatório Geral de Cadastros"
+          moduleTitle={activeTabTitle}
+          totalRecords={activeTabRecordsCount}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={PERIOD_LABELS[dateFilter.preset]}
+          periodRange={periodRangeText}
+        />
+
+        {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR / ATUALIZAR */}
+        <ReportActionBar
+          title="Relatório Geral de Cadastros"
+          badgeText="Cadastros & Equipe"
+          badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+          description="Auditoria cadastral completa de usuários do sistema, equipe de funcionários, fornecedores homologados e carteira de clientes."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportExcel}
+          onExportXml={handleExportXml}
+          onPrint={() => window.print()}
+          onRefresh={() => void loadData()}
+          isRefreshing={isLoading}
+          disableExport={activeTabRecordsCount === 0}
+        />
+
+        {renderPeriodToolbar()}
+
+        {/* 4 CARDS DE KPIS */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Usuários do Sistema</span>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-0.5">
+                  {registrationsAnalytics.totalUsers}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {registrationsAnalytics.adminUsersCount} Admins • {registrationsAnalytics.standardUsersCount} Membros
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
+                <Briefcase className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Funcionários &amp; Equipe</span>
+                <h3 className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                  {registrationsAnalytics.employeesCount}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {registrationsAnalytics.employeesWithJobTitleCount} com cargo atribuído
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400">
+                <Truck className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Fornecedores Homologados</span>
+                <h3 className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                  {registrationsAnalytics.totalSuppliers}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {registrationsAnalytics.suppliersWithCnpjCount} com CNPJ cadastrado
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Carteira de Clientes</span>
+                <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {registrationsAnalytics.totalCustomers}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {registrationsAnalytics.individualCustomersCount} PF • {registrationsAnalytics.companyCustomersCount} PJ
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* SELETOR DE SUB-ABAS (USUÁRIOS / FUNCIONÁRIOS / FORNECEDORES / CLIENTES) E CAMPO DE BUSCA */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 dark:border-slate-800 pb-3 print:hidden">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+            <button
+              type="button"
+              onClick={() => handleTabChange('users')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                registrationsTab === 'users'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              <span>Usuários do Sistema</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'users' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
+                {filteredUsers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange('employees')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                registrationsTab === 'employees'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Briefcase className="h-4 w-4" />
+              <span>Funcionários &amp; Equipe</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'employees' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
+                {filteredEmployees.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange('suppliers')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                registrationsTab === 'suppliers'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Truck className="h-4 w-4" />
+              <span>Fornecedores</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'suppliers' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
+                {filteredSuppliers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange('customers')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                registrationsTab === 'customers'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>Clientes</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'customers' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
+                {filteredCustomers.length}
+              </span>
+            </button>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar no cadastro..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+            />
+          </div>
+        </div>
+
+        {/* ÁREA DE FICHAS CADASTRAIS */}
+        <div className="space-y-4">
+          {registrationsTab === 'users' && (
+            <div className="space-y-4">
+              {filteredUsers.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+                  Nenhum usuário encontrado com os filtros selecionados.
+                </div>
+              ) : (
+                filteredUsers.map((u) => (
+                  <div
+                    key={u.userId}
+                    className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
+                  >
+                    <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 font-bold text-sm">
+                          {u.displayName.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                            {u.displayName}
+                          </h4>
+                          <span className="text-xs text-slate-500 font-mono">{u.email}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${
+                            u.role === 'admin' || u.role === 'owner'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {u.role === 'admin' ? 'Administrador' : u.role === 'owner' ? 'Proprietário' : 'Membro'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Cargo / Função</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {u.jobTitle || 'Não especificado'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {u.phone ? formatPhoneNumber(u.phone) : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Último Acesso</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {u.lastAccessAt ? new Date(u.lastAccessAt).toLocaleString('pt-BR') : 'Sem registros'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {registrationsTab === 'employees' && (
+            <div className="space-y-4">
+              {filteredEmployees.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+                  Nenhum funcionário encontrado.
+                </div>
+              ) : (
+                filteredEmployees.map((e) => (
+                  <div
+                    key={e.userId}
+                    className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
+                  >
+                    <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 font-bold text-sm">
+                          <Briefcase className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                            {e.displayName}
+                          </h4>
+                          <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold">
+                            Cargo: {e.jobTitle || 'Colaborador da Empresa'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        Equipe Ativa
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail Corporativo</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
+                          {e.email}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Contato Telefônico</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {e.phone ? formatPhoneNumber(e.phone) : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Nível de Permissão</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {e.role === 'admin' ? 'Administrador' : 'Membro Operacional'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Admissão / Cadastro</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {e.createdAt ? new Date(e.createdAt).toLocaleDateString('pt-BR') : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {e.dashboardModules && e.dashboardModules.length > 0 && (
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs">
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                          Módulos Liberados no Acesso ({e.dashboardModules.length})
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {e.dashboardModules.map((m) => (
+                            <span
+                              key={m}
+                              className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded text-[10px] font-semibold"
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {registrationsTab === 'suppliers' && (
+            <div className="space-y-4">
+              {filteredSuppliers.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+                  Nenhum fornecedor cadastrado.
+                </div>
+              ) : (
+                filteredSuppliers.map((s) => {
+                  const billInfo = supplierBillsMap.get(s.name.trim().toLowerCase())
+                  return (
+                    <div
+                      key={s.id}
+                      className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
+                    >
+                      <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-bold text-sm">
+                            <Truck className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                              {s.name}
+                            </h4>
+                            <span className="text-xs text-slate-500 font-mono">
+                              CNPJ/CPF: {s.document || 'Não informado'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase block">Despesas Vinculadas</span>
+                          <span className="text-xs font-bold text-purple-700 dark:text-purple-400">
+                            {billInfo ? `${billInfo.count} contas (${formatCurrency(billInfo.total.toFixed(2))})` : 'Nenhuma conta'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Contato / Responsável</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {s.contactName || '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {s.phone ? formatPhoneNumber(s.phone) : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
+                            {s.email || '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—'}
+                          </span>
+                        </div>
+                        {s.address && (
+                          <div className="col-span-2 sm:col-span-4 pt-1">
+                            <span className="block text-[10px] font-bold text-slate-500 uppercase">Endereço Completo</span>
+                            <span className="text-slate-700 dark:text-slate-300">{s.address}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+
+          {registrationsTab === 'customers' && (
+            <div className="space-y-4">
+              {filteredCustomers.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+                  Nenhum cliente cadastrado.
+                </div>
+              ) : (
+                filteredCustomers.map((c) => {
+                  const metrics = customerMetricsMap.get(c.id)
+                  return (
+                    <div
+                      key={c.id}
+                      className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
+                    >
+                      <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 font-bold text-sm">
+                            <Users className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                              {c.name}
+                            </h4>
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                              <span className="font-semibold uppercase text-emerald-700 dark:text-emerald-400">
+                                {c.personType === 'company' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+                              </span>
+                              <span>•</span>
+                              <span className="font-mono">{c.document || 'Sem documento'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase block">Total em Compras</span>
+                          <span className="text-sm font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                            {formatCurrency((metrics?.totalSpent || 0).toFixed(2))}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {metrics?.salesCount || 0} faturamentos
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone / WhatsApp</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {c.phone ? formatPhoneNumber(c.phone) : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono truncate block">
+                            {c.email || '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Situação Cadastral</span>
+                          <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                            <UserCheck className="h-3.5 w-3.5" />
+                            Ativo
+                          </span>
+                        </div>
+
+                        {c.address && (
+                          <div className="col-span-2 sm:col-span-4 pt-1">
+                            <span className="block text-[10px] font-bold text-slate-500 uppercase">Endereço</span>
+                            <span className="text-slate-700 dark:text-slate-300">{c.address}</span>
+                          </div>
+                        )}
+
+                        {c.notes && (
+                          <div className="col-span-2 sm:col-span-4 pt-1">
+                            <span className="block text-[10px] font-bold text-slate-500 uppercase">Observações</span>
+                            <span className="text-slate-600 dark:text-slate-400">{c.notes}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          documentType="Documento Oficial de Auditoria Cadastral"
+        />
+      </div>
+    )
+  }
+
+  // ============================================================================
+  // VIEW PRINCIPAL (HOME): CENTRAL DE RELATÓRIOS (CATÁLOGO DE MÓDULOS)
+  // ============================================================================
   return (
     <div className="space-y-6">
-      {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO (PRINT MEDIA) */}
-      <ReportPrintHeader
-        organizationName={currentOrganization?.name}
-        organizationLogoUrl={currentOrganization?.logoUrl}
-        reportTitle="Relatório Geral de Cadastros"
-        moduleTitle={activeTabTitle}
-        totalRecords={activeTabRecordsCount}
-        emissionWeekday={emissionWeekday}
-        emissionDate={emissionDate}
-        emissionTime={emissionTime}
-        periodLabel={PERIOD_LABELS[dateFilter.preset]}
-        periodRange={periodRangeText}
-      />
+      {/* CABEÇALHO */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+              Central de Relatórios &amp; Inteligência Operacional
+            </h1>
+            <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:text-blue-300 ring-1 ring-blue-600/20">
+              MOD-08
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+            Painéis e demonstrativos gerenciais oficiais com exportação para Excel (CSV), XML e impressão profissional.
+          </p>
+        </div>
 
-      {/* CABEÇALHO PADRÃO EM TELA COM BOTÕES EXCEL / XML / IMPRIMIR / ATUALIZAR */}
-      <ReportActionBar
-        title="Relatório Geral de Cadastros"
-        badgeText="Cadastros & Equipe"
-        badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
-        description="Auditoria cadastral completa de usuários do sistema, equipe de funcionários, fornecedores homologados e carteira de clientes."
-        onExportExcel={handleExportExcel}
-        onExportXml={handleExportXml}
-        onPrint={() => window.print()}
-        onRefresh={() => void loadData()}
-        isRefreshing={isLoading}
-        disableExport={activeTabRecordsCount === 0}
-      />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void loadData()}
+          disabled={isLoading}
+          className="rounded-xl flex items-center gap-1.5 text-xs font-semibold self-start sm:self-auto"
+        >
+          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <span>Atualizar Indicadores</span>
+        </Button>
+      </div>
+
+      {/* NAVEGAÇÃO RÁPIDA POR ABAS */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-gray-200 dark:border-slate-800 print:hidden">
+        <button
+          type="button"
+          onClick={() => navigateToView('home')}
+          className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold whitespace-nowrap bg-blue-600 text-white shadow-xs"
+        >
+          <FileBarChart className="h-4 w-4 text-white" />
+          <span>Visão Geral</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigateToView('registrations')}
+          className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold whitespace-nowrap text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:text-white transition-all"
+        >
+          <Users className="h-4 w-4 text-gray-500" />
+          <span>Relatório Geral de Cadastros</span>
+          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
+            NOVO
+          </span>
+        </button>
+      </div>
 
       {renderPeriodToolbar()}
 
-      {/* 4 CARDS DE KPIS */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
+      {/* CARDS RESUMO DOS CADASTROS */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs">
           <CardContent className="p-5 flex items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
@@ -594,417 +1156,61 @@ export function ReportsPage() {
         </Card>
       </div>
 
-      {/* SELETOR DE SUB-ABAS (USUÁRIOS / FUNCIONÁRIOS / FORNECEDORES / CLIENTES) E CAMPO DE BUSCA */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 dark:border-slate-800 pb-3 print:hidden">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-          <button
-            type="button"
-            onClick={() => handleTabChange('users')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
-              registrationsTab === 'users'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-            }`}
-          >
-            <ShieldCheck className="h-4 w-4" />
-            <span>Usuários do Sistema</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'users' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
-              {filteredUsers.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('employees')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
-              registrationsTab === 'employees'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-            }`}
-          >
-            <Briefcase className="h-4 w-4" />
-            <span>Funcionários &amp; Equipe</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'employees' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
-              {filteredEmployees.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('suppliers')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
-              registrationsTab === 'suppliers'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-            }`}
-          >
-            <Truck className="h-4 w-4" />
-            <span>Fornecedores</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'suppliers' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
-              {filteredSuppliers.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('customers')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
-              registrationsTab === 'customers'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-            }`}
-          >
-            <Users className="h-4 w-4" />
-            <span>Clientes</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${registrationsTab === 'customers' ? 'bg-white/20' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
-              {filteredCustomers.length}
-            </span>
-          </button>
+      {/* CATÁLOGO DE MÓDULOS DE RELATÓRIO DISPONÍVEIS */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+            Módulo de Relatório
+          </h2>
+          <span className="text-xs text-gray-400">
+            Selecione o módulo para visualizar e exportar
+          </span>
         </div>
 
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar no cadastro..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {/* MÓDULO EXCLUSIVO: RELATÓRIO GERAL DE CADASTROS */}
+          <Card className="group relative overflow-hidden rounded-2xl border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+            <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-700 dark:text-blue-300">
+                    <UserCheck className="h-6 w-6" />
+                  </div>
+                  <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-800 dark:text-blue-300">
+                    CADASTROS &amp; EQUIPE
+                  </span>
+                </div>
+                <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
+                  RELATÓRIO GERAL DE CADASTROS
+                </h3>
+                <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
+                  Painel analítico e auditoria de cadastros: usuários de acesso, funcionários com atribuição de cargos, fornecedores parceiros e carteira completa de clientes.
+                </p>
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                  <span>Usuários: <b>{registrationsAnalytics.totalUsers}</b></span>
+                  <span>Funcionários: <b>{registrationsAnalytics.employeesCount}</b></span>
+                  <span>Fornecedores: <b>{registrationsAnalytics.totalSuppliers}</b></span>
+                  <span>Clientes: <b>{registrationsAnalytics.totalCustomers}</b></span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  size="sm"
+                  onClick={() => navigateToView('registrations')}
+                  className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <UserCheck className="h-4 w-4" />
+                    Abrir Relatório de Cadastros
+                  </span>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-
-      {/* ÁREA DE RELATÓRIO / FICHAS CADASTRAIS (EXIBIÇÃO NA TELA E NA IMPRESSÃO) */}
-      <div className="space-y-4">
-        {/* ABA: USUÁRIOS */}
-        {registrationsTab === 'users' && (
-          <div className="space-y-4">
-            {filteredUsers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
-                Nenhum usuário encontrado com os filtros selecionados.
-              </div>
-            ) : (
-              filteredUsers.map((u) => (
-                <div
-                  key={u.userId}
-                  className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                >
-                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 font-bold text-sm">
-                        {u.displayName.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                          {u.displayName}
-                        </h4>
-                        <span className="text-xs text-slate-500 font-mono">{u.email}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${
-                          u.role === 'admin' || u.role === 'owner'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {u.role === 'admin' ? 'Administrador' : u.role === 'owner' ? 'Proprietário' : 'Membro'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Cargo / Função</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {u.jobTitle || 'Não especificado'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {u.phone ? formatPhoneNumber(u.phone) : '—'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Último Acesso</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {u.lastAccessAt ? new Date(u.lastAccessAt).toLocaleString('pt-BR') : 'Sem registros'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* ABA: FUNCIONÁRIOS */}
-        {registrationsTab === 'employees' && (
-          <div className="space-y-4">
-            {filteredEmployees.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
-                Nenhum funcionário encontrado.
-              </div>
-            ) : (
-              filteredEmployees.map((e) => (
-                <div
-                  key={e.userId}
-                  className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                >
-                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 font-bold text-sm">
-                        <Briefcase className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                          {e.displayName}
-                        </h4>
-                        <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold">
-                          Cargo: {e.jobTitle || 'Colaborador da Empresa'}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-emerald-50 text-emerald-800 border border-emerald-200">
-                      Equipe Ativa
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail Corporativo</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
-                        {e.email}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Contato Telefônico</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {e.phone ? formatPhoneNumber(e.phone) : '—'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Nível de Permissão</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {e.role === 'admin' ? 'Administrador' : 'Membro Operacional'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Admissão / Cadastro</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        {e.createdAt ? new Date(e.createdAt).toLocaleDateString('pt-BR') : '—'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {e.dashboardModules && e.dashboardModules.length > 0 && (
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs">
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                        Módulos Liberados no Acesso ({e.dashboardModules.length})
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {e.dashboardModules.map((m) => (
-                          <span
-                            key={m}
-                            className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded text-[10px] font-semibold"
-                          >
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* ABA: FORNECEDORES */}
-        {registrationsTab === 'suppliers' && (
-          <div className="space-y-4">
-            {filteredSuppliers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
-                Nenhum fornecedor cadastrado.
-              </div>
-            ) : (
-              filteredSuppliers.map((s) => {
-                const billInfo = supplierBillsMap.get(s.name.trim().toLowerCase())
-                return (
-                  <div
-                    key={s.id}
-                    className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                  >
-                    <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-bold text-sm">
-                          <Truck className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                            {s.name}
-                          </h4>
-                          <span className="text-xs text-slate-500 font-mono">
-                            CNPJ/CPF: {s.document || 'Não informado'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Despesas Vinculadas</span>
-                        <span className="text-xs font-bold text-purple-700 dark:text-purple-400">
-                          {billInfo ? `${billInfo.count} contas (${formatCurrency(billInfo.total.toFixed(2))})` : 'Nenhuma conta'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Contato / Responsável</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {s.contactName || '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {s.phone ? formatPhoneNumber(s.phone) : '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
-                          {s.email || '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—'}
-                        </span>
-                      </div>
-                      {s.address && (
-                        <div className="col-span-2 sm:col-span-4 pt-1">
-                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Endereço Completo</span>
-                          <span className="text-slate-700 dark:text-slate-300">{s.address}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        )}
-
-        {/* ABA: CLIENTES */}
-        {registrationsTab === 'customers' && (
-          <div className="space-y-4">
-            {filteredCustomers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
-                Nenhum cliente cadastrado.
-              </div>
-            ) : (
-              filteredCustomers.map((c) => {
-                const metrics = customerMetricsMap.get(c.id)
-                return (
-                  <div
-                    key={c.id}
-                    className="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs break-inside-avoid print:border-slate-400 print:shadow-none print:p-4 print:mb-4"
-                  >
-                    <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 font-bold text-sm">
-                          <Users className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                            {c.name}
-                          </h4>
-                          <div className="flex items-center gap-2 text-xs text-slate-500">
-                            <span className="font-semibold uppercase text-emerald-700 dark:text-emerald-400">
-                              {c.personType === 'company' ? 'Pessoa Jurídica' : 'Pessoa Física'}
-                            </span>
-                            <span>•</span>
-                            <span className="font-mono">{c.document || 'Sem documento'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Total em Compras</span>
-                        <span className="text-sm font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                          {formatCurrency((metrics?.totalSpent || 0).toFixed(2))}
-                        </span>
-                        <span className="text-[10px] text-slate-400 block">
-                          {metrics?.salesCount || 0} faturamentos
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Telefone / WhatsApp</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {c.phone ? formatPhoneNumber(c.phone) : '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">E-mail</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono truncate block">
-                          {c.email || '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cadastro</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase">Situação Cadastral</span>
-                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
-                          <UserCheck className="h-3.5 w-3.5" />
-                          Ativo
-                        </span>
-                      </div>
-
-                      {c.address && (
-                        <div className="col-span-2 sm:col-span-4 pt-1">
-                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Endereço</span>
-                          <span className="text-slate-700 dark:text-slate-300">{c.address}</span>
-                        </div>
-                      )}
-
-                      {c.notes && (
-                        <div className="col-span-2 sm:col-span-4 pt-1">
-                          <span className="block text-[10px] font-bold text-slate-500 uppercase">Observações</span>
-                          <span className="text-slate-600 dark:text-slate-400">{c.notes}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
-      <ReportPrintFooter
-        emissionWeekday={emissionWeekday}
-        emissionDate={emissionDate}
-        emissionTime={emissionTime}
-        documentType="Documento Oficial de Auditoria Cadastral"
-      />
     </div>
   )
 }
