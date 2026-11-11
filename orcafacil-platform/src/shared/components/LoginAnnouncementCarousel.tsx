@@ -216,63 +216,36 @@ export function LoginAnnouncementCarousel({
         </>
       )}
 
-      {/* Rodapé: Legenda, resumo, barra de tempo e bolinhas indicadoras */}
-      <div
-        className={`relative z-30 flex flex-col gap-3.5 ${
-          isFullscreen ? 'p-8 xl:p-10' : 'p-6'
-        }`}
-      >
-        {(current.title || current.summary) && (
-          <div
-            className={`max-w-xl space-y-1.5 ${
-              current.linkUrl ? 'cursor-pointer hover:opacity-95' : ''
-            }`}
-            onClick={handleBannerClick}
-          >
-            {current.title && (
-              <h2 className="text-2xl font-bold tracking-tight text-white drop-shadow-lg">
-                {current.title}
-              </h2>
-            )}
-            {current.summary && (
-              <p className="text-sm text-slate-200 line-clamp-2 leading-relaxed drop-shadow-md font-medium">
-                {current.summary}
-              </p>
-            )}
+      {/* Rodapé: Paginação e barra de tempo (apenas quando houver mais de 1 anúncio) */}
+      {announcements.length > 1 && (
+        <div
+          className={`relative z-30 flex items-center justify-between ${
+            isFullscreen ? 'p-8 xl:p-10' : 'p-6'
+          }`}
+        >
+          {/* Bolinhas / Barras de paginação */}
+          <div className="flex items-center gap-2">
+            {announcements.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setCurrentIndex(idx)}
+                className={`h-2.5 rounded-full transition-all cursor-pointer ${
+                  idx === currentIndex
+                    ? 'w-8 bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.7)]'
+                    : 'w-2.5 bg-white/40 hover:bg-white/70'
+                }`}
+                aria-label={`Ir para anúncio ${idx + 1}`}
+              />
+            ))}
           </div>
-        )}
 
-        {/* Indicadores de slides e progresso de 8 segundos */}
-        {announcements.length > 1 && (
-          <div className="flex items-center justify-between pt-2 border-t border-white/15">
-            {/* Bolinhas / Barras de paginação */}
-            <div className="flex items-center gap-2">
-              {announcements.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setCurrentIndex(idx)}
-                  className={`h-2.5 rounded-full transition-all cursor-pointer ${
-                    idx === currentIndex
-                      ? 'w-8 bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.7)]'
-                      : 'w-2.5 bg-white/40 hover:bg-white/70'
-                  }`}
-                  aria-label={`Ir para anúncio ${idx + 1}`}
-                />
-              ))}
-            </div>
-
-            {/* Marcador de tempo (8s) */}
-            <span className="text-xs font-semibold text-slate-300 tracking-wider">
-              {isPaused ? 'Pausado' : 'Passa a cada 8s'}
-            </span>
-          </div>
-        )}
-
-        {isFullscreen && (
-          <p className="text-xs text-slate-400">ControleSoft — Potencialize a administração da sua empresa</p>
-        )}
-      </div>
+          {/* Marcador de tempo (8s) */}
+          <span className="text-xs font-semibold text-slate-300 tracking-wider">
+            {isPaused ? 'Pausado' : 'Passa a cada 8s'}
+          </span>
+        </div>
+      )}
     </div>
   )
 }
