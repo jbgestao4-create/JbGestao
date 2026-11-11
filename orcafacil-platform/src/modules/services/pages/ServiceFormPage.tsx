@@ -40,12 +40,19 @@ interface InventoryProductOption {
   quantity_on_hand: number
 }
 
+const FULL_FISCAL_ACCESS_PLAN_ID = '00000000-0000-4000-8000-000000000004'
+
 export function ServiceFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
   const { currentOrganization } = useOrganization()
   const { user, profile } = useAuth()
+
+  const hasFullFiscalAccessPlan =
+    currentOrganization?.accessPlanId === FULL_FISCAL_ACCESS_PLAN_ID ||
+    currentOrganization?.accessPlanName?.trim().toLowerCase() ===
+      'completo com emissão de nf-e e nfc-e'
 
   const [activeTab, setActiveTab] = useState<'general' | 'pricing' | 'materials' | 'fiscal'>('general')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -432,7 +439,9 @@ export function ServiceFormPage() {
           { id: 'general', label: '1. Informações Gerais', icon: Wrench },
           { id: 'pricing', label: '2. Precificação & Custos', icon: DollarSign },
           { id: 'materials', label: `3. Materiais Utilizados (${materials.length})`, icon: Package },
-          { id: 'fiscal', label: '4. Dados Fiscais (NFS-e)', icon: FileText },
+          ...(hasFullFiscalAccessPlan
+            ? [{ id: 'fiscal', label: '4. Dados Fiscais (NFS-e)', icon: FileText }]
+            : []),
         ].map((tab) => {
           const active = activeTab === tab.id
           const Icon = tab.icon
@@ -893,7 +902,7 @@ export function ServiceFormPage() {
         )}
 
         {/* ABA 4: DADOS FISCAIS (NFS-e) */}
-        {activeTab === 'fiscal' && (
+        {hasFullFiscalAccessPlan && activeTab === 'fiscal' && (
           <div className="space-y-4">
             <Card className="rounded-2xl shadow-xs">
               <CardContent className="p-6 space-y-6">

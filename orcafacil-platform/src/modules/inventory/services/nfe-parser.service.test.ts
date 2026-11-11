@@ -18,7 +18,7 @@ describe('nfe-parser.service', () => {
     expect(result.series).toBe('1')
     expect(result.accessKey).toBe('52210237947783000125550010000074941624442880')
     expect(result.items.length).toBe(13)
-    expect(result.items[0].code).toBe('EZAL25DY-G')
+    expect(result.items[0].code).toBe('1')
     expect(result.items[0].name).toContain('Love your self')
     expect(result.items[0].quantity).toBe(4)
     expect(result.items[0].unitCost).toBe(7.5)
@@ -36,7 +36,7 @@ describe('nfe-parser.service', () => {
     expect(result.invoiceNumber).toBe('16008825')
     expect(result.accessKey).toBe('32221105570714000825550010160088251371149302')
     expect(result.items.length).toBe(1)
-    expect(result.items[0].code).toBe('114642')
+    expect(result.items[0].code).toBe('1')
     expect(result.items[0].name).toContain('WATER COOLER')
     expect(result.items[0].quantity).toBe(1)
     expect(result.items[0].unitCost).toBe(376.46)
@@ -54,7 +54,7 @@ describe('nfe-parser.service', () => {
     expect(result.series).toBe('2')
     expect(result.accessKey).toBe('42231009376495000122550020013557941487920358')
     expect(result.items.length).toBe(1)
-    expect(result.items[0].code).toBe('37157')
+    expect(result.items[0].code).toBe('1')
     expect(result.items[0].name).toContain('Cadeira Gamer')
     expect(result.items[0].quantity).toBe(1)
     expect(result.items[0].unitCost).toBe(637.9758)
@@ -86,6 +86,7 @@ describe('nfe-parser.service', () => {
           <det nItem="1">
             <prod>
               <cProd>SKU-TEST</cProd>
+              <cEAN>7891234567895</cEAN>
               <xProd>Produto Teste XML</xProd>
               <NCM>12345678</NCM>
               <uCom>UN</uCom>
@@ -109,7 +110,8 @@ describe('nfe-parser.service', () => {
     expect(result.supplier.document).toBe('12345678000199')
     expect(result.invoiceNumber).toBe('12345')
     expect(result.items.length).toBe(1)
-    expect(result.items[0].code).toBe('SKU-TEST')
+    expect(result.items[0].code).toBe('1')
+    expect(result.items[0].barcode).toBe('7891234567895')
     expect(result.items[0].name).toBe('Produto Teste XML')
     expect(result.items[0].quantity).toBe(10)
     expect(result.items[0].unitCost).toBe(25.5)

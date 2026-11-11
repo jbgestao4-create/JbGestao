@@ -144,6 +144,7 @@ export interface RecordMovementParams {
   attachmentUrl?: string | null
   attachmentName?: string | null
   moveToAccount?: boolean
+  deductFromPhysicalCash?: boolean
 }
 
 export interface CloseSessionParams {
@@ -456,6 +457,8 @@ export const cashSessionService = {
         .eq('organization_id', organizationId)
         .eq('status', 'open')
         .eq('session_type', 'cash_management')
+        .order('opened_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
       if (error) {
@@ -911,7 +914,7 @@ export const cashSessionService = {
           attachmentName: row.attachment_name ? String(row.attachment_name) : null,
           moveToAccount: Boolean(
             row.move_to_account ||
-            String(row.category || '').includes('Conta') ||
+            String(row.category || '').includes('Mover para Conta') ||
             String(row.reason || '').includes('[Transferido para Conta]') ||
             String(row.reason || '').includes('Mover para Conta')
           ),
@@ -955,7 +958,7 @@ export const cashSessionService = {
           attachmentName: row.attachment_name ? String(row.attachment_name) : null,
           moveToAccount: Boolean(
             row.move_to_account ||
-            String(row.category || '').includes('Conta') ||
+            String(row.category || '').includes('Mover para Conta') ||
             String(row.reason || '').includes('[Transferido para Conta]') ||
             String(row.reason || '').includes('Mover para Conta')
           ),
@@ -999,9 +1002,11 @@ export const cashSessionService = {
       let newEntriesCents = toCents(session.totalAdditionalEntries)
       let newWithdrawalsCents = toCents(session.totalWithdrawals)
 
+      const shouldUpdatePhysicalCash = params.deductFromPhysicalCash !== false
+
       if (params.type === 'supply') {
         newEntriesCents += movementCents
-      } else {
+      } else if (shouldUpdatePhysicalCash) {
         newWithdrawalsCents += movementCents
       }
 

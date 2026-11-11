@@ -633,7 +633,7 @@ export function ServiceOrdersListPage() {
                         )}
                       </td>
 
-                                            {/* Cliente */}
+                      {/* Cliente */}
                       <td className="px-3 py-3 align-top">
                         <div className="font-semibold text-gray-900 dark:text-white">
                           {o.customerName}
@@ -643,12 +643,6 @@ export function ServiceOrdersListPage() {
                             {o.customerPhone}
                           </div>
                         )}
-                        <div className="mt-1.5 flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/60 px-2 py-0.5 text-[11px] font-bold text-blue-800 dark:text-blue-300">
-                            <Wrench className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
-                            <span>{o.technicianName ? `Téc: ${o.technicianName}` : 'Sem técnico atribuído'}</span>
-                          </span>
-                        </div>
                       </td>
 
                       {/* Técnico Responsável */}

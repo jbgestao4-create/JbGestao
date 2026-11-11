@@ -14,6 +14,10 @@ export interface ParsedInvoiceSupplier {
 export interface ParsedInvoiceItem {
   id: string
   code: string
+  invoiceProductCode?: string
+  existingItemId?: string
+  existingQuantity?: number
+  barcode?: string
   name: string
   ncm?: string
   cfop?: string
@@ -27,6 +31,53 @@ export interface ParsedInvoiceItem {
   category?: string
   isPendingInfo: boolean
   pendingFields: string[]
+}
+
+function mergeDuplicateInvoiceItems(rawItems: ParsedInvoiceItem[]): ParsedInvoiceItem[] {
+  const merged: ParsedInvoiceItem[] = []
+
+  for (const item of rawItems) {
+    const normInvoiceCode = item.invoiceProductCode?.trim().toLowerCase() || ''
+    const normBarcode =
+      item.barcode && item.barcode.trim().toUpperCase() !== 'SEM GTIN'
+        ? item.barcode.trim()
+        : ''
+    const normName = item.name.trim().toLowerCase()
+
+    const existingIdx = merged.findIndex((m) => {
+      const mInvoiceCode = m.invoiceProductCode?.trim().toLowerCase() || ''
+      const mBarcode =
+        m.barcode && m.barcode.trim().toUpperCase() !== 'SEM GTIN' ? m.barcode.trim() : ''
+      const mName = m.name.trim().toLowerCase()
+
+      if (normInvoiceCode && mInvoiceCode && normInvoiceCode === mInvoiceCode) return true
+      if (normBarcode && mBarcode && normBarcode === mBarcode) return true
+      if (!normInvoiceCode && !mInvoiceCode && normName.length >= 2 && normName === mName) {
+        return true
+      }
+      return false
+    })
+
+    if (existingIdx !== -1) {
+      const target = merged[existingIdx]
+      const newQty = target.quantity + item.quantity
+      const newTotalCost = target.totalCost + item.totalCost
+      const newUnitCost = newQty > 0 ? Math.round((newTotalCost / newQty) * 100) / 100 : target.unitCost
+      merged[existingIdx] = {
+        ...target,
+        quantity: newQty,
+        unitCost: newUnitCost,
+        totalCost: newTotalCost,
+        suggestedSalePrice: Math.round(newUnitCost * 1.5 * 100) / 100,
+        barcode: target.barcode || item.barcode,
+        ncm: target.ncm || item.ncm,
+      }
+    } else {
+      merged.push({ ...item, code: String(merged.length + 1) })
+    }
+  }
+
+  return merged
 }
 
 export interface ParsedInvoiceData {
@@ -106,9 +157,17 @@ export async function parseNfeXml(xmlContent: string): Promise<ParsedInvoiceData
 
   // 3. Produtos
   const detNodes = Array.from(doc.querySelectorAll('det'))
-  const items: ParsedInvoiceItem[] = detNodes.map((det, index) => {
+  const rawItems: ParsedInvoiceItem[] = detNodes.map((det, index) => {
     const prod = det.querySelector('prod')
-    const cProd = prod?.querySelector('cProd')?.textContent?.trim() || `ITEM-${index + 1}`
+    const cProd = prod?.querySelector('cProd')?.textContent?.trim() || ''
+    const rawCEAN = prod?.querySelector('cEAN')?.textContent?.trim() || ''
+    const rawCEANTrib = prod?.querySelector('cEANTrib')?.textContent?.trim() || ''
+    const barcode =
+      rawCEAN && rawCEAN.toUpperCase() !== 'SEM GTIN'
+        ? rawCEAN
+        : rawCEANTrib && rawCEANTrib.toUpperCase() !== 'SEM GTIN'
+          ? rawCEANTrib
+          : ''
     const xProd = prod?.querySelector('xProd')?.textContent?.trim() || 'Produto sem descrição'
     const ncm = prod?.querySelector('NCM')?.textContent?.trim() || ''
     const cfop = prod?.querySelector('CFOP')?.textContent?.trim() || ''
@@ -124,7 +183,9 @@ export async function parseNfeXml(xmlContent: string): Promise<ParsedInvoiceData
 
     return {
       id: crypto.randomUUID ? crypto.randomUUID() : `item-${index + 1}`,
-      code: cProd,
+      code: String(index + 1),
+      invoiceProductCode: cProd || undefined,
+      barcode: barcode || undefined,
       name: xProd,
       ncm,
       cfop,
@@ -138,6 +199,8 @@ export async function parseNfeXml(xmlContent: string): Promise<ParsedInvoiceData
       pendingFields,
     }
   })
+
+  const items = mergeDuplicateInvoiceItems(rawItems)
 
   return {
     supplier: {
@@ -441,6 +504,7 @@ export async function parseNfePdf(pdfData: Uint8Array): Promise<ParsedInvoiceDat
 
       currentItem = {
         code,
+        invoiceProductCode: code || undefined,
         name,
         ncm,
         cfop,
@@ -470,6 +534,8 @@ export async function parseNfePdf(pdfData: Uint8Array): Promise<ParsedInvoiceDat
     items.push(finishItem(currentItem, items.length))
   }
 
+  const mergedItems = mergeDuplicateInvoiceItems(items)
+
   return {
     supplier: {
       name: supplierName,
@@ -482,9 +548,9 @@ export async function parseNfePdf(pdfData: Uint8Array): Promise<ParsedInvoiceDat
     series: series || '1',
     accessKey,
     issuedAt,
-    productsTotal: productsTotal || items.reduce((acc, i) => acc + i.totalCost, 0),
+    productsTotal: productsTotal || mergedItems.reduce((acc, i) => acc + i.totalCost, 0),
     invoiceTotal: invoiceTotal || productsTotal,
-    items,
+    items: mergedItems,
     rawFileType: 'pdf',
   }
 }
@@ -495,7 +561,9 @@ function finishItem(item: Partial<ParsedInvoiceItem>, index: number): ParsedInvo
 
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : `item-${index + 1}`,
-    code: item.code || `PROD-${index + 1}`,
+    code: String(index + 1),
+    invoiceProductCode: item.invoiceProductCode || item.code || undefined,
+    barcode: item.barcode,
     name: item.name || `Material da Nota #${index + 1}`,
     ncm: item.ncm,
     cfop: item.cfop,

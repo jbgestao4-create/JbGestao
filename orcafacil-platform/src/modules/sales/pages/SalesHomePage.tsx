@@ -34,7 +34,16 @@ export function SalesHomePage() {
   const canAccessQuickSale = canAccessSubFeature('MOD-01_QUICK_SALE')
   const canAccessPdv = canAccessSubFeature('MOD-01_PDV')
   const canAccessSearchSales = canAccessSubFeature('MOD-01_SEARCH')
-  const canAccessInvoices = canAccessSubFeature('MOD-01_INVOICES')
+  const FULL_FISCAL_ACCESS_PLAN_ID = '00000000-0000-4000-8000-000000000004'
+  const hasFullFiscalAccessPlan =
+    currentOrganization?.accessPlanId === FULL_FISCAL_ACCESS_PLAN_ID ||
+    Boolean(
+      currentOrganization?.accessPlanName &&
+        currentOrganization.accessPlanName.toLowerCase().includes('completo') &&
+        currentOrganization.accessPlanName.toLowerCase().includes('emiss'),
+    )
+  const canAccessInvoices =
+    canAccessSubFeature('MOD-01_INVOICES') && hasFullFiscalAccessPlan
 
   const [registers, setRegisters] = useState<CashRegister[]>([])
   const [selectedRegister, setSelectedRegister] = useState<string>('Caixa 01')
@@ -233,7 +242,9 @@ export function SalesHomePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Vendas &amp; Balcão</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Terminal de frente de caixa PDV, pedidos faturados e notas fiscais (NF-e / NFC-e).
+            {canAccessInvoices
+              ? 'Terminal de frente de caixa PDV, pedidos faturados e notas fiscais (NF-e / NFC-e).'
+              : 'Terminal de frente de caixa PDV e histórico de pedidos faturados.'}
           </p>
         </div>
       </div>
@@ -251,7 +262,11 @@ export function SalesHomePage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div
+          className={`grid grid-cols-1 gap-5 ${
+            canAccessInvoices ? 'md:grid-cols-3' : 'md:grid-cols-2'
+          }`}
+        >
           {/* CARD 1: VENDAS & PDV (NOVA VENDA & PDV) */}
           {(canAccessQuickSale || canAccessPdv) && (
             <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">

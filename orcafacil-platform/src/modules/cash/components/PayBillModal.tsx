@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Banknote,
@@ -8,6 +8,7 @@ import {
   Paperclip,
   QrCode,
   Trash2,
+  Unlock,
   Upload,
   X,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ interface PayBillModalProps {
     }
   ) => Promise<void>;
   hasOpenSession: boolean;
+  onOpenGeneralCash?: () => void;
   isLoading?: boolean;
 }
 
@@ -44,6 +46,7 @@ export function PayBillModal({
   onClose,
   onConfirmPay,
   hasOpenSession,
+  onOpenGeneralCash,
   isLoading = false,
 }: PayBillModalProps) {
   const billAmountNum = bill ? parseFloat(bill.amount) || 0 : 0;
@@ -58,6 +61,18 @@ export function PayBillModal({
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (bill) {
+      const amountNum = parseFloat(bill.amount) || 0;
+      setPaidAmountStr(amountNum.toFixed(2).replace('.', ','));
+      setPaymentMethod('money');
+      setDeductFromCash(true);
+      setNotes('');
+      setAttachmentFile(null);
+      setFileError(null);
+    }
+  }, [bill?.id]);
 
   if (!isOpen || !bill) return null;
 
@@ -130,14 +145,26 @@ export function PayBillModal({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* Alerta de Caixa Fechado */}
           {!hasOpenSession && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Caixa Geral Fechado</p>
-                <p className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300">
-                  É obrigatório que o Caixa Geral esteja aberto para realizar a baixa de faturas/boletos e registrar a sangria no fluxo de caixa. Por favor, abra o caixa antes de continuar.
-                </p>
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Caixa Geral Fechado</p>
+                  <p className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300 font-semibold">
+                    Para realizar o pagamento do boleto o caixa deve estar aberto.
+                  </p>
+                </div>
               </div>
+              {onOpenGeneralCash && (
+                <button
+                  type="button"
+                  onClick={onOpenGeneralCash}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                >
+                  <Unlock className="h-3.5 w-3.5" />
+                  Abrir Caixa Geral
+                </button>
+              )}
             </div>
           )}
 
@@ -293,16 +320,31 @@ export function PayBillModal({
           </div>
 
           {/* Opção de Sangria no Caixa */}
-          <label className="flex items-center gap-2.5 rounded-xl border border-emerald-200 dark:border-emerald-900/50 p-3 text-xs font-medium bg-emerald-50/40 dark:bg-emerald-950/20 cursor-pointer">
+          <label className="flex items-start gap-2.5 rounded-xl border border-emerald-200 dark:border-emerald-900/50 p-3 text-xs font-medium bg-emerald-50/40 dark:bg-emerald-950/20 cursor-pointer">
             <input
               type="checkbox"
               checked={deductFromCash}
               onChange={(e) => setDeductFromCash(e.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="text-zinc-800 dark:text-zinc-200">
-              Descontar e registrar saída (sangria) com comprovante no <strong>Caixa Geral</strong>
-            </span>
+            <div className="space-y-0.5">
+              <span className="text-zinc-800 dark:text-zinc-200 block font-semibold">
+                Realizar sangria no Caixa Geral
+              </span>
+              <span className="text-[11px] text-zinc-600 dark:text-zinc-400 block">
+                {paymentMethod === 'money' ? (
+                  <>
+                    Como a forma escolhida é <strong>Dinheiro</strong>, o valor será descontado do{' '}
+                    <strong className="text-emerald-700 dark:text-emerald-400">Saldo Físico</strong>.
+                  </>
+                ) : (
+                  <>
+                    Como a forma escolhida é <strong>PIX / Cartões / Transferência</strong>, o valor será descontado do{' '}
+                    <strong className="text-indigo-700 dark:text-indigo-400">Saldo em Conta</strong>.
+                  </>
+                )}
+              </span>
+            </div>
           </label>
 
           <div>

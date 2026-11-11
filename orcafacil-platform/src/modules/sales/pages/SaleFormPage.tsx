@@ -112,8 +112,11 @@ export function SaleFormPage() {
   const FULL_FISCAL_ACCESS_PLAN_ID = '00000000-0000-4000-8000-000000000004'
   const hasFullFiscalAccessPlan =
     currentOrganization?.accessPlanId === FULL_FISCAL_ACCESS_PLAN_ID ||
-    currentOrganization?.accessPlanName?.trim().toLowerCase() ===
-      'completo com emissão de nf-e e nfc-e'
+    Boolean(
+      currentOrganization?.accessPlanName &&
+        currentOrganization.accessPlanName.toLowerCase().includes('completo') &&
+        currentOrganization.accessPlanName.toLowerCase().includes('emiss'),
+    )
 
   // Agendamento / Encaminhar para agenda
   const [forwardToSchedule, setForwardToSchedule] = useState(false)
@@ -652,7 +655,7 @@ export function SaleFormPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                Frente de Caixa (PDV)
+                Frente de Caixa
               </h1>
               <p className="mt-0.5 text-sm text-gray-500">
                 Emissão ágil de venda com baixa de estoque e faturamento no caixa.

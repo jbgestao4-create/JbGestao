@@ -8,6 +8,7 @@ import { useModuleAccess } from '@modules/access-control/context/ModuleAccessCon
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
+import { GeneralCashStatusBadge } from '@shared/components/GeneralCashStatusBadge'
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { SystemNotificationModal } from '@shared/components/SystemNotificationModal'
@@ -502,7 +503,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </span>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+              <GeneralCashStatusBadge />
               <ProfileMenu
                 variant="header"
                 displayName={profile?.displayName || 'Usuário'}
@@ -518,7 +520,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           className={
             isDashboard
               ? 'w-full print:p-0 print:m-0 print:w-full print:max-w-none'
-              : 'mx-auto flex-1 min-w-0 w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 sm:py-4 print:p-0 print:m-0 print:w-full print:max-w-none'
+              : 'container-fluid mx-auto flex-1 min-w-0 w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 sm:py-4 print:p-0 print:m-0 print:w-full print:max-w-none'
           }
         >
           {children}

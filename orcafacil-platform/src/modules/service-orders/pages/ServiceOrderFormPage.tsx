@@ -128,6 +128,7 @@ export function ServiceOrderFormPage() {
   const [damageNotes, setDamageNotes] = useState('')
   const [photos, setPhotos] = useState<ServiceOrderPhoto[]>([])
   const [previewPhoto, setPreviewPhoto] = useState<ServiceOrderPhoto | null>(null)
+  const [isDraggingPhotos, setIsDraggingPhotos] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Problema, Diagnóstico, Pendência e Solução
@@ -384,12 +385,12 @@ export function ServiceOrderFormPage() {
   }
 
   // Upload de fotos do equipamento / avarias
-  const handleUploadPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
+  const processPhotoFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files).filter((file) => file.type.startsWith('image/'))
+    if (fileArray.length === 0) return
 
     const newPhotos: ServiceOrderPhoto[] = []
-    for (const file of Array.from(files)) {
+    for (const file of fileArray) {
       try {
         const dataUrl = await compressImageFile(file)
         newPhotos.push({
@@ -407,6 +408,12 @@ export function ServiceOrderFormPage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+
+  const handleUploadPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    await processPhotoFiles(files)
   }
 
   const handleUpdatePhotoCaption = (photoId: string, caption: string) => {
@@ -1116,7 +1123,36 @@ export function ServiceOrderFormPage() {
           </div>
 
           {/* Fotos do Equipamento e Avarias */}
-          <div className="rounded-xl border border-gray-200 dark:border-slate-800 p-4 space-y-3">
+          <div
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDraggingPhotos(true)
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDraggingPhotos(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDraggingPhotos(false)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDraggingPhotos(false)
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                void processPhotoFiles(e.dataTransfer.files)
+              }
+            }}
+            className={`rounded-xl border p-4 space-y-3 transition-colors ${
+              isDraggingPhotos
+                ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
+                : 'border-gray-200 dark:border-slate-800'
+            }`}
+          >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 dark:text-slate-200 flex items-center gap-1.5">
@@ -1124,7 +1160,7 @@ export function ServiceOrderFormPage() {
                   Fotos do Equipamento e Avarias ({photos.length})
                 </h3>
                 <p className="text-[11px] text-gray-500 dark:text-slate-400">
-                  Adicione fotos do estado de entrada do aparelho, número de série, avarias ou reparo concluído
+                  Arraste uma ou mais fotos para cá ou clique para selecionar várias de uma só vez
                 </p>
               </div>
               <div>
@@ -1152,45 +1188,63 @@ export function ServiceOrderFormPage() {
             {photos.length === 0 ? (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="cursor-pointer rounded-xl border-2 border-dashed border-gray-200 dark:border-slate-800 py-8 text-center hover:border-blue-400 transition-colors"
+                className={`cursor-pointer rounded-xl border-2 border-dashed py-8 text-center transition-colors ${
+                  isDraggingPhotos
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40'
+                    : 'border-gray-200 dark:border-slate-800 hover:border-blue-400'
+                }`}
               >
                 <Camera className="h-7 w-7 mx-auto text-gray-400 mb-1.5" />
                 <p className="text-xs font-medium text-gray-600 dark:text-slate-400">
-                  Clique aqui para selecionar ou tirar fotos do equipamento e avarias
+                  Clique aqui para selecionar ou arraste uma ou mais fotos do equipamento e avarias
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {photos.map((photo) => (
-                  <div
-                    key={photo.id}
-                    className="group relative rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 p-2 flex flex-col gap-1.5"
-                  >
-                    <div className="relative h-28 w-full overflow-hidden rounded-lg bg-black/5">
-                      <img
-                        src={photo.dataUrl}
-                        alt={photo.caption || 'Foto do equipamento'}
-                        onClick={() => setPreviewPhoto(photo)}
-                        className="h-full w-full object-cover cursor-pointer hover:scale-105 transition-transform"
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {photos.map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="group relative rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 p-2 flex flex-col gap-1.5"
+                    >
+                      <div className="relative h-28 w-full overflow-hidden rounded-lg bg-black/5">
+                        <img
+                          src={photo.dataUrl}
+                          alt={photo.caption || 'Foto do equipamento'}
+                          onClick={() => setPreviewPhoto(photo)}
+                          className="h-full w-full object-cover cursor-pointer hover:scale-105 transition-transform"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(photo.id)}
+                          title="Remover foto"
+                          className="absolute top-1.5 right-1.5 rounded-full bg-red-600/90 p-1 text-white hover:bg-red-700 cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={photo.caption || ''}
+                        onChange={(e) => handleUpdatePhotoCaption(photo.id, e.target.value)}
+                        placeholder="Legenda (ex: Tela trincada)"
+                        className="w-full rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-[11px] text-gray-700 dark:text-slate-200 focus:border-blue-500 focus:outline-hidden"
                       />
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePhoto(photo.id)}
-                        title="Remover foto"
-                        className="absolute top-1.5 right-1.5 rounded-full bg-red-600/90 p-1 text-white hover:bg-red-700 cursor-pointer"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
                     </div>
-                    <input
-                      type="text"
-                      value={photo.caption || ''}
-                      onChange={(e) => handleUpdatePhotoCaption(photo.id, e.target.value)}
-                      placeholder="Legenda (ex: Tela trincada)"
-                      className="w-full rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-[11px] text-gray-700 dark:text-slate-200 focus:border-blue-500 focus:outline-hidden"
-                    />
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`cursor-pointer rounded-xl border-2 border-dashed py-3 text-center transition-colors ${
+                    isDraggingPhotos
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40'
+                      : 'border-gray-200 dark:border-slate-800 hover:border-blue-400'
+                  }`}
+                >
+                  <p className="text-xs font-medium text-gray-600 dark:text-slate-400">
+                    + Clique ou arraste mais fotos para adicionar
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -1278,6 +1332,7 @@ export function ServiceOrderFormPage() {
       </Card>
 
       {/* 4. ADICIONAR PRODUTOS (PEÇAS) E SERVIÇOS NA O.S. */}
+      {isEditing && (
       <Card>
         <CardHeader className="border-b border-gray-100 dark:border-slate-800 pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -1535,6 +1590,7 @@ export function ServiceOrderFormPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* ENCAMINHAR PARA AGENDA */}
       <ForwardToScheduleCard

@@ -26,8 +26,19 @@ export function ServiceOrderPrintModal({
   const serviceItems = order.items.filter((i) => i.itemType === 'service')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto print:bg-white print:p-0">
-      <div className="w-full max-w-4xl rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-200 max-h-[92vh] flex flex-col print:max-h-none print:shadow-none print:border-none">
+    <div className="os-print-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto print:static print:inset-auto print:block print:bg-white print:p-0">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 0mm !important;
+          }
+          body #root main > div > *:not(.os-print-modal-root) {
+            display: none !important;
+          }
+        }
+      `}</style>
+      <div className="w-full max-w-4xl rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-200 max-h-[92vh] flex flex-col print:max-w-none print:max-h-none print:shadow-none print:border-none">
         {/* Barra Superior (oculta na impressão) */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 print:hidden">
           <div>

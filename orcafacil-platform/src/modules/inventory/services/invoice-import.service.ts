@@ -1,10 +1,10 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
-import type { ServiceResult, UUID } from '@shared/types/common'
+import type { InventoryItem, ServiceResult, UUID } from '@shared/types/common'
 import { supplierService } from '@modules/suppliers/services/supplier.service'
 import { supplierInvoiceService } from '@modules/suppliers/services/supplier-invoice.service'
 import { inventoryService } from './inventory.service'
-import type { ParsedInvoiceData } from './nfe-parser.service'
+import type { ParsedInvoiceData, ParsedInvoiceItem } from './nfe-parser.service'
 
 export interface InvoiceImportResult {
   supplierId: string
@@ -15,6 +15,68 @@ export interface InvoiceImportResult {
   completedCount: number
   awaitingCount: number
   createdItemIds: string[]
+}
+
+export function findMatchingInventoryItem(
+  item: Pick<
+    ParsedInvoiceItem,
+    'existingItemId' | 'invoiceProductCode' | 'barcode' | 'code' | 'name'
+  >,
+  existingItems: InventoryItem[],
+): InventoryItem | undefined {
+  if (item.existingItemId) {
+    const byId = existingItems.find((e) => e.id === item.existingItemId)
+    if (byId) return byId
+  }
+
+  const normInvoiceCode = item.invoiceProductCode?.trim().toLowerCase() || ''
+  if (normInvoiceCode) {
+    const byInvoiceCode = existingItems.find((e) => {
+      const suppCode = e.supplierProductCode?.trim().toLowerCase() || ''
+      const fiscCode = e.fiscalProductCode?.trim().toLowerCase() || ''
+      const attrCode = e.attributes?.nfe_product_code?.trim().toLowerCase() || ''
+      const skuCode = e.sku?.trim().toLowerCase() || ''
+      const hasSupplierMatch = e.suppliers?.some(
+        (s) => s.supplierProductCode?.trim().toLowerCase() === normInvoiceCode,
+      )
+      return (
+        suppCode === normInvoiceCode ||
+        fiscCode === normInvoiceCode ||
+        attrCode === normInvoiceCode ||
+        skuCode === normInvoiceCode ||
+        Boolean(hasSupplierMatch)
+      )
+    })
+    if (byInvoiceCode) return byInvoiceCode
+  }
+
+  const normBarcode = item.barcode?.trim() || ''
+  if (normBarcode && normBarcode.toUpperCase() !== 'SEM GTIN') {
+    const byBarcode = existingItems.find(
+      (e) => e.barcode?.trim() === normBarcode || e.gtin?.trim() === normBarcode,
+    )
+    if (byBarcode) return byBarcode
+  }
+
+  const normCode = item.code?.trim().toLowerCase() || ''
+  const normName = item.name?.trim().toLowerCase() || ''
+
+  if (normCode) {
+    const byCodeAndName = existingItems.find(
+      (e) =>
+        e.sku?.trim().toLowerCase() === normCode &&
+        normName.length >= 2 &&
+        e.name?.trim().toLowerCase() === normName,
+    )
+    if (byCodeAndName) return byCodeAndName
+  }
+
+  if (normName.length >= 2) {
+    const byName = existingItems.find((e) => e.name?.trim().toLowerCase() === normName)
+    if (byName) return byName
+  }
+
+  return undefined
 }
 
 export const invoiceImportService = {
@@ -100,12 +162,103 @@ export const invoiceImportService = {
         }
       }
 
-      // 3. Cadastrar os Materiais no Estoque
+      // 3. Cadastrar ou Somar os Materiais no Estoque
       const createdItemIds: string[] = []
       let completedCount = 0
       let awaitingCount = 0
 
+      const existingListRes = await inventoryService.list(organizationId)
+      const existingItems: InventoryItem[] = existingListRes.success ? [...existingListRes.data] : []
+
       for (const item of parsedData.items) {
+        const existingItem = findMatchingInventoryItem(item, existingItems)
+
+        if (existingItem) {
+          const previousQty = Number(existingItem.quantityOnHand) || 0
+          const addedQty = Number(item.quantity) || 0
+          const newQty = previousQty + addedQty
+
+          const effectiveSalePrice =
+            Number(item.salePrice) > 0
+              ? Number(item.salePrice)
+              : Number(existingItem.unitPrice) || 0
+          const isCompleted =
+            effectiveSalePrice > 0 &&
+            (existingItem.name || item.name).trim().length >= 2 &&
+            Boolean(existingItem.unit || item.unit)
+          const status = isCompleted ? 'completed' : 'awaiting_information'
+          const pendingFields = isCompleted ? [] : ['Preço de venda']
+
+          if (isCompleted) {
+            completedCount++
+          } else {
+            awaitingCount++
+          }
+
+          const mergedAttributes: Record<string, string> = {
+            ...(existingItem.attributes || {}),
+            registration_status: status,
+            pending_fields: JSON.stringify(pendingFields),
+            imported_from_nfe: 'true',
+            nfe_number: parsedData.invoiceNumber,
+            nfe_series: parsedData.series,
+            nfe_access_key: parsedData.accessKey,
+            supplier_name: parsedData.supplier.name,
+            ...(item.invoiceProductCode ? { nfe_product_code: item.invoiceProductCode } : {}),
+          }
+
+          const { error: updateErr } = await supabase
+            .from('inventory_items')
+            .update({
+              quantity_on_hand: String(newQty),
+              purchase_price: String(item.unitCost || existingItem.purchasePrice || '0.00'),
+              last_purchase_price: String(item.unitCost || existingItem.purchasePrice || '0.00'),
+              last_purchase_at: new Date().toISOString(),
+              unit_price: String(effectiveSalePrice || '0.00'),
+              can_sell: isCompleted ? true : existingItem.canSell,
+              supplier_id: supplierId || existingItem.supplierId || null,
+              supplier_product_code:
+                item.invoiceProductCode || existingItem.supplierProductCode || null,
+              fiscal_product_code:
+                item.invoiceProductCode || existingItem.fiscalProductCode || null,
+              barcode: existingItem.barcode || item.barcode || null,
+              gtin: existingItem.gtin || item.barcode || null,
+              fiscal_ncm: existingItem.fiscalNcm || item.ncm || null,
+              attributes: mergedAttributes,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('organization_id', organizationId)
+            .eq('id', existingItem.id)
+
+          if (!updateErr) {
+            createdItemIds.push(existingItem.id)
+            existingItem.quantityOnHand = String(newQty)
+            existingItem.unitPrice = String(effectiveSalePrice || '0.00')
+            if (item.invoiceProductCode) {
+              existingItem.supplierProductCode = item.invoiceProductCode
+              existingItem.fiscalProductCode = item.invoiceProductCode
+            }
+
+            if (addedQty > 0) {
+              await supabase.from('inventory_movements').insert({
+                organization_id: organizationId,
+                inventory_item_id: existingItem.id,
+                movement_type: 'entry',
+                quantity: String(addedQty),
+                unit_price: String(item.unitCost || '0.00'),
+                document_reference: `NF-e nº ${parsedData.invoiceNumber}`,
+                reason: `Entrada complementar por importação de NF-e (Fornecedor: ${parsedData.supplier.name})`,
+                balance_before: String(previousQty),
+                balance_after: String(newQty),
+              })
+            }
+          } else {
+            logger.error(`Erro ao somar estoque do material existente ${item.name}`, updateErr)
+          }
+
+          continue
+        }
+
         const hasSalePrice = Number(item.salePrice) > 0
         const isCompleted = hasSalePrice && item.name.trim().length >= 2 && Boolean(item.unit)
         const status = isCompleted ? 'completed' : 'awaiting_information'
@@ -117,7 +270,7 @@ export const invoiceImportService = {
           awaitingCount++
         }
 
-        const createItemRes = await inventoryService.create(organizationId, {
+        const itemParams = {
           supplierId,
           supplierIds: [supplierId],
           name: item.name,
@@ -125,8 +278,8 @@ export const invoiceImportService = {
           quantityOnHand: String(item.quantity || '0'),
           minimumQuantity: '0',
           unitPrice: hasSalePrice ? String(item.salePrice) : '0.00',
-          sku: item.code || '',
-          barcode: '',
+          sku: '',
+          barcode: item.barcode || '',
           description: `Importado de NF-e nº ${parsedData.invoiceNumber} (Série ${parsedData.series})`,
           category: item.category || '',
           subcategory: '',
@@ -136,7 +289,7 @@ export const invoiceImportService = {
           manufacturerReference: '',
           purchasePrice: String(item.unitCost || '0.00'),
           extraPurchaseCost: '0.00',
-          supplierProductCode: item.code || '',
+          supplierProductCode: item.invoiceProductCode || '',
           leadTimeDays: '',
           promotionalPrice: '',
           targetMarginPercent: '',
@@ -153,8 +306,8 @@ export const invoiceImportService = {
           fiscalCest: '',
           fiscalOrigin: '',
           commercialUnit: item.unit || 'UN',
-          fiscalProductCode: item.code || '',
-          gtin: '',
+          fiscalProductCode: item.invoiceProductCode || '',
+          gtin: item.barcode || '',
           isActive: true,
           canSell: isCompleted,
           canPurchase: true,
@@ -169,12 +322,22 @@ export const invoiceImportService = {
             nfe_series: parsedData.series,
             nfe_access_key: parsedData.accessKey,
             supplier_name: parsedData.supplier.name,
+            ...(item.invoiceProductCode ? { nfe_product_code: item.invoiceProductCode } : {}),
           },
           imagePath: '',
-        })
+        }
+
+        let createItemRes = await inventoryService.create(organizationId, itemParams)
+        if (!createItemRes.success && itemParams.barcode) {
+          createItemRes = await inventoryService.create(organizationId, {
+            ...itemParams,
+            barcode: '',
+          })
+        }
 
         if (createItemRes.success) {
           createdItemIds.push(createItemRes.data.id)
+          existingItems.push(createItemRes.data)
 
           // Registrar movimentação de entrada no estoque
           if (Number(item.quantity) > 0) {

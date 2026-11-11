@@ -36,6 +36,15 @@ export function SalesListPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
+  const FULL_FISCAL_ACCESS_PLAN_ID = '00000000-0000-4000-8000-000000000004'
+  const hasFullFiscalAccessPlan =
+    currentOrganization?.accessPlanId === FULL_FISCAL_ACCESS_PLAN_ID ||
+    Boolean(
+      currentOrganization?.accessPlanName &&
+        currentOrganization.accessPlanName.toLowerCase().includes('completo') &&
+        currentOrganization.accessPlanName.toLowerCase().includes('emiss'),
+    )
+
   const [sales, setSales] = useState<SaleListItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -75,6 +84,7 @@ export function SalesListPage() {
       if (statusFilter === 'approved' && s.status !== 'approved') return false
       if (statusFilter === 'fiscal' && !s.hasFiscalInvoice) return false
       if (statusFilter === 'pdv' && !s.isPdv) return false
+      if (statusFilter === 'new_sale' && s.isPdv) return false
 
       if (dateFilter) {
         const saleDate = s.createdAt.slice(0, 10)
@@ -169,7 +179,9 @@ export function SalesListPage() {
                 Consultar Vendas e Faturamento
               </h1>
               <p className="mt-0.5 text-sm text-gray-500">
-                Histórico de pedidos, faturamento e emissão de notas fiscais.
+                {hasFullFiscalAccessPlan
+                  ? 'Histórico de pedidos, faturamento e emissão de notas fiscais.'
+                  : 'Histórico de pedidos e faturamento de vendas.'}
               </p>
             </div>
           </div>
@@ -293,8 +305,9 @@ export function SalesListPage() {
               { id: 'all', label: 'Todas as Vendas' },
               { id: 'completed', label: 'Concluídas / Faturadas' },
               { id: 'approved', label: 'Aprovadas' },
-              { id: 'fiscal', label: 'Com NFC-e / NF-e' },
-              { id: 'pdv', label: 'Apenas PDV Balcão' },
+              ...(hasFullFiscalAccessPlan ? [{ id: 'fiscal', label: 'Com NFC-e / NF-e' }] : []),
+              { id: 'pdv', label: 'Apenas PDV' },
+              { id: 'new_sale', label: 'Apenas Nova Venda' },
             ].map((tab) => {
               const active = statusFilter === tab.id
               return (
@@ -337,7 +350,9 @@ export function SalesListPage() {
                     <th className="px-3 py-3 text-center font-semibold">Itens</th>
                     <th className="px-3 py-3 text-right font-semibold">Total</th>
                     <th className="px-3 py-3 font-semibold">Pagamento</th>
-                    <th className="px-3 py-3 text-center font-semibold">Fiscal</th>
+                    {hasFullFiscalAccessPlan && (
+                      <th className="px-3 py-3 text-center font-semibold">Fiscal</th>
+                    )}
                     <th className="px-3 py-3 text-center font-semibold">Status</th>
                     <th className="px-4 py-3 text-center font-semibold">Ações</th>
                   </tr>
@@ -405,26 +420,28 @@ export function SalesListPage() {
                             {PAYMENT_METHOD_LABELS[s.paymentMethod]}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-center whitespace-nowrap">
-                          {s.hasFiscalInvoice ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleOpenFiscal(s)}
-                              className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 transition"
-                            >
-                              <QrCode className="h-3 w-3" />
-                              {s.fiscalInvoice?.type.toUpperCase()}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => void handleOpenFiscal(s)}
-                              className="text-[10px] text-gray-400 hover:text-blue-600 underline font-medium"
-                            >
-                              Emitir Nota
-                            </button>
-                          )}
-                        </td>
+                        {hasFullFiscalAccessPlan && (
+                          <td className="px-3 py-3 text-center whitespace-nowrap">
+                            {s.hasFiscalInvoice ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenFiscal(s)}
+                                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 transition"
+                              >
+                                <QrCode className="h-3 w-3" />
+                                {s.fiscalInvoice?.type.toUpperCase()}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenFiscal(s)}
+                                className="text-[10px] text-gray-400 hover:text-blue-600 underline font-medium"
+                              >
+                                Emitir Nota
+                              </button>
+                            )}
+                          </td>
+                        )}
                         <td className="px-3 py-3 text-center whitespace-nowrap">
                           <span
                             className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
@@ -478,16 +495,18 @@ export function SalesListPage() {
                               <Printer className="h-3.5 w-3.5" />
                             </Button>
 
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void handleOpenFiscal(s)}
-                              className="h-7 w-7 p-0 text-gray-600 hover:text-purple-600"
-                              title="Nota fiscal NF-e / NFC-e"
-                            >
-                              <FileText className="h-3.5 w-3.5" />
-                            </Button>
+                            {hasFullFiscalAccessPlan && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleOpenFiscal(s)}
+                                className="h-7 w-7 p-0 text-gray-600 hover:text-purple-600"
+                                title="Nota fiscal NF-e / NFC-e"
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -507,15 +526,17 @@ export function SalesListPage() {
         onClose={() => setReceiptModalOpen(false)}
       />
 
-      <FiscalInvoiceModal
-        open={fiscalModalOpen}
-        sale={selectedSaleDetail}
-        organizationId={currentOrganization?.id || ''}
-        onClose={() => setFiscalModalOpen(false)}
-        onEmitted={() => {
-          void loadSales()
-        }}
-      />
+      {hasFullFiscalAccessPlan && (
+        <FiscalInvoiceModal
+          open={fiscalModalOpen}
+          sale={selectedSaleDetail}
+          organizationId={currentOrganization?.id || ''}
+          onClose={() => setFiscalModalOpen(false)}
+          onEmitted={() => {
+            void loadSales()
+          }}
+        />
+      )}
 
       <LinkedQuoteModal
         open={linkedQuoteModalOpen}

@@ -338,6 +338,66 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 /* ==========================================================================
+   RESPONSIVIDADE BOOTSTRAP PARA SMARTPHONES E TABLETS
+   Adaptação fluida de containers, tabelas, modais, barras de navegação e cards
+   ========================================================================== */
+.table-responsive {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.img-fluid {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Ajustes responsivos para Tablets (até 991.98px - breakpoint lg do Bootstrap) */
+@media (max-width: 991.98px) {
+  .container,
+  .container-fluid {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  /* Garante que tabelas largas tenham rolagem horizontal suave em tablets */
+  table {
+    min-width: 560px;
+  }
+}
+
+/* Ajustes responsivos para Smartphones (até 575.98px - breakpoint sm do Bootstrap) */
+@media (max-width: 575.98px) {
+  .container,
+  .container-fluid {
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+
+  /* Modais ocupando largura adequada no smartphone sem cortar conteúdo */
+  [role='dialog'] > div,
+  .fixed.inset-0 > div {
+    max-width: 100% !important;
+    max-height: 92dvh !important;
+  }
+
+  /* Abas navegáveis com scroll horizontal em telas pequenas */
+  nav.-mb-px {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  nav.-mb-px::-webkit-scrollbar {
+    display: none;
+  }
+  nav.-mb-px > button {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* ==========================================================================
    ESTILOS GLOBAIS DE IMPRESSÃO PROFISSIONAL (PRINT MEDIA)
    Garante relatórios perfeitamente organizados, com nova logo,
    sem cabeçalhos, sem barras laterais, sem botões e sem dark mode.
@@ -345,14 +405,12 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm 10mm 10mm 10mm;
+    margin: 0mm;
   }
 
   /* Força modo claro completo na impressão independente do tema ativo */
   html,
   html.dark,
-  body,
-  html.dark body,
   #root,
   main {
     background-color: #ffffff !important;
@@ -360,6 +418,21 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     color: #0f172a !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  body,
+  html.dark body {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 8mm 10mm 10mm 10mm !important;
     width: 100% !important;
     max-width: 100% !important;
     min-height: auto !important;

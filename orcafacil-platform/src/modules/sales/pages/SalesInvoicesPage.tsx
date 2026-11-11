@@ -26,6 +26,15 @@ export function SalesInvoicesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'emitted' | 'pending'>('all')
 
+  const FULL_FISCAL_ACCESS_PLAN_ID = '00000000-0000-4000-8000-000000000004'
+  const hasFullFiscalAccessPlan =
+    currentOrganization?.accessPlanId === FULL_FISCAL_ACCESS_PLAN_ID ||
+    Boolean(
+      currentOrganization?.accessPlanName &&
+        currentOrganization.accessPlanName.toLowerCase().includes('completo') &&
+        currentOrganization.accessPlanName.toLowerCase().includes('emiss'),
+    )
+
   const [selectedSale, setSelectedSale] = useState<SaleDetail | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -68,6 +77,25 @@ export function SalesInvoicesPage() {
       setSelectedSale(res.data)
       setModalOpen(true)
     }
+  }
+
+  if (!hasFullFiscalAccessPlan) {
+    return (
+      <div className="space-y-6">
+        <Link
+          to="/orcafacil/sales"
+          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar às Vendas
+        </Link>
+        <Card className="rounded-2xl border-amber-200 bg-amber-50 p-6 text-center text-amber-800">
+          <p className="font-semibold text-sm">
+            A emissão e gestão de Notas Fiscais (NF-e / NFC-e) está disponível exclusivamente no plano Completo com Emissão de Nota Fiscal.
+          </p>
+        </Card>
+      </div>
+    )
   }
 
   return (

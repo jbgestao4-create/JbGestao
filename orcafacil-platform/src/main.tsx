@@ -1,3 +1,4 @@
+import 'bootstrap/dist/css/bootstrap-grid.min.css'
 import '@/styles/globals.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

@@ -32,7 +32,12 @@ import { quoteService } from '@modules/orcafacil/services/quote.service'
 import { customerService } from '@modules/customers/services/customer.service'
 import { AgendaHeroWidget } from '@modules/agendapro/components/AgendaHeroWidget'
 import { AnnouncementCarousel } from '@shared/components/AnnouncementCarousel'
+import {
+  announcementService,
+  type SystemAnnouncement,
+} from '@shared/services/announcement.service'
 import { ProfileMenu } from '@shared/components/ProfileMenu'
+import { GeneralCashStatusBadge } from '@shared/components/GeneralCashStatusBadge'
 import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import type { DashboardModuleCode } from '@shared/types/database'
 
@@ -76,6 +81,51 @@ export function DashboardPage() {
     'checking',
   )
   const [isModulesExpanded, setIsModulesExpanded] = useState(true)
+  const [initialAnnouncements, setInitialAnnouncements] = useState<SystemAnnouncement[]>([])
+  const [isAnnouncementReady, setIsAnnouncementReady] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const preloadAnnouncement = async () => {
+      try {
+        const res = await announcementService.listActive()
+        const activeList = res.success && res.data ? res.data : []
+
+        if (activeList.length > 0 && activeList[0].imageUrl) {
+          await new Promise<void>((resolve) => {
+            const img = new Image()
+            const timer = setTimeout(resolve, 3000)
+            img.onload = () => {
+              clearTimeout(timer)
+              resolve()
+            }
+            img.onerror = () => {
+              clearTimeout(timer)
+              resolve()
+            }
+            img.src = activeList[0].imageUrl
+          })
+        }
+
+        if (isMounted) {
+          setInitialAnnouncements(activeList)
+          setIsAnnouncementReady(true)
+        }
+      } catch {
+        if (isMounted) {
+          setInitialAnnouncements([])
+          setIsAnnouncementReady(true)
+        }
+      }
+    }
+
+    void preloadAnnouncement()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const [orderedModuleIds, setOrderedModuleIds] = useState<string[]>(() => {
     try {
@@ -378,10 +428,14 @@ export function DashboardPage() {
     offline: 'Sem conexão com o banco',
   }[connectionStatus]
 
+  if (!isAnnouncementReady) {
+    return <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19]" />
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100">
       <header className="border-b border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827]">
-        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 sm:px-7 xl:flex-row xl:items-center xl:justify-between">
+        <div className="container-fluid mx-auto flex max-w-[1600px] flex-col gap-3 px-3 py-3 sm:px-7 sm:py-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5 shadow-xs ring-1 ring-slate-200/70">
               <img src="/controlesoft-mark.png" alt="ControleSoft" className="h-full w-full object-contain" />
@@ -405,33 +459,19 @@ export function DashboardPage() {
               type="button"
               disabled
               aria-label={`Organização atual: ${currentOrganization?.name ?? 'Organização'}`}
-              className="inline-flex h-10 w-56 cursor-not-allowed items-center gap-2 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-800/60 px-3 text-left text-xs font-medium text-slate-600 dark:text-slate-400 opacity-90 shadow-2xs"
+              className="inline-flex h-10 w-full sm:w-56 cursor-not-allowed items-center gap-2 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-800/60 px-3 text-left text-xs font-medium text-slate-600 dark:text-slate-400 opacity-90 shadow-2xs"
             >
               <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
               <span className="truncate">{currentOrganization?.name ?? 'Organização'}</span>
             </button>
 
-            <div
-              className="flex items-center gap-2 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 shadow-2xs"
-              aria-live="polite"
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  connectionStatus === 'connected'
-                    ? 'bg-emerald-500'
-                    : connectionStatus === 'offline'
-                      ? 'bg-red-500'
-                      : 'animate-pulse bg-amber-400'
-                }`}
-              />
-              {connectionStatus === 'connected' ? 'Sistema Conectado' : connectionLabel}
-            </div>
+            <GeneralCashStatusBadge />
 
             <Link
               to="/"
               aria-label="Página Inicial"
               title="Página Inicial"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
+              className="inline-flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
             >
               <Home aria-hidden="true" className="h-4 w-4" />
             </Link>
@@ -447,19 +487,20 @@ export function DashboardPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1600px] space-y-8 px-4 py-6 sm:px-7 sm:py-8">
+      <main className="container-fluid mx-auto w-full max-w-[1600px] space-y-8 px-3 py-5 sm:px-7 sm:py-8">
         <section className="relative">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-stretch">
+          <div className="row g-4 items-stretch">
             {/* LADO ESQUERDO: ANÚNCIOS (Maior e rotativo de 3s) */}
-            <div className="lg:col-span-7 flex flex-col min-h-[310px] sm:min-h-[340px]">
+            <div className="col-12 col-lg-7 flex flex-col min-h-[260px] sm:min-h-[340px]">
               <AnnouncementCarousel
                 firstName={firstName}
+                initialAnnouncements={initialAnnouncements}
                 onManageAnnouncements={() => void navigate('/admin/announcements')}
               />
             </div>
 
             {/* LADO DIREITO: AGENDA (Maior, branca no modo claro, escura no modo escuro) */}
-            <div className="lg:col-span-5 flex flex-col min-h-[310px] sm:min-h-[340px]">
+            <div className="col-12 col-lg-5 flex flex-col min-h-[300px] sm:min-h-[340px]">
               <AgendaHeroWidget
                 organizationId={currentOrganization?.id}
                 userId={user?.id}
@@ -515,7 +556,7 @@ export function DashboardPage() {
 
           <div
             id="dashboard-modules"
-            className={`grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 ${
+            className={`row g-3 g-md-4 ${
               isModulesExpanded ? '' : 'hidden'
             }`}
           >
@@ -525,8 +566,8 @@ export function DashboardPage() {
               const isDragOver = dragOverModuleId === module.id
 
               return (
+                <div key={module.id} className="col-12 col-sm-6 col-lg-4 col-xl-3 d-flex">
                 <article
-                  key={module.id}
                   draggable
                   onDragStart={(e) => {
                     setDraggedModuleId(module.id)
@@ -553,7 +594,7 @@ export function DashboardPage() {
                     setDraggedModuleId(null)
                     setDragOverModuleId(null)
                   }}
-                  className={`group relative flex min-h-[260px] flex-col rounded-xl border bg-white dark:bg-[#111827] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all cursor-grab active:cursor-grabbing select-none ${
+                  className={`group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col rounded-xl border bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all cursor-grab active:cursor-grabbing select-none ${
                     isBeingDragged
                       ? 'opacity-40 border-dashed border-blue-500 scale-[0.98]'
                       : isDragOver
@@ -618,6 +659,7 @@ export function DashboardPage() {
                     )}
                   </div>
                 </article>
+                </div>
               )
             })}
           </div>

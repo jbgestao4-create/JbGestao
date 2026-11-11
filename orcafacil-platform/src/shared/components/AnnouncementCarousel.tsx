@@ -8,36 +8,78 @@ import { isSystemOwner } from '@shared/utils/system-owner'
 interface AnnouncementCarouselProps {
   firstName: string
   onManageAnnouncements?: () => void
+  initialAnnouncements?: SystemAnnouncement[]
+  onReady?: () => void
+}
+
+function preloadImage(src: string, timeoutMs = 3000): Promise<void> {
+  return new Promise((resolve) => {
+    if (!src) {
+      resolve()
+      return
+    }
+    const img = new Image()
+    const timer = setTimeout(resolve, timeoutMs)
+    img.onload = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    img.onerror = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    img.src = src
+  })
 }
 
 export function AnnouncementCarousel({
   firstName,
   onManageAnnouncements,
+  initialAnnouncements,
+  onReady,
 }: AnnouncementCarouselProps) {
   const { user } = useAuth()
   const isDev = isSystemOwner(user)
 
-  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
+  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>(
+    initialAnnouncements ?? [],
+  )
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(initialAnnouncements === undefined)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   const loadAnnouncements = async () => {
     setIsLoading(true)
     try {
       const res = await announcementService.listActive()
-      if (res.success && res.data) {
-        setAnnouncements(res.data)
+      const activeList = res.success && res.data ? res.data : []
+      if (activeList.length > 0 && activeList[0].imageUrl) {
+        await preloadImage(activeList[0].imageUrl)
+        // Preload remaining images in background
+        activeList.slice(1).forEach((item) => {
+          if (item.imageUrl) void preloadImage(item.imageUrl)
+        })
       }
+      setAnnouncements(activeList)
     } finally {
       setIsLoading(false)
+      onReady?.()
     }
   }
 
   useEffect(() => {
+    if (initialAnnouncements !== undefined) {
+      setAnnouncements(initialAnnouncements)
+      setIsLoading(false)
+      initialAnnouncements.slice(1).forEach((item) => {
+        if (item.imageUrl) void preloadImage(item.imageUrl)
+      })
+      onReady?.()
+      return
+    }
     void loadAnnouncements()
-  }, [])
+  }, [initialAnnouncements])
 
   // Cycle every 3 seconds unless hovered/paused
   useEffect(() => {
@@ -65,8 +107,13 @@ export function AnnouncementCarousel({
     setCurrentIndex((prev) => (prev + 1) % announcements.length)
   }
 
+  // Não exibe nada no lugar do anúncio antes do carregamento dele terminar
+  if (isLoading) {
+    return null
+  }
+
   // If there are uploaded announcement images, render the interactive 3-second carousel!
-  if (!isLoading && announcements.length > 0) {
+  if (announcements.length > 0) {
     const current = announcements[currentIndex]
 
     const handleBannerClick = () => {

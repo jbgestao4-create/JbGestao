@@ -7,9 +7,12 @@ import {
   type ParsedInvoiceData,
 } from '../services/nfe-parser.service'
 import {
+  findMatchingInventoryItem,
   invoiceImportService,
   type InvoiceImportResult,
 } from '../services/invoice-import.service'
+import { inventoryService } from '../services/inventory.service'
+import type { InventoryItem } from '@shared/types/common'
 import {
   AlertCircle,
   Building2,
@@ -41,6 +44,8 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
   const [parsedData, setParsedData] = useState<ParsedInvoiceData | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<InvoiceImportResult | null>(null)
+  const [customMargin, setCustomMargin] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
 
   if (!open) return null
 
@@ -51,6 +56,8 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
     setParsedData(null)
     setIsImporting(false)
     setImportResult(null)
+    setCustomMargin('')
+    setIsDragging(false)
   }
 
   const handleProcessFile = async (file: File) => {
@@ -58,10 +65,11 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
     setIsParsing(true)
     setParseError(null)
     setParsedData(null)
+    setCustomMargin('')
 
     try {
-      const isXml = file.name.endsWith('.xml') || file.type.includes('xml')
-      const isPdf = file.name.endsWith('.pdf') || file.type.includes('pdf')
+      const isXml = file.name.toLowerCase().endsWith('.xml') || file.type.includes('xml')
+      const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf')
 
       if (!isXml && !isPdf) {
         setParseError('Formato inválido. Por favor, envie uma nota em PDF (DANFE) ou XML da NF-e.')
@@ -69,15 +77,59 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
         return
       }
 
+      let data: ParsedInvoiceData
       if (isXml) {
         const text = await file.text()
-        const data = await parseNfeXml(text)
-        setParsedData(data)
+        data = await parseNfeXml(text)
       } else {
         const arrayBuffer = await file.arrayBuffer()
-        const data = await parseNfePdf(new Uint8Array(arrayBuffer))
-        setParsedData(data)
+        data = await parseNfePdf(new Uint8Array(arrayBuffer))
       }
+
+      let baseCode = 1
+      let existingItems: InventoryItem[] = []
+      if (currentOrganization) {
+        const [nextCodeRes, existingRes] = await Promise.all([
+          inventoryService.getNextCode(currentOrganization.id),
+          inventoryService.list(currentOrganization.id),
+        ])
+        if (nextCodeRes.success) {
+          const parsedNext = parseInt(nextCodeRes.data, 10)
+          if (!isNaN(parsedNext) && parsedNext > 0) {
+            baseCode = parsedNext
+          }
+        }
+        if (existingRes.success) {
+          existingItems = existingRes.data
+        }
+      }
+
+      let nextNewCode = baseCode
+      setParsedData({
+        ...data,
+        items: data.items.map((item) => {
+          const matched = findMatchingInventoryItem(item, existingItems)
+          if (matched) {
+            const existingSalePrice = Number(matched.unitPrice) || 0
+            const hasSale = existingSalePrice > 0
+            return {
+              ...item,
+              code: matched.sku || String(baseCode),
+              existingItemId: matched.id,
+              existingQuantity: Number(matched.quantityOnHand) || 0,
+              salePrice: hasSale ? existingSalePrice : item.salePrice,
+              isPendingInfo: !hasSale,
+              pendingFields: hasSale ? [] : ['Preço de venda'],
+            }
+          }
+          const assignedCode = String(nextNewCode)
+          nextNewCode++
+          return {
+            ...item,
+            code: assignedCode,
+          }
+        }),
+      })
     } catch (err) {
       setParseError(
         err instanceof Error
@@ -107,11 +159,12 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
     if (!parsedData) return
     const updatedItems = parsedData.items.map((item) => {
       const price = Math.round(item.unitCost * (1 + marginPercent / 100) * 100) / 100
+      const isCompleted = price > 0
       return {
         ...item,
         salePrice: price,
-        isPendingInfo: false,
-        pendingFields: [],
+        isPendingInfo: !isCompleted,
+        pendingFields: isCompleted ? [] : ['Preço de venda'],
       }
     })
     setParsedData({ ...parsedData, items: updatedItems })
@@ -119,6 +172,7 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
 
   const handleClearAllSalePrices = () => {
     if (!parsedData) return
+    setCustomMargin('')
     const updatedItems = parsedData.items.map((item) => ({
       ...item,
       salePrice: 0,
@@ -263,10 +317,35 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
             <div className="space-y-6">
               <label
                 htmlFor="invoice-file-input"
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (!isParsing) setIsDragging(true)
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (!isParsing) setIsDragging(true)
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDragging(false)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDragging(false)
+                  if (isParsing) return
+                  const file = e.dataTransfer?.files?.[0]
+                  if (file) void handleProcessFile(file)
+                }}
                 className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center transition cursor-pointer ${
                   isParsing
                     ? 'border-blue-400 bg-blue-50/50'
-                    : 'border-gray-300 hover:border-blue-500 hover:bg-gray-50'
+                    : isDragging
+                      ? 'border-blue-500 bg-blue-50/80 ring-2 ring-blue-200'
+                      : 'border-gray-300 hover:border-blue-500 hover:bg-gray-50'
                 }`}
               >
                 <input
@@ -351,14 +430,33 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleApplyMarginToAll(50)}
-                    className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700 transition"
-                  >
-                    <Percent className="h-3.5 w-3.5" /> Aplicar +50% margem em todos
-                  </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-2.5 py-1 shadow-2xs">
+                    <Percent className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                    <label
+                      htmlFor="custom-margin-input"
+                      className="text-xs font-semibold text-gray-700 whitespace-nowrap"
+                    >
+                      Margem em todos (%):
+                    </label>
+                    <input
+                      id="custom-margin-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={customMargin}
+                      placeholder="Ex: 50"
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setCustomMargin(val)
+                        const parsed = parseFloat(val)
+                        if (!isNaN(parsed) && parsed >= 0) {
+                          handleApplyMarginToAll(parsed)
+                        }
+                      }}
+                      className="w-20 rounded-md border border-gray-300 px-2 py-1 text-right text-xs font-semibold text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={handleClearAllSalePrices}
@@ -374,7 +472,7 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
                 <table className="w-full text-left text-xs text-gray-700">
                   <thead className="bg-gray-50 text-[11px] uppercase font-bold text-gray-500 border-b border-gray-200">
                     <tr>
-                      <th className="px-3 py-2.5">Cód.</th>
+                      <th className="px-3 py-2.5">ID</th>
                       <th className="px-3 py-2.5">Descrição do Material</th>
                       <th className="px-3 py-2.5">Unid.</th>
                       <th className="px-3 py-2.5 text-right">Qtd</th>
@@ -386,8 +484,22 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {parsedData.items.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-gray-50/75 transition">
-                        <td className="px-3 py-2 font-mono font-medium text-gray-600">{item.code || '—'}</td>
-                        <td className="px-3 py-2 font-medium text-gray-900 max-w-xs">{item.name}</td>
+                        <td className="px-3 py-2 font-mono font-bold text-blue-700">
+                          #{item.code || idx + 1}
+                        </td>
+                        <td className="px-3 py-2 font-medium text-gray-900 max-w-xs">
+                          <div>{item.name}</div>
+                          {item.barcode && (
+                            <div className="text-[10px] font-mono text-gray-500 mt-0.5">
+                              Cód. Barras: {item.barcode}
+                            </div>
+                          )}
+                          {item.existingItemId && (
+                            <div className="mt-1 inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-200">
+                              Já cadastrado • Somará +{item.quantity.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ao estoque
+                            </div>
+                          )}
+                        </td>
                         <td className="px-3 py-2 font-bold text-gray-600">{item.unit}</td>
                         <td className="px-3 py-2 text-right font-semibold text-gray-900">
                           {item.quantity.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}

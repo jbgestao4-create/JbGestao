@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
+import { cashBillsService } from '@modules/cash/services/cash-bills.service'
 import { organizationService } from '@modules/organizations/services/organization.service'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@shared/components/ui/Button'
@@ -43,6 +44,9 @@ export function LoginPage() {
   const [isFullMaintenanceBlocked, setIsFullMaintenanceBlocked] = useState(false)
 
   useEffect(() => {
+    // Sempre que acessar a tela de login do zero, limpa qualquer dispensa anterior de alertas de boletos
+    cashBillsService.clearAllAlertDismissals()
+
     // Garante que a tela de login seja sempre exibida em modo claro
     document.documentElement.classList.remove('dark')
     document.documentElement.removeAttribute('data-theme')

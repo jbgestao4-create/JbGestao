@@ -68,4 +68,17 @@ describe('cash-bills.service', () => {
     expect(pay.success).toBe(false);
     expect(remove.success).toBe(false);
   });
+
+  it('limpa todas as dispensas de alerta ao logar do zero e preserva estado de retomada pós-abertura de caixa', () => {
+    cashBillsService.dismissAlertForCurrentSession(orgId);
+    expect(cashBillsService.wasAlertDismissedInCurrentSession(orgId)).toBe(true);
+
+    cashBillsService.clearAllAlertDismissals();
+    expect(cashBillsService.wasAlertDismissedInCurrentSession(orgId)).toBe(false);
+
+    cashBillsService.savePendingAlertPaymentForCashOpen(orgId, 'bill-123');
+    const pending = cashBillsService.consumePendingAlertPaymentForCashOpen(orgId);
+    expect(pending).toEqual({ billId: 'bill-123' });
+    expect(cashBillsService.consumePendingAlertPaymentForCashOpen(orgId)).toBeNull();
+  });
 });

@@ -11,6 +11,7 @@ import {
   type BillPaymentMethod,
   type CashBillAlert,
 } from '../services/cash-bills.service'
+import { cashSessionService } from '../services/cash-session.service'
 import {
   AlertTriangle,
   Archive,
@@ -23,6 +24,7 @@ import {
   Flame,
   Receipt,
   Truck,
+  Unlock,
   Wifi,
   X,
   Zap,
@@ -55,19 +57,42 @@ export function UpcomingBillsAlertModal({
 
   const [alerts, setAlerts] = useState<CashBillAlert[]>([])
   const [isOpen, setIsOpen] = useState(false)
+  const [hasOpenGeneralCash, setHasOpenGeneralCash] = useState<boolean>(true)
   const [selectedBillForPay, setSelectedBillForPay] = useState<string | null>(null)
   const [paymentMethodByBill, setPaymentMethodByBill] = useState<Record<string, BillPaymentMethod>>({})
+  const [deductFromCashByBill, setDeductFromCashByBill] = useState<Record<string, boolean>>({})
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  const checkGeneralCashStatus = useCallback(async () => {
+    if (!currentOrganization) return false
+    const sessionRes = await cashSessionService.getOpenCashManagementSession(currentOrganization.id)
+    const isOpenNow = Boolean(sessionRes.success && sessionRes.data)
+    setHasOpenGeneralCash(isOpenNow)
+    return isOpenNow
+  }, [currentOrganization])
+
   const loadAlerts = useCallback(async () => {
-    if (!currentOrganization || isLoadingAccess || !canAccessCash) {
+    if (!user || !currentOrganization) {
       setAlerts([])
       setIsOpen(false)
       return
     }
 
-    const res = await cashBillsService.getUpcomingDueAlerts(currentOrganization.id)
+    if (isLoadingAccess) {
+      return
+    }
+
+    if (!canAccessCash) {
+      setAlerts([])
+      setIsOpen(false)
+      return
+    }
+
+    const [res] = await Promise.all([
+      cashBillsService.getUpcomingDueAlerts(currentOrganization.id),
+      checkGeneralCashStatus(),
+    ])
     if (res.success) {
       setAlerts(res.data)
       if (res.data.length > 0) {
@@ -79,7 +104,7 @@ export function UpcomingBillsAlertModal({
         setIsOpen(false)
       }
     }
-  }, [currentOrganization, isLoadingAccess, canAccessCash, forceOpen])
+  }, [user, currentOrganization, isLoadingAccess, canAccessCash, forceOpen, checkGeneralCashStatus])
 
   useEffect(() => {
     void loadAlerts()
@@ -91,6 +116,42 @@ export function UpcomingBillsAlertModal({
       setIsOpen(true)
     }
   }, [forceOpen, canAccessCash, loadAlerts])
+
+  useEffect(() => {
+    const onCashSessionOpened = async () => {
+      if (!currentOrganization) return
+      const pending = cashBillsService.consumePendingAlertPaymentForCashOpen(
+        currentOrganization.id,
+      )
+      await checkGeneralCashStatus()
+      if (pending) {
+        setFeedbackMsg(null)
+        const res = await cashBillsService.getUpcomingDueAlerts(currentOrganization.id)
+        if (res.success && res.data.length > 0) {
+          setAlerts(res.data)
+          const targetBillId =
+            pending.billId && res.data.some((b) => b.id === pending.billId)
+              ? pending.billId
+              : res.data[0].id
+          setSelectedBillForPay(targetBillId)
+          setHasOpenGeneralCash(true)
+          setIsOpen(true)
+        }
+      }
+    }
+
+    const onUserLoggedIn = () => {
+      cashBillsService.clearAllAlertDismissals()
+      void loadAlerts()
+    }
+
+    window.addEventListener('general-cash-session-opened', onCashSessionOpened)
+    window.addEventListener('orcafacil-user-logged-in', onUserLoggedIn)
+    return () => {
+      window.removeEventListener('general-cash-session-opened', onCashSessionOpened)
+      window.removeEventListener('orcafacil-user-logged-in', onUserLoggedIn)
+    }
+  }, [currentOrganization, checkGeneralCashStatus, loadAlerts])
 
   // Permissão estrita: só exibe para usuários com permissão de acesso ao módulo de gerenciamento de caixa (MOD-05)
   if (!canAccessCash || (!isOpen && !forceOpen) || alerts.length === 0) {
@@ -105,18 +166,52 @@ export function UpcomingBillsAlertModal({
     if (onCloseForceOpen) onCloseForceOpen()
   }
 
+  const handleOpenGeneralCash = () => {
+    if (currentOrganization) {
+      cashBillsService.savePendingAlertPaymentForCashOpen(
+        currentOrganization.id,
+        selectedBillForPay,
+      )
+    }
+    setIsOpen(false)
+    if (onCloseForceOpen) onCloseForceOpen()
+    window.dispatchEvent(new CustomEvent('open-general-cash-modal'))
+    void navigate('/cash?openCash=true')
+  }
+
+  const handleTogglePayPanel = async (billId: string) => {
+    if (selectedBillForPay === billId) {
+      setSelectedBillForPay(null)
+      return
+    }
+    setFeedbackMsg(null)
+    await checkGeneralCashStatus()
+    setSelectedBillForPay(billId)
+  }
+
   const handlePayBill = async (bill: CashBillAlert) => {
     if (!currentOrganization) return
     setProcessingId(bill.id)
     setFeedbackMsg(null)
 
+    const isOpenNow = await checkGeneralCashStatus()
+    if (!isOpenNow) {
+      setProcessingId(null)
+      setFeedbackMsg({
+        type: 'error',
+        text: 'Para realizar o pagamento do boleto o caixa deve estar aberto.',
+      })
+      return
+    }
+
     const method: BillPaymentMethod = paymentMethodByBill[bill.id] || 'money'
+    const shouldDeduct = deductFromCashByBill[bill.id] !== false
     const operatorName = profile?.displayName || user?.email?.split('@')[0] || 'Operador'
 
     const res = await cashBillsService.payBill(currentOrganization.id, bill.id, {
       paymentMethod: method,
       paidAmount: bill.amount,
-      deductFromOpenSession: true,
+      deductFromOpenSession: shouldDeduct,
       operatorName,
       userId: user?.id || null,
       notes: 'Baixa realizada pelo Alerta Crítico de Vencimento',
@@ -125,9 +220,13 @@ export function UpcomingBillsAlertModal({
     setProcessingId(null)
 
     if (res.success) {
+      const targetBalanceLabel =
+        method === 'money' ? 'Saldo Físico' : 'Saldo em Conta'
       setFeedbackMsg({
         type: 'success',
-        text: `Baixa realizada com sucesso: "${bill.description}" (${formatCurrency(bill.amount)} via ${BILL_PAYMENT_METHOD_LABELS[method]}). Saída registrada no caixa!`,
+        text: shouldDeduct
+          ? `Baixa realizada com sucesso: "${bill.description}" (${formatCurrency(bill.amount)} via ${BILL_PAYMENT_METHOD_LABELS[method]}). Sangria descontada do ${targetBalanceLabel}!`
+          : `Baixa realizada com sucesso: "${bill.description}" (${formatCurrency(bill.amount)} via ${BILL_PAYMENT_METHOD_LABELS[method]}).`,
       })
       setSelectedBillForPay(null)
       await loadAlerts()
@@ -270,18 +369,30 @@ export function UpcomingBillsAlertModal({
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {feedbackMsg && (
             <div
-              className={`rounded-xl p-3 text-xs font-semibold border flex items-start gap-2 ${
+              className={`rounded-xl p-3 text-xs font-semibold border flex items-center justify-between gap-2 ${
                 feedbackMsg.type === 'success'
                   ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                   : 'bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
               }`}
             >
-              {feedbackMsg.type === 'success' ? (
-                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
-              ) : (
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+              <div className="flex items-start gap-2">
+                {feedbackMsg.type === 'success' ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+                )}
+                <span>{feedbackMsg.text}</span>
+              </div>
+              {feedbackMsg.type === 'error' && !hasOpenGeneralCash && (
+                <button
+                  type="button"
+                  onClick={handleOpenGeneralCash}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                >
+                  <Unlock className="h-3.5 w-3.5" />
+                  Abrir Caixa Geral
+                </button>
               )}
-              <span>{feedbackMsg.text}</span>
             </div>
           )}
 
@@ -289,6 +400,7 @@ export function UpcomingBillsAlertModal({
             const isPayingThis = selectedBillForPay === bill.id
             const isProcessing = processingId === bill.id
             const currentMethod = paymentMethodByBill[bill.id] || 'money'
+            const shouldDeduct = deductFromCashByBill[bill.id] !== false
 
             return (
               <div
@@ -358,7 +470,7 @@ export function UpcomingBillsAlertModal({
                       <button
                         type="button"
                         disabled={isProcessing}
-                        onClick={() => setSelectedBillForPay(isPayingThis ? null : bill.id)}
+                        onClick={() => void handleTogglePayPanel(bill.id)}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" />
@@ -381,50 +493,109 @@ export function UpcomingBillsAlertModal({
 
                 {/* Painel expansível de confirmação rápida de pagamento (Dar Baixa) */}
                 {isPayingThis && (
-                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/60 dark:bg-emerald-950/30 p-3 rounded-xl">
-                    <div className="flex-1">
-                      <label className="block text-[11px] font-bold text-emerald-900 dark:text-emerald-300 mb-1">
-                        Forma de Pagamento para Saída no Caixa:
-                      </label>
-                      <select
-                        value={currentMethod}
-                        onChange={(e) =>
-                          setPaymentMethodByBill((prev) => ({
-                            ...prev,
-                            [bill.id]: e.target.value as BillPaymentMethod,
-                          }))
-                        }
-                        className="w-full sm:w-72 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:text-slate-100 focus:outline-hidden"
-                      >
-                        {(Object.keys(BILL_PAYMENT_METHOD_LABELS) as BillPaymentMethod[]).map((m) => (
-                          <option key={m} value={m}>
-                            {BILL_PAYMENT_METHOD_LABELS[m]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-700 space-y-3 bg-emerald-50/60 dark:bg-emerald-950/30 p-3.5 rounded-xl">
+                    {!hasOpenGeneralCash ? (
+                      <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-2.5">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold">Caixa Geral Fechado</p>
+                            <p className="mt-0.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                              Para realizar o pagamento do boleto o caixa deve estar aberto.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleOpenGeneralCash}
+                          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                        >
+                          <Unlock className="h-3.5 w-3.5" />
+                          Abrir Caixa Geral
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex-1">
+                            <label className="block text-[11px] font-bold text-emerald-900 dark:text-emerald-300 mb-1">
+                              Forma de Pagamento para Saída no Caixa:
+                            </label>
+                            <select
+                              value={currentMethod}
+                              onChange={(e) =>
+                                setPaymentMethodByBill((prev) => ({
+                                  ...prev,
+                                  [bill.id]: e.target.value as BillPaymentMethod,
+                                }))
+                              }
+                              className="w-full sm:w-80 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:text-slate-100 focus:outline-hidden"
+                            >
+                              {(Object.keys(BILL_PAYMENT_METHOD_LABELS) as BillPaymentMethod[]).map((m) => (
+                                <option key={m} value={m}>
+                                  {BILL_PAYMENT_METHOD_LABELS[m]}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedBillForPay(null)}
-                        className="rounded-lg text-xs"
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        isLoading={isProcessing}
-                        onClick={() => void handlePayBill(bill)}
-                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5"
-                      >
-                        <Receipt className="h-3.5 w-3.5" />
-                        Confirmar Pagamento ({formatCurrency(bill.amount)})
-                      </Button>
-                    </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedBillForPay(null)}
+                              className="rounded-lg text-xs"
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              isLoading={isProcessing}
+                              onClick={() => void handlePayBill(bill)}
+                              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5"
+                            >
+                              <Receipt className="h-3.5 w-3.5" />
+                              Confirmar Pagamento ({formatCurrency(bill.amount)})
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Caixa perguntando se deseja realizar a sangria */}
+                        <label className="flex items-start gap-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-white/80 dark:bg-slate-900/60 p-2.5 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={shouldDeduct}
+                            onChange={(e) =>
+                              setDeductFromCashByBill((prev) => ({
+                                ...prev,
+                                [bill.id]: e.target.checked,
+                              }))
+                            }
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div className="space-y-0.5">
+                            <span className="font-bold text-gray-900 dark:text-white block">
+                              Deseja realizar a sangria no caixa?
+                            </span>
+                            <span className="text-[11px] text-gray-600 dark:text-slate-300 block">
+                              {currentMethod === 'money' ? (
+                                <>
+                                  Ao confirmar em <strong>Dinheiro</strong>, o valor será descontado do{' '}
+                                  <strong className="text-emerald-700 dark:text-emerald-400">Saldo Físico</strong>.
+                                </>
+                              ) : (
+                                <>
+                                  Ao confirmar em <strong>PIX, Cartões ou Sangrias p/ Conta</strong>, o valor será descontado do{' '}
+                                  <strong className="text-indigo-700 dark:text-indigo-400">Saldo em Conta</strong>.
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        </label>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

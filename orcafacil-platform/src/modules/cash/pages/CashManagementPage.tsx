@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useOrganization } from '@modules/organizations/context/OrganizationContext';
 import { useAuth } from '@modules/auth/context/AuthContext';
 import { Card, CardContent } from '@shared/components/ui/Card';
@@ -17,7 +17,6 @@ import {
   CreditCard,
   DollarSign,
   Eye,
-  FileCheck,
   FileText,
   History,
   Landmark,
@@ -31,10 +30,8 @@ import {
   ShoppingCart,
   Store,
   Trash2,
-
   Unlock,
   Upload,
-  Wrench,
 } from 'lucide-react';
 import { supabase } from '@app/config/supabase';
 
@@ -42,8 +39,6 @@ import type { CashSession, CashSessionMovement } from '../domain/cash-session';
 import { cashSessionService } from '../services/cash-session.service';
 import type { CashBill } from '../services/cash-bills.service';
 import { cashBillsService } from '../services/cash-bills.service';
-import { quoteService, type QuoteListItem } from '@modules/orcafacil/services/quote.service';
-import { serviceOrderService, type ServiceOrderListItem } from '@modules/service-orders/services/service-order.service';
 import { salesService, type SaleListItem } from '@modules/sales/services/sales.service';
 
 
@@ -52,18 +47,17 @@ import { ManualMovementModal } from '../components/ManualMovementModal';
 import { BoletoFormModal } from '../components/BoletoFormModal';
 import { PayBillModal } from '../components/PayBillModal';
 
-type ActiveTab = 'session' | 'bills' | 'integrations' | 'history';
+type ActiveTab = 'session' | 'bills' | 'history';
 
 export function CashManagementPage() {
   const { currentOrganization } = useOrganization();
   const { user, profile } = useAuth();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Tab state
   const currentTabParam = searchParams.get('tab') as ActiveTab | null;
   const [activeTab, setActiveTab] = useState<ActiveTab>(
-    currentTabParam && ['session', 'bills', 'integrations', 'history'].includes(currentTabParam)
+    currentTabParam && ['session', 'bills', 'history'].includes(currentTabParam)
       ? currentTabParam
       : 'session'
   );
@@ -92,6 +86,7 @@ export function CashManagementPage() {
   const [boletoModalOpen, setBoletoModalOpen] = useState<boolean>(false);
   const [payBillModalOpen, setPayBillModalOpen] = useState<boolean>(false);
   const [billToPay, setBillToPay] = useState<CashBill | null>(null);
+  const [resumePayBillAfterOpen, setResumePayBillAfterOpen] = useState<boolean>(false);
   const [inspectHistorySession, setInspectHistorySession] = useState<CashSession | null>(null);
   const [historyMovements, setHistoryMovements] = useState<CashSessionMovement[]>([]);
   const [isLoadingHistoryMovements, setIsLoadingHistoryMovements] = useState<boolean>(false);
@@ -111,11 +106,6 @@ export function CashManagementPage() {
   const [billsSearch, setBillsSearch] = useState<string>('');
   const [isLoadingBills, setIsLoadingBills] = useState<boolean>(false);
   const [upcomingAlertCount, setUpcomingAlertCount] = useState<number>(0);
-
-  // Integrations State (Quotes and Service Orders)
-  const [approvedQuotes, setApprovedQuotes] = useState<QuoteListItem[]>([]);
-  const [readyOrders, setReadyOrders] = useState<ServiceOrderListItem[]>([]);
-  const [isLoadingIntegrations, setIsLoadingIntegrations] = useState<boolean>(false);
 
   // Notification message
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -209,28 +199,6 @@ export function CashManagementPage() {
     }
   }, [currentOrganization]);
 
-  // Carrega orçamentos aprovados e OS prontas
-  const loadIntegrations = useCallback(async () => {
-    if (!currentOrganization) return;
-    setIsLoadingIntegrations(true);
-    try {
-      const quotesRes = await quoteService.listQuotes(currentOrganization.id);
-      if (quotesRes.success && quotesRes.data) {
-        setApprovedQuotes(quotesRes.data.filter((q) => q.status === 'approved'));
-      }
-      const osRes = await serviceOrderService.list(currentOrganization.id);
-      if (osRes.success && osRes.data) {
-        setReadyOrders(
-          osRes.data.filter(
-            (o) => o.status === 'ready' || o.status === 'closed'
-          )
-        );
-      }
-    } finally {
-      setIsLoadingIntegrations(false);
-    }
-  }, [currentOrganization]);
-
   // Carrega a última sessão fechada para herdar obrigatoriamente o saldo final no início do dia
   const loadLastClosure = useCallback(async () => {
     if (!currentOrganization) return;
@@ -258,14 +226,14 @@ export function CashManagementPage() {
     }
   }, [currentOrganization]);
 
-  const handleOpenOpenModal = async () => {
+  const handleOpenOpenModal = useCallback(async () => {
     setClosureModalOpen(false);
     setClosureSession(null);
     setIsLoadingLastClosure(true);
     await loadLastClosure();
     setIsLoadingLastClosure(false);
     setOpenModalOpen(true);
-  };
+  }, [loadLastClosure]);
 
   const handleRefreshAll = useCallback(async () => {
     setIsRefreshing(true);
@@ -273,19 +241,37 @@ export function CashManagementPage() {
       loadActiveSession(),
       loadBills(),
       loadHistory(),
-      loadIntegrations(),
       loadLastClosure(),
     ]);
     setIsRefreshing(false);
-  }, [loadActiveSession, loadBills, loadHistory, loadIntegrations, loadLastClosure]);
+  }, [loadActiveSession, loadBills, loadHistory, loadLastClosure]);
 
   useEffect(() => {
     void loadActiveSession();
     void loadBills();
     void loadHistory();
-    void loadIntegrations();
     void loadLastClosure();
-  }, [loadActiveSession, loadBills, loadHistory, loadIntegrations, loadLastClosure]);
+  }, [loadActiveSession, loadBills, loadHistory, loadLastClosure]);
+
+  // Abre modal de abertura de Caixa Geral quando acionado via ?openCash=true ou evento global
+  useEffect(() => {
+    if (searchParams.get('openCash') === 'true') {
+      void handleOpenOpenModal();
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('openCash');
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, handleOpenOpenModal]);
+
+  useEffect(() => {
+    const onOpenGeneralCashEvent = () => {
+      void handleOpenOpenModal();
+    };
+    window.addEventListener('open-general-cash-modal', onOpenGeneralCashEvent);
+    return () => {
+      window.removeEventListener('open-general-cash-modal', onOpenGeneralCashEvent);
+    };
+  }, [handleOpenOpenModal]);
 
   // Atualização em tempo real (Supabase Realtime Channel + Interval de contingência)
   useEffect(() => {
@@ -384,6 +370,16 @@ export function CashManagementPage() {
       setClosureModalOpen(false);
       setClosureSession(null);
       showNotification('success', 'Caixa Geral aberto com sucesso!');
+
+      if (resumePayBillAfterOpen && billToPay) {
+        setResumePayBillAfterOpen(false);
+        setActiveTab('bills');
+        setSearchParams({ tab: 'bills' }, { replace: true });
+        setPayBillModalOpen(true);
+      }
+
+      window.dispatchEvent(new CustomEvent('general-cash-session-opened'));
+
       void loadActiveSession();
       void loadHistory();
       void loadLastClosure();
@@ -421,6 +417,8 @@ export function CashManagementPage() {
 
     if (res.success) {
       showNotification('success', 'Caixa fechado com sucesso!');
+      window.dispatchEvent(new CustomEvent('general-cash-session-closed'));
+      await loadActiveSession();
       await loadHistory();
       await loadLastClosure();
     } else {
@@ -657,15 +655,28 @@ export function CashManagementPage() {
         (m) =>
           m.type === 'bleed' &&
           (m.moveToAccount ||
-            m.category?.includes('Conta') ||
+            m.category?.includes('Mover para Conta') ||
             m.reason.includes('[Transferido para Conta]') ||
             m.reason.includes('Mover para Conta'))
       )
       .reduce((acc, m) => acc + (parseFloat(m.amount) || 0), 0);
   }, [allOrgMovements]);
 
-  // 6. Saldo em Conta: somando os valores de Pix Total, Cartões (C/D) e Sangrias movidas para a conta
-  const massiveAccountBalance = massivePixTotal + massiveCardsTotal + totalSangriasToAccount;
+  // Saídas / Sangrias de boletos pagos via Saldo em Conta (Pix + Cartões + Sangrias p/ Conta)
+  const totalAccountOutflows = useMemo(() => {
+    return allOrgMovements
+      .filter(
+        (m) =>
+          m.type === 'bleed' &&
+          (m.reason.includes('[Saída Saldo em Conta]') ||
+            m.category?.includes('Saída Saldo em Conta'))
+      )
+      .reduce((acc, m) => acc + (parseFloat(m.amount) || 0), 0);
+  }, [allOrgMovements]);
+
+  // 6. Saldo em Conta: somando os valores de Pix Total, Cartões (C/D) e Sangrias movidas para a conta, descontando saídas da conta
+  const massiveAccountBalance =
+    massivePixTotal + massiveCardsTotal + totalSangriasToAccount - totalAccountOutflows;
 
   const sessionTotalMoneySales = activeSession
     ? parseFloat(activeSession.totalMoney) || 0
@@ -777,12 +788,13 @@ export function CashManagementPage() {
       )}
 
       {/* KPI Cards do Caixa */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
+      <div className="row g-3">
         {/* 1. Saldo Físico em Dinheiro */}
-        <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="col-12 col-sm-6 col-md-4 col-xl-2">
+        <Card className="h-full rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-500">Saldo Físico (Dinheiro)</span>
+              <span className="text-xs font-semibold text-zinc-500">Saldo Físico (Dinheiro Em Caixa)</span>
               <div className="rounded-lg bg-emerald-100 p-1.5 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
                 <Banknote className="h-4 w-4" />
               </div>
@@ -795,9 +807,11 @@ export function CashManagementPage() {
             </span>
           </CardContent>
         </Card>
+        </div>
 
         {/* 2. Total PIX Massivo */}
-        <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="col-12 col-sm-6 col-md-4 col-xl-2">
+        <Card className="h-full rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-zinc-500">PIX Total</span>
@@ -811,9 +825,11 @@ export function CashManagementPage() {
             <span className="text-[11px] text-zinc-400">Total acumulado (Vendas/OS)</span>
           </CardContent>
         </Card>
+        </div>
 
         {/* 3. Total Cartões Massivo */}
-        <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="col-12 col-sm-6 col-md-4 col-xl-2">
+        <Card className="h-full rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-zinc-500">Cartões (C/D)</span>
@@ -827,9 +843,11 @@ export function CashManagementPage() {
             <span className="text-[11px] text-zinc-400">Crédito + Débito total</span>
           </CardContent>
         </Card>
+        </div>
 
         {/* 4. Suprimentos */}
-        <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="col-12 col-sm-6 col-md-4 col-xl-2">
+        <Card className="h-full rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-zinc-500">Suprimentos</span>
@@ -843,9 +861,11 @@ export function CashManagementPage() {
             <span className="text-[11px] text-zinc-400">Entradas manuais</span>
           </CardContent>
         </Card>
+        </div>
 
         {/* 5. Sangrias */}
-        <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="col-12 col-sm-6 col-md-4 col-xl-2">
+        <Card className="h-full rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-zinc-500">Sangrias</span>
@@ -859,9 +879,11 @@ export function CashManagementPage() {
             <span className="text-[11px] text-zinc-400">Retiradas manuais</span>
           </CardContent>
         </Card>
+        </div>
 
         {/* 6. Saldo em Conta */}
-        <Card className="rounded-2xl border border-indigo-200 bg-indigo-50/40 shadow-xs dark:border-indigo-900/50 dark:bg-indigo-950/20">
+        <div className="col-12 col-sm-6 col-md-4 col-xl-2">
+        <Card className="h-full rounded-2xl border border-indigo-200 bg-indigo-50/40 shadow-xs dark:border-indigo-900/50 dark:bg-indigo-950/20">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">Saldo em Conta</span>
@@ -877,6 +899,7 @@ export function CashManagementPage() {
             </span>
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Tabs Navigation */}
@@ -907,23 +930,6 @@ export function CashManagementPage() {
             {upcomingAlertCount > 0 && (
               <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
                 {upcomingAlertCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => handleTabChange('integrations')}
-            className={`flex items-center gap-2 border-b-2 py-3 text-sm font-semibold transition ${
-              activeTab === 'integrations'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-300'
-            }`}
-          >
-            <CheckCircle className="h-4 w-4" />
-            Integrações (Vendas, O.S. e Orçamentos)
-            {approvedQuotes.length + readyOrders.length > 0 && (
-              <span className="rounded-full bg-blue-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                {approvedQuotes.length + readyOrders.length}
               </span>
             )}
           </button>
@@ -1296,10 +1302,10 @@ export function CashManagementPage() {
       {/* ABA 2: Contas a Pagar & Boletos (PDF Inteligente) */}
       {activeTab === 'bills' && (
         <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-1 items-center gap-3">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="row g-2 flex-1 items-center">
+              <div className="col-12 col-md-5 relative">
+                <Search className="absolute left-5 top-2.5 h-4 w-4 text-zinc-400" />
                 <input
                   type="text"
                   placeholder="Buscar por descrição, beneficiário ou código de barras..."
@@ -1310,10 +1316,11 @@ export function CashManagementPage() {
               </div>
 
               {/* Filtro Categoria */}
+              <div className="col-6 col-md-3">
               <select
                 value={billsFilterCategory}
                 onChange={(e) => setBillsFilterCategory(e.target.value)}
-                className="rounded-xl border border-zinc-300 px-3 py-2 text-xs font-medium dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-xs font-medium dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               >
                 <option value="all">Todas Categorias</option>
                 <option value="Água">Água</option>
@@ -1324,12 +1331,14 @@ export function CashManagementPage() {
                 <option value="Impostos">Impostos</option>
                 <option value="Outros">Outros</option>
               </select>
+              </div>
 
               {/* Filtro Status */}
+              <div className="col-6 col-md-4">
               <select
                 value={billsFilterStatus}
                 onChange={(e) => setBillsFilterStatus(e.target.value)}
-                className="rounded-xl border border-zinc-300 px-3 py-2 text-xs font-medium dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-xs font-medium dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               >
                 <option value="all">Todos os Status</option>
                 <option value="due_soon">⚠️ Vencendo em 10 dias (Pendente)</option>
@@ -1337,11 +1346,12 @@ export function CashManagementPage() {
                 <option value="paid">Pago</option>
                 <option value="cancelled">Cancelado / Arquivado</option>
               </select>
+              </div>
             </div>
 
             <Button
               onClick={() => setBoletoModalOpen(true)}
-              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
               size="sm"
             >
               <Upload className="h-4 w-4" />
@@ -1504,122 +1514,7 @@ export function CashManagementPage() {
         </div>
       )}
 
-      {/* ABA 3: Integrações (Vendas, O.S. e Orçamentos) */}
-      {activeTab === 'integrations' && (
-        <div className="space-y-6">
-          {/* Card Informativo de Integração Automática */}
-          <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300">
-            <p className="font-semibold text-sm">Integração Automática com Caixa Ativo Ativada</p>
-            <p className="mt-1">
-              • Toda venda realizada no PDV ou Balcão já lança automaticamente a receita no caixa aberto correspondente.
-              <br />• Orçamentos aprovados e Ordens de Serviço prontas podem ser convertidos e faturados diretamente com 1 clique abaixo.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Orçamentos Aprovados Prontos para Faturar */}
-            <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between border-b pb-3 dark:border-zinc-800">
-                  <div className="flex items-center gap-2">
-                    <FileCheck className="h-5 w-5 text-emerald-600" />
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                      Orçamentos Aprovados
-                    </h3>
-                  </div>
-                  <span className="text-xs text-zinc-400">
-                    {approvedQuotes.length} aguardando faturamento
-                  </span>
-                </div>
-
-                {isLoadingIntegrations ? (
-                  <p className="py-6 text-center text-xs text-zinc-400">Carregando...</p>
-                ) : approvedQuotes.length === 0 ? (
-                  <p className="py-8 text-center text-xs text-zinc-400">
-                    Nenhum orçamento com status &quot;Aprovado&quot; aguardando faturamento.
-                  </p>
-                ) : (
-                  <div className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {approvedQuotes.map((q) => (
-                      <div key={q.id} className="py-3 flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                            #{q.quoteNumber} • {(q as any).clientName ?? (q as any).customerName ?? "Cliente"}
-                          </p>
-                          <p className="text-[11px] text-zinc-400">
-                            Valor Total: <strong className="text-zinc-800 dark:text-zinc-200">{formatCurrency((q as any).totalAmount ?? q.total ?? 0)}</strong>
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          onClick={() => navigate(`/orcafacil/sales/new?quoteId=${q.id}`)}
-                          className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                        >
-                          Faturar no Caixa
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Ordens de Serviço Prontas */}
-            <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between border-b pb-3 dark:border-zinc-800">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="h-5 w-5 text-blue-600" />
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                      Ordens de Serviço (O.S.)
-                    </h3>
-                  </div>
-                  <span className="text-xs text-zinc-400">
-                    {readyOrders.length} para recebimento
-                  </span>
-                </div>
-
-                {isLoadingIntegrations ? (
-                  <p className="py-6 text-center text-xs text-zinc-400">Carregando...</p>
-                ) : readyOrders.length === 0 ? (
-                  <p className="py-8 text-center text-xs text-zinc-400">
-                    Nenhuma ordem de serviço pronta para recebimento no momento.
-                  </p>
-                ) : (
-                  <div className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {readyOrders.map((os) => (
-                      <div key={os.id} className="py-3 flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                            OS #{os.orderNumber} • {(os as any).clientName ?? os.customerName ?? 'Cliente'}
-                          </p>
-                          <p className="text-[11px] text-zinc-400">
-                            Status: <strong className="capitalize">{os.status}</strong> • Total:{' '}
-                            <strong className="text-zinc-800 dark:text-zinc-200">
-                              {formatCurrency((os as any).totalAmount ?? (os as any).total ?? 0)}
-                            </strong>
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          onClick={() => navigate(`/orcafacil/sales/new?serviceOrderId=${os.id}`)}
-                          className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
-                        >
-                          Receber O.S. no Caixa
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* ABA 4: Histórico de Caixas */}
+      {/* ABA 3: Histórico de Caixas */}
       {activeTab === 'history' && (
         <div className="space-y-4">
           <Card className="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
@@ -1838,7 +1733,14 @@ export function CashManagementPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setOpenModalOpen(false)}
+                  onClick={() => {
+                    setOpenModalOpen(false);
+                    cashBillsService.clearPendingAlertPaymentForCashOpen();
+                    if (resumePayBillAfterOpen && billToPay) {
+                      setResumePayBillAfterOpen(false);
+                      setPayBillModalOpen(true);
+                    }
+                  }}
                   disabled={isSubmittingSession}
                 >
                   Cancelar
@@ -1901,9 +1803,15 @@ export function CashManagementPage() {
         onClose={() => {
           setPayBillModalOpen(false);
           setBillToPay(null);
+          setResumePayBillAfterOpen(false);
         }}
         onConfirmPay={handleConfirmPayBill}
         hasOpenSession={!!activeSession}
+        onOpenGeneralCash={() => {
+          setResumePayBillAfterOpen(true);
+          setPayBillModalOpen(false);
+          void handleOpenOpenModal();
+        }}
         isLoading={isSubmittingSession}
       />
 

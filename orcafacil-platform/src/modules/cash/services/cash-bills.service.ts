@@ -26,13 +26,13 @@ export const BILL_CATEGORIES: readonly BoletoCategory[] = [
 ] as const
 
 export const BILL_PAYMENT_METHOD_LABELS: Record<BillPaymentMethod, string> = {
-  money: 'Dinheiro (Caixa)',
-  pix: 'PIX',
-  debit_card: 'Cartão de Débito',
-  credit_card: 'Cartão de Crédito',
-  bank_transfer: 'Transferência / Conta Bancária',
-  boleto: 'Compensação Bancária',
-  other: 'Outro',
+  money: 'Dinheiro (Saldo Físico)',
+  pix: 'PIX (Saldo em Conta)',
+  debit_card: 'Cartão de Débito (Saldo em Conta)',
+  credit_card: 'Cartão de Crédito (Saldo em Conta)',
+  bank_transfer: 'Sangrias p/ Conta / Transferência (Saldo em Conta)',
+  boleto: 'Compensação Bancária (Saldo em Conta)',
+  other: 'Outro (Saldo em Conta)',
 }
 
 export interface CashBill {
@@ -100,6 +100,7 @@ export interface PayCashBillParams {
 }
 
 const DISMISSED_ALERTS_KEY_PREFIX = 'orcafacil_dismissed_bill_alerts_'
+const RESUME_BILL_ALERT_AFTER_CASH_OPEN_KEY = 'orcafacil_resume_bill_alert_after_cash_open'
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear()
@@ -289,6 +290,60 @@ export const cashBillsService = {
     }
   },
 
+  clearAllAlertDismissals(): void {
+    try {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i)
+        if (key && key.startsWith(DISMISSED_ALERTS_KEY_PREFIX)) {
+          keysToRemove.push(key)
+        }
+      }
+      for (const key of keysToRemove) {
+        sessionStorage.removeItem(key)
+      }
+      sessionStorage.removeItem(RESUME_BILL_ALERT_AFTER_CASH_OPEN_KEY)
+    } catch {
+      // ignore
+    }
+  },
+
+  savePendingAlertPaymentForCashOpen(organizationId: string, billId: string | null): void {
+    try {
+      sessionStorage.setItem(
+        RESUME_BILL_ALERT_AFTER_CASH_OPEN_KEY,
+        JSON.stringify({ organizationId, billId }),
+      )
+    } catch {
+      // ignore
+    }
+  },
+
+  consumePendingAlertPaymentForCashOpen(
+    organizationId: string,
+  ): { billId: string | null } | null {
+    try {
+      const raw = sessionStorage.getItem(RESUME_BILL_ALERT_AFTER_CASH_OPEN_KEY)
+      if (!raw) return null
+      sessionStorage.removeItem(RESUME_BILL_ALERT_AFTER_CASH_OPEN_KEY)
+      const parsed = JSON.parse(raw) as { organizationId?: string; billId?: string | null }
+      if (parsed.organizationId && parsed.organizationId !== organizationId) {
+        return null
+      }
+      return { billId: parsed.billId ?? null }
+    } catch {
+      return null
+    }
+  },
+
+  clearPendingAlertPaymentForCashOpen(): void {
+    try {
+      sessionStorage.removeItem(RESUME_BILL_ALERT_AFTER_CASH_OPEN_KEY)
+    } catch {
+      // ignore
+    }
+  },
+
   /**
    * Cadastra um novo boleto ou conta a pagar
    */
@@ -441,7 +496,7 @@ export const cashBillsService = {
       const paidAmountStr = toMoneyString(paidAmountCents)
       const nowIso = new Date().toISOString()
 
-      // Verifica se existe uma sessão de caixa aberta para lançar a saída correspondente
+      // Verifica se existe uma sessão de Caixa Geral aberta para lançar a saída correspondente
       let targetSessionId = params.openSessionId || params.sessionId || null
       if (!targetSessionId) {
         const mgmtRes = await cashSessionService.getOpenCashManagementSession(organizationId)
@@ -453,20 +508,15 @@ export const cashBillsService = {
             params.userId || undefined,
             'cash_management',
           )
-          const openPdv = await cashSessionService.findBestOpenSession(
-            organizationId,
-            params.userId || undefined,
-            'pdv',
-          )
-          targetSessionId = openMgmt?.id || openPdv?.id || null
+          targetSessionId = openMgmt?.id || null
         }
       }
 
-      // Regra de negócio obrigatória: Baixa de fatura/boleto só é permitida com caixa aberto para registrar a sangria
+      // Regra de negócio obrigatória: Baixa de fatura/boleto só é permitida com o Caixa Geral aberto
       if (!targetSessionId) {
         return {
           success: false,
-          error: 'O caixa precisa estar aberto para realizar a baixa de faturas/boletos e registrar a sangria no fluxo de caixa.',
+          error: 'Para realizar o pagamento do boleto o caixa deve estar aberto.',
         }
       }
 
@@ -485,21 +535,27 @@ export const cashBillsService = {
         }
       }
 
-      // Se houver caixa aberto e estiver marcado para descontar (ou por padrão ativo com caixa aberto),
-      // registra automaticamente a saída (Sangria de Pagamento de Boleto/Fatura) com o comprovante anexo!
+      // Se houver caixa aberto e estiver marcado para realizar a sangria:
+      // - Dinheiro ('money') desconta do Saldo Físico (gaveta)
+      // - PIX, Cartões ou Sangrias p/ Conta descontam do Saldo em Conta
       const shouldDeductFromCashDrawer = params.deductFromOpenSession !== false
 
       if (targetSessionId && shouldDeductFromCashDrawer) {
+        const isPhysicalMoney = params.paymentMethod === 'money'
+        const balanceTag = isPhysicalMoney ? '[Saldo Físico]' : '[Saída Saldo em Conta]'
         const movRes = await cashSessionService.recordMovement(organizationId, targetSessionId, {
           type: 'bleed',
           amount: paidAmountStr,
-          reason: `Baixa de Boleto/Fatura (${existing.category}): ${existing.description}`,
-          category: `Pagamento de Boleto (${existing.category})`,
+          reason: `Baixa de Boleto/Fatura (${existing.category}): ${existing.description} • ${balanceTag}`,
+          category: isPhysicalMoney
+            ? `Pagamento de Boleto - Saldo Físico (${existing.category})`
+            : `Pagamento de Boleto - Saída Saldo em Conta (${existing.category})`,
           referenceId: existing.id,
           attachmentUrl: finalAttachmentUrl || existing.attachmentDataUrl || null,
           attachmentName: finalAttachmentName || existing.attachmentName || null,
           operatorName: params.operatorName || undefined,
           userId: params.userId || undefined,
+          deductFromPhysicalCash: isPhysicalMoney,
         })
 
         if (!movRes.success) {

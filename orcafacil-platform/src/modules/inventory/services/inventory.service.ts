@@ -331,9 +331,9 @@ export const inventoryService = {
 
       let max = 0
       for (const row of data) {
-        if (row.sku) {
-          const cleaned = row.sku.replace(/^\D+/, '')
-          const num = parseInt(cleaned || row.sku, 10)
+        const rawSku = row.sku?.trim()
+        if (rawSku && /^\d+$/.test(rawSku)) {
+          const num = parseInt(rawSku, 10)
           if (!isNaN(num) && num > max) {
             max = num
           }

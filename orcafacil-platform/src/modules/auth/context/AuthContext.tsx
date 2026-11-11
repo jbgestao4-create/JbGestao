@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { authService, type SignInParams, type SignUpParams } from '../services/auth.service'
+import { cashBillsService } from '@modules/cash/services/cash-bills.service'
 import type { ServiceResult, UserProfile } from '@shared/types/common'
 
 export type FontSizePreference = 'small' | 'medium' | 'large'
@@ -158,9 +159,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleSignIn = async (params: SignInParams) => {
     const res = await authService.signIn(params)
     if (res.success) {
+      cashBillsService.clearAllAlertDismissals()
       setUser(res.data.user)
       setSession(res.data.session)
       await loadProfile(res.data.user)
+      window.dispatchEvent(new CustomEvent('orcafacil-user-logged-in'))
     }
     return res
   }
@@ -172,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleSignOut = async () => {
     const res = await authService.signOut()
     if (res.success) {
+      cashBillsService.clearAllAlertDismissals()
       setUser(null)
       setProfile(null)
       setSession(null)
