@@ -82,46 +82,20 @@ export function DashboardPage() {
   )
   const [isModulesExpanded, setIsModulesExpanded] = useState(true)
   const [initialAnnouncements, setInitialAnnouncements] = useState<SystemAnnouncement[]>([])
-  const [isAnnouncementReady, setIsAnnouncementReady] = useState(false)
 
   useEffect(() => {
     let isMounted = true
-
-    const preloadAnnouncement = async () => {
+    const loadAnnouncements = async () => {
       try {
         const res = await announcementService.listActive()
-        const activeList = res.success && res.data ? res.data : []
-
-        if (activeList.length > 0 && activeList[0].imageUrl) {
-          await new Promise<void>((resolve) => {
-            const img = new Image()
-            const timer = setTimeout(resolve, 3000)
-            img.onload = () => {
-              clearTimeout(timer)
-              resolve()
-            }
-            img.onerror = () => {
-              clearTimeout(timer)
-              resolve()
-            }
-            img.src = activeList[0].imageUrl
-          })
-        }
-
-        if (isMounted) {
-          setInitialAnnouncements(activeList)
-          setIsAnnouncementReady(true)
+        if (isMounted && res.success && res.data) {
+          setInitialAnnouncements(res.data)
         }
       } catch {
-        if (isMounted) {
-          setInitialAnnouncements([])
-          setIsAnnouncementReady(true)
-        }
+        // ignore
       }
     }
-
-    void preloadAnnouncement()
-
+    void loadAnnouncements()
     return () => {
       isMounted = false
     }
@@ -427,10 +401,6 @@ export function DashboardPage() {
     connected: 'Online • Sincronizado',
     offline: 'Sem conexão com o banco',
   }[connectionStatus]
-
-  if (!isAnnouncementReady) {
-    return <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19]" />
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100">

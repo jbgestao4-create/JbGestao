@@ -5,50 +5,27 @@ interface BrandLoadingScreenProps {
 
 export function BrandLoadingScreen({
   message = 'Carregando...',
-  fullScreen = true,
 }: BrandLoadingScreenProps) {
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`flex flex-col items-center justify-center bg-slate-900 dark:bg-[#0b0f19] text-white select-none transition-opacity duration-200 ${
-        fullScreen ? 'fixed inset-0 z-50 min-h-screen w-screen' : 'w-full min-h-[360px] py-12'
-      }`}
+      className="flex flex-col items-center justify-center p-8 min-h-[220px] w-full select-none"
     >
-      {/* Contêiner da Logo com Anel de Carregamento Suave */}
-      <div className="relative flex items-center justify-center w-24 h-24 mb-5">
-        {/* Anel giratório externo */}
-        <div className="absolute inset-0 rounded-full border-[3px] border-blue-500/20 border-t-blue-500 animate-spin" />
-
-        {/* Glow de fundo */}
-        <div className="absolute inset-2 rounded-full bg-blue-500/10 blur-md animate-pulse" />
-
-        {/* Ícone oficial da marca ControleSoft */}
-        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-white p-1.5 shadow-lg ring-1 ring-white/20">
+      <div className="relative flex items-center justify-center w-14 h-14 mb-2.5">
+        <div className="absolute inset-0 rounded-full border-2 border-blue-500/20 border-t-blue-600 dark:border-t-blue-400 animate-spin" />
+        <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-white p-1 shadow-xs ring-1 ring-slate-200 dark:ring-slate-700">
           <img
             src="/controlesoft-mark.png"
             alt="ControleSoft"
             className="h-full w-full object-contain"
             loading="eager"
-            decoding="async"
           />
         </div>
       </div>
-
-      {/* Identidade e Mensagem de Carregamento */}
-      <div className="text-center space-y-1">
-        <h2 className="text-sm font-bold tracking-wider text-slate-100 uppercase">
-          ControleSoft
-        </h2>
-        <p className="text-xs font-medium text-slate-400 animate-pulse">
-          {message}
-        </p>
-      </div>
-
-      {/* Barra de progresso indeterminada ultra-leve */}
-      <div className="mt-5 h-1 w-36 overflow-hidden rounded-full bg-slate-800">
-        <div className="h-full w-full bg-gradient-to-r from-blue-600 via-indigo-400 to-blue-600 animate-[shimmer_1.5s_infinite_linear] rounded-full" />
-      </div>
+      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 animate-pulse">
+        {message}
+      </p>
     </div>
   )
 }
