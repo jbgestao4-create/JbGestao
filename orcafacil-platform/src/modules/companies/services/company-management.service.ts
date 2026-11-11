@@ -3,6 +3,7 @@ import { supabase } from '@app/config/supabase'
 import { env } from '@app/config/env'
 import { logger } from '@shared/lib/logger'
 import { organizationService } from '@modules/organizations/services/organization.service'
+import { isSystemOwner, registerSystemOwnerEmail } from '@shared/utils/system-owner'
 import type { DashboardModuleCode, ServiceResult, UUID } from '@shared/types/common'
 
 export interface ManagedCompany {
@@ -1254,6 +1255,10 @@ export const companyManagementService = {
 
       if (data && !data.success) {
         return { success: false, error: data.error || 'Erro ao atualizar usuário.' }
+      }
+
+      if (isSystemOwner(params.email) || isSystemOwner(userId)) {
+        registerSystemOwnerEmail(params.email)
       }
 
       return { success: true, data: undefined }

@@ -2,6 +2,7 @@ import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult, UserProfile, UUID } from '@shared/types/common'
 import type { Session, User } from '@supabase/supabase-js'
+import { registerSystemOwnerEmail } from '@shared/utils/system-owner'
 
 const PROFILE_AVATARS_BUCKET = 'profile-avatars'
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
@@ -325,7 +326,8 @@ export const authService = {
         avatarUrl: data.avatar_path
           ? `${supabase.storage.from(PROFILE_AVATARS_BUCKET).getPublicUrl(data.avatar_path).data.publicUrl}?v=${encodeURIComponent(data.updated_at)}`
           : null,
-        email: '',
+        email: data.email || '',
+        phone: data.phone ?? null,
         createdAt: data.created_at,
         themeColor: data.theme_color ?? null,
       }
@@ -353,6 +355,88 @@ export const authService = {
     } catch (err) {
       logger.error('Erro inesperado ao salvar tema', err)
       return { success: false, error: 'Ocorreu um erro ao salvar o tema.' }
+    }
+  },
+
+  /**
+   * Atualiza as informações básicas da conta (Nome, E-mail e Telefone),
+   * preservando automaticamente permissões de superadmin/proprietário e renovando a sessão.
+   */
+  async updateAccountData(params: {
+    userId: UUID
+    displayName: string
+    email: string
+    phone?: string | null
+  }): Promise<ServiceResult<{ email: string; displayName: string }>> {
+    const cleanName = params.displayName.trim()
+    const cleanEmail = params.email.trim().toLowerCase()
+    const cleanPhone = params.phone ? params.phone.replace(/\D/g, '') : null
+
+    if (!cleanName) {
+      return { success: false, error: 'O nome é obrigatório.' }
+    }
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return { success: false, error: 'Informe um e-mail válido.' }
+    }
+
+    try {
+      // 1. Tenta a RPC centralizada de auto-atualização de perfil
+      const { data: rpcData, error: rpcError } = await supabase.rpc('self_update_profile', {
+        p_name: cleanName,
+        p_email: cleanEmail,
+        p_phone: cleanPhone,
+      })
+
+      if (!rpcError && rpcData && rpcData.success) {
+        registerSystemOwnerEmail(cleanEmail)
+        await supabase.auth.refreshSession().catch(() => {})
+        return {
+          success: true,
+          data: { email: cleanEmail, displayName: cleanName },
+        }
+      }
+
+      // 2. Se a RPC não estiver disponível ou falhar, realiza atualização padrão via auth.updateUser e profiles
+      const { data: authData, error: authError } = await supabase.auth.updateUser({
+        email: cleanEmail,
+        data: {
+          display_name: cleanName,
+          phone: cleanPhone,
+        },
+      })
+
+      if (authError) {
+        logger.error('Erro ao atualizar usuário no auth', authError)
+        return { success: false, error: authError.message || 'Não foi possível atualizar o e-mail.' }
+      }
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          display_name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq('id', params.userId)
+
+      if (profileError) {
+        logger.warn('Erro ao atualizar perfil na tabela profiles', { message: profileError.message })
+      }
+
+      registerSystemOwnerEmail(cleanEmail)
+      await supabase.auth.refreshSession().catch(() => {})
+
+      return {
+        success: true,
+        data: {
+          email: authData.user?.email || cleanEmail,
+          displayName: cleanName,
+        },
+      }
+    } catch (err: any) {
+      logger.error('Exceção ao atualizar dados da conta', err)
+      return { success: false, error: err?.message || 'Erro inesperado ao atualizar dados da conta.' }
     }
   },
 

@@ -21,6 +21,39 @@ export const SYSTEM_OWNER_EMAILS = [
 
 export const SYSTEM_OWNER_TEST_ORGANIZATION_SLUG = 'ambiente-testes-proprietario'
 
+const DYNAMIC_OWNER_EMAILS_KEY = 'jb_system_owner_custom_emails'
+
+function getStoredOwnerEmails(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(DYNAMIC_OWNER_EMAILS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.map((e: string) => String(e).trim().toLowerCase()) : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Registra dinamicamente um novo e-mail de proprietário caso o adm@adm.com ou superadmin
+ * altere seu endereço para um e-mail personalizado.
+ */
+export function registerSystemOwnerEmail(email?: string | null): void {
+  if (!email || typeof window === 'undefined') return
+  const clean = email.trim().toLowerCase()
+  if (!clean || SYSTEM_OWNER_EMAILS.includes(clean)) return
+  try {
+    const current = getStoredOwnerEmails()
+    if (!current.includes(clean)) {
+      current.push(clean)
+      localStorage.setItem(DYNAMIC_OWNER_EMAILS_KEY, JSON.stringify(current))
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function isSystemOwner(
   userOrEmail?:
     | {
@@ -33,13 +66,15 @@ export function isSystemOwner(
 ): boolean {
   if (!userOrEmail) return false
 
+  const storedEmails = getStoredOwnerEmails()
+
   if (typeof userOrEmail === 'string') {
     const clean = userOrEmail.trim().toLowerCase()
-    return SYSTEM_OWNER_EMAILS.includes(clean)
+    return SYSTEM_OWNER_EMAILS.includes(clean) || storedEmails.includes(clean)
   }
 
   const email = userOrEmail.email?.trim().toLowerCase()
-  if (email && SYSTEM_OWNER_EMAILS.includes(email)) {
+  if (email && (SYSTEM_OWNER_EMAILS.includes(email) || storedEmails.includes(email))) {
     return true
   }
 
@@ -47,6 +82,9 @@ export function isSystemOwner(
     userOrEmail.user_metadata?.is_platform_owner === true ||
     userOrEmail.app_metadata?.is_platform_owner === true
   ) {
+    if (email) {
+      registerSystemOwnerEmail(email)
+    }
     return true
   }
 

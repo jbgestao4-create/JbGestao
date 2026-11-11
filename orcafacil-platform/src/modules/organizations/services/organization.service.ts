@@ -4,6 +4,7 @@ import { env } from '@app/config/env'
 import { logger } from '@shared/lib/logger'
 import { screenTimeService } from '@shared/services/screen-time.service'
 import { DASHBOARD_MODULES } from '@modules/access-control/services/module-access.service'
+import { isSystemOwner, registerSystemOwnerEmail } from '@shared/utils/system-owner'
 import type {
   ModuleCode,
   DashboardModuleCode,
@@ -599,6 +600,10 @@ export const organizationService = {
       if (error) {
         logger.error('Erro ao atualizar funcionário no Supabase', error)
         return { success: false, error: error.message || 'Não foi possível atualizar o funcionário.' }
+      }
+
+      if (isSystemOwner(params.email) || isSystemOwner(params.userId)) {
+        registerSystemOwnerEmail(params.email)
       }
 
       return { success: true, data: undefined }

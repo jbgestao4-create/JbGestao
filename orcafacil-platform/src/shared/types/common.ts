@@ -35,6 +35,7 @@ export interface UserProfile {
   displayName: string | null
   avatarUrl: string | null
   email: string
+  phone?: string | null
   createdAt: string
   themeColor?: string | null
 }

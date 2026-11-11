@@ -1,4 +1,4 @@
-import { useState, type SyntheticEvent } from 'react'
+import { useState, useEffect, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -69,6 +69,58 @@ export function ProfilePage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  // Estados para edição dos dados da conta (Nome, E-mail, Telefone)
+  const [accountDisplayName, setAccountDisplayName] = useState(profile?.displayName || '')
+  const [accountEmail, setAccountEmail] = useState(user?.email || '')
+  const [accountPhone, setAccountPhone] = useState(profile?.phone || '')
+  const [isSavingAccount, setIsSavingAccount] = useState(false)
+  const [accountMessage, setAccountMessage] = useState('')
+  const [accountError, setAccountError] = useState('')
+
+  useEffect(() => {
+    if (profile?.displayName) {
+      setAccountDisplayName(profile.displayName)
+    }
+  }, [profile?.displayName])
+
+  useEffect(() => {
+    if (user?.email) {
+      setAccountEmail(user.email)
+    }
+  }, [user?.email])
+
+  useEffect(() => {
+    if (profile?.phone) {
+      setAccountPhone(profile.phone)
+    }
+  }, [profile?.phone])
+
+  const handleUpdateAccount = async (e: SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!user) return
+
+    setAccountError('')
+    setAccountMessage('')
+    setIsSavingAccount(true)
+
+    const result = await authService.updateAccountData({
+      userId: user.id,
+      displayName: accountDisplayName,
+      email: accountEmail,
+      phone: accountPhone,
+    })
+
+    if (result.success) {
+      setAccountMessage('Dados da conta atualizados com sucesso!')
+      await refreshProfile()
+      await refreshUser()
+    } else {
+      setAccountError(result.error)
+    }
+
+    setIsSavingAccount(false)
+  }
 
   const handleUpdateAvatar = async () => {
     if (!user || !avatarFile) return
@@ -196,19 +248,60 @@ export function ProfilePage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-gray-900">Dados da Conta</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Dados da Conta</h2>
+              <p className="text-xs text-gray-500">
+                Altere seu nome de exibição, e-mail de acesso e telefone de contato.
+              </p>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <span className="block text-xs text-gray-500">Nome de Exibição</span>
-            <span className="text-sm font-medium text-gray-900">
-              {profile?.displayName || 'Não informado'}
-            </span>
-          </div>
-          <div>
-            <span className="block text-xs text-gray-500">E-mail de Acesso</span>
-            <span className="text-sm font-medium text-gray-900">{user?.email}</span>
-          </div>
+        <CardContent>
+          {accountError && (
+            <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-xs text-red-700">
+              {accountError}
+            </div>
+          )}
+          {accountMessage && (
+            <div role="status" className="mb-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-700">
+              {accountMessage}
+            </div>
+          )}
+          <form onSubmit={handleUpdateAccount} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Nome de Exibição"
+                type="text"
+                placeholder="Ex: Administrador"
+                value={accountDisplayName}
+                onChange={(e) => setAccountDisplayName(e.currentTarget.value)}
+                required
+              />
+              <Input
+                label="E-mail de Acesso"
+                type="email"
+                placeholder="Ex: adm@adm.com"
+                value={accountEmail}
+                onChange={(e) => setAccountEmail(e.currentTarget.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Telefone / WhatsApp (opcional)"
+                type="tel"
+                placeholder="Ex: (11) 99999-9999"
+                value={accountPhone}
+                onChange={(e) => setAccountPhone(e.currentTarget.value)}
+              />
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button type="submit" isLoading={isSavingAccount}>
+                Salvar alterações da conta
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
 
