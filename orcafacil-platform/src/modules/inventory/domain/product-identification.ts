@@ -1,3 +1,35 @@
+export function areCodesMatching(
+  codeA: string | null | undefined,
+  codeB: string | null | undefined,
+): boolean {
+  if (!codeA || !codeB) return false
+  const cleanA = codeA.trim().toLowerCase().replace(/^#+/, '')
+  const cleanB = codeB.trim().toLowerCase().replace(/^#+/, '')
+  if (!cleanA || !cleanB) return false
+
+  // Ignore invalid / placeholder barcodes
+  if (
+    cleanA === 'sem gtin' ||
+    cleanA === 'semgtin' ||
+    cleanA === '0' ||
+    cleanB === 'sem gtin' ||
+    cleanB === 'semgtin' ||
+    cleanB === '0'
+  ) {
+    return false
+  }
+
+  // Exact match
+  if (cleanA === cleanB) return true
+
+  // Numeric comparison without leading zeros (e.g. 000000000016005166 vs 16005166)
+  const noZerosA = cleanA.replace(/^0+/, '')
+  const noZerosB = cleanB.replace(/^0+/, '')
+  if (noZerosA && noZerosB && noZerosA === noZerosB) return true
+
+  return false
+}
+
 export function getInventoryUniqueConstraintError(
   code: string | undefined,
   message: string | undefined,

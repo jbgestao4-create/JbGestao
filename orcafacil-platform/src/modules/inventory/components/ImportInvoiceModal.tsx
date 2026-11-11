@@ -114,7 +114,7 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
             const hasSale = existingSalePrice > 0
             return {
               ...item,
-              code: matched.sku || item.invoiceProductCode || String(baseCode),
+              code: matched.sku || String(baseCode),
               existingItemId: matched.id,
               existingQuantity: Number(matched.quantityOnHand) || 0,
               salePrice: hasSale ? existingSalePrice : item.salePrice,
@@ -122,10 +122,8 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
               pendingFields: hasSale ? [] : ['Preço de venda'],
             }
           }
-          const assignedCode = item.invoiceProductCode?.trim() || String(nextNewCode)
-          if (!item.invoiceProductCode?.trim()) {
-            nextNewCode++
-          }
+          const assignedCode = String(nextNewCode)
+          nextNewCode++
           return {
             ...item,
             code: assignedCode,
@@ -491,6 +489,11 @@ export function ImportInvoiceModal({ open, onClose, onSuccess }: ImportInvoiceMo
                         </td>
                         <td className="px-3 py-2 font-medium text-gray-900 max-w-xs">
                           <div>{item.name}</div>
+                          {item.invoiceProductCode && (
+                            <div className="text-[10px] font-mono text-gray-500 mt-0.5">
+                              Cód. da Nota: {item.invoiceProductCode}
+                            </div>
+                          )}
                           {item.barcode && (
                             <div className="text-[10px] font-mono text-gray-500 mt-0.5">
                               Cód. Barras: {item.barcode}

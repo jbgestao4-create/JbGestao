@@ -7,7 +7,7 @@ import type {
   ServiceResult,
   UUID,
 } from '@shared/types/common'
-import { getInventoryUniqueConstraintError } from '../domain/product-identification'
+import { areCodesMatching, getInventoryUniqueConstraintError } from '../domain/product-identification'
 
 interface InventorySupplierRow {
   id: string
@@ -334,33 +334,53 @@ export const inventoryService = {
         return { success: true, data: { groupsMerged: 0, itemsMerged: 0 } }
       }
 
-      // Agrupa itens por código normalizado (SKU ou Código de Barras)
-      const groupsMap = new Map<string, InventoryItemRow[]>()
+      // Agrupa itens que compartilham o mesmo código (SKU, Fornecedor, Código de barras ou Nome normalizado)
+      const groups: InventoryItemRow[][] = []
 
       for (const item of rawItems) {
-        const cleanSku = (item.sku || '').trim().toLowerCase().replace(/^0+/, '')
+        const cleanSku = (item.sku || '').trim().toLowerCase().replace(/^#+/, '').replace(/^0+/, '')
+        const cleanSupplierCode = (item.supplier_product_code || '').trim().toLowerCase().replace(/^0+/, '')
         const cleanBarcode = (item.barcode || '').trim().toLowerCase()
         const isValidBarcode = cleanBarcode && !cleanBarcode.includes('sem gtin') && cleanBarcode !== '0'
+        const cleanName = (item.name || '').trim().toLowerCase()
 
-        let key = ''
-        if (cleanSku) {
-          key = `sku:${cleanSku}`
-        } else if (isValidBarcode) {
-          key = `barcode:${cleanBarcode}`
-        }
+        const matchingGroup = groups.find((group) =>
+          group.some((other) => {
+            const otherSku = (other.sku || '').trim().toLowerCase().replace(/^#+/, '').replace(/^0+/, '')
+            const otherSupplier = (other.supplier_product_code || '').trim().toLowerCase().replace(/^0+/, '')
+            const otherBarcode = (other.barcode || '').trim().toLowerCase()
+            const otherValidBarcode = otherBarcode && !otherBarcode.includes('sem gtin') && otherBarcode !== '0'
+            const otherName = (other.name || '').trim().toLowerCase()
 
-        if (key) {
-          if (!groupsMap.has(key)) {
-            groupsMap.set(key, [])
-          }
-          groupsMap.get(key)!.push(item)
+            if (cleanSku && otherSku && cleanSku === otherSku) return true
+            if (isValidBarcode && otherValidBarcode && cleanBarcode === otherBarcode) return true
+            if (cleanSupplierCode && otherSupplier && cleanSupplierCode === otherSupplier) return true
+            if (cleanSupplierCode && otherSku && cleanSupplierCode === otherSku) return true
+            if (cleanSku && otherSupplier && cleanSku === otherSupplier) return true
+            if (
+              cleanName &&
+              otherName &&
+              cleanName === otherName &&
+              (item.unit || '').trim().toUpperCase() === (other.unit || '').trim().toUpperCase()
+            ) {
+              return true
+            }
+
+            return false
+          }),
+        )
+
+        if (matchingGroup) {
+          matchingGroup.push(item)
+        } else {
+          groups.push([item])
         }
       }
 
       let groupsMerged = 0
       let itemsMerged = 0
 
-      for (const items of groupsMap.values()) {
+      for (const items of groups) {
         if (items.length <= 1) continue
 
         // Ordenar: preferir item com maior saldo, ou com preço de venda preenchido, ou mais antigo
@@ -570,6 +590,32 @@ export const inventoryService = {
           .is('deleted_at', null)
           .maybeSingle()
         if (bySupplierCode) existingMatch = bySupplierCode as unknown as InventoryItemRow
+      }
+
+      if (!existingMatch && (incomingSku || incomingBarcode || incomingSupplierCode)) {
+        const { data: allActive } = await supabase
+          .from('inventory_items')
+          .select('*, suppliers(name), inventory_item_suppliers(*, suppliers(name))')
+          .eq('organization_id', organizationId)
+          .is('deleted_at', null)
+
+        if (allActive) {
+          const match = allActive.find((row) => {
+            const rowCodes = [
+              row.sku,
+              row.supplier_product_code,
+              row.barcode,
+              row.gtin,
+              row.fiscal_product_code,
+              (row.attributes as Record<string, string> | null)?.nfe_product_code,
+            ]
+            const candidates = [incomingSku, incomingBarcode, incomingSupplierCode].filter(Boolean)
+            return candidates.some((cand) =>
+              rowCodes.some((rc) => areCodesMatching(cand, rc)),
+            )
+          })
+          if (match) existingMatch = match as unknown as InventoryItemRow
+        }
       }
 
       if (existingMatch) {

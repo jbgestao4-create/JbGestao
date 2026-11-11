@@ -22,8 +22,8 @@ export function areCodesMatching(
   codeB: string | null | undefined,
 ): boolean {
   if (!codeA || !codeB) return false
-  const cleanA = codeA.trim().toLowerCase()
-  const cleanB = codeB.trim().toLowerCase()
+  const cleanA = codeA.trim().toLowerCase().replace(/^#+/, '')
+  const cleanB = codeB.trim().toLowerCase().replace(/^#+/, '')
   if (!cleanA || !cleanB) return false
 
   // Ignore invalid / placeholder barcodes
@@ -47,6 +47,17 @@ export function areCodesMatching(
   if (noZerosA && noZerosB && noZerosA === noZerosB) return true
 
   return false
+}
+
+export function normalizeProductName(name: string | null | undefined): string {
+  if (!name) return ''
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function findMatchingInventoryItem(
@@ -89,11 +100,11 @@ export function findMatchingInventoryItem(
     if (byCode) return byCode
   }
 
-  // Fallback: match by exact normalized name if >= 3 characters
-  const normName = item.name?.trim().toLowerCase() || ''
-  if (normName.length >= 3) {
+  // Fallback: match by normalized name (ignoring accents, punctuation, extra spaces)
+  const normItemName = normalizeProductName(item.name)
+  if (normItemName.length >= 3) {
     const byName = existingItems.find(
-      (e) => e.name?.trim().toLowerCase() === normName,
+      (e) => normalizeProductName(e.name) === normItemName,
     )
     if (byName) return byName
   }
@@ -292,7 +303,6 @@ export const invoiceImportService = {
           awaitingCount++
         }
 
-        const itemCode = (item.invoiceProductCode || item.code || '').trim()
         const itemParams = {
           supplierId,
           supplierIds: [supplierId],
@@ -301,7 +311,7 @@ export const invoiceImportService = {
           quantityOnHand: String(item.quantity || '0'),
           minimumQuantity: '0',
           unitPrice: hasSalePrice ? String(item.salePrice) : '0.00',
-          sku: itemCode,
+          sku: '', // Código do produto gerado automaticamente pelo sistema (1, 2, 3...)
           barcode: item.barcode || '',
           description: `Importado de NF-e nº ${parsedData.invoiceNumber} (Série ${parsedData.series})`,
           category: item.category || '',

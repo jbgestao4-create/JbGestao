@@ -559,7 +559,7 @@ export function InventoryFormPage() {
     try {
       const params = {
         ...submittedForm,
-        sku: isEditing ? submittedForm.sku : (submittedForm.sku.trim() || generatedNextCode || ''),
+        sku: isEditing ? submittedForm.sku : generatedNextCode,
         quantityOnHand: submittedForm.quantityOnHand.trim() || '0',
         minimumQuantity: submittedForm.minimumQuantity.trim() || '0',
         unitPrice: submittedForm.unitPrice.trim() || '0.00',
@@ -817,16 +817,14 @@ export function InventoryFormPage() {
               />
               <Input
                 label="Código do produto"
-                placeholder={isEditing ? '' : (generatedNextCode ? `#${generatedNextCode}` : 'Gerado automaticamente')}
+                placeholder={isEditing ? '' : 'Gerado automaticamente'}
                 helperText={
                   isEditing
-                    ? 'Código sequencial exclusivo do produto (SKU ou referência interna).'
-                    : 'Código do produto (SKU). Deixe em branco para sequencial automático. Se já existir um produto com este código, o estoque será atualizado.'
+                    ? 'Código sequencial exclusivo do produto (gerado automaticamente).'
+                    : 'Código numérico sequencial gerado automaticamente de 1 em 1.'
                 }
-                value={form.sku}
-                onChange={(event) => {
-                  updateForm('sku', event.target.value)
-                }}
+                value={form.sku ? `#${form.sku}` : (generatedNextCode ? `#${generatedNextCode}` : '')}
+                disabled
               />
               <div className="space-y-2">
                 <Input
