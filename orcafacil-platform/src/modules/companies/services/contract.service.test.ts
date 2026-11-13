@@ -1,14 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { contractService, type SoftwareContract } from './contract.service'
+import {
+  contractService,
+  type SoftwareContract,
+  getInvoiceEffectiveStatus,
+  getContractOverdueInfo,
+} from './contract.service'
 
 vi.mock('@app/config/supabase', () => ({
   supabase: {
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
       order: vi.fn().mockResolvedValue({ data: null, error: { message: 'Table offline' } }),
       upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
       delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockResolvedValue({ data: null, error: null }),
     })),
   },
 }))
@@ -93,5 +98,66 @@ describe('contractService', () => {
     if (!listAfter.success) return
 
     expect(listAfter.data.length).toBe(0)
+  })
+
+  it('deve gerar faturas, gerenciar pagamentos e identificar vencimento em atraso', async () => {
+    const contract = await contractService.saveContract({
+      clientName: 'Auto Mecânica Express',
+      clientDocument: '99.888.777/0001-11',
+      clientResponsibleName: 'Roberto Souza',
+      monthlyAmount: 199.9,
+      billingDay: 10,
+    })
+
+    expect(contract.success).toBe(true)
+    if (!contract.success) return
+
+    // 1. Gera lote de faturas (ex: 3 meses)
+    const batchRes = await contractService.generateInvoicesBatch(contract.data, 3)
+    expect(batchRes.success).toBe(true)
+    if (!batchRes.success) return
+    expect(batchRes.data.length).toBe(3)
+
+    const invoices = await contractService.listInvoices(contract.data.id)
+    expect(invoices.success).toBe(true)
+    if (!invoices.success) return
+    expect(invoices.data.length).toBe(3)
+
+    const firstInvoice = invoices.data[0]
+
+    // 2. Marca como paga
+    const paidRes = await contractService.markInvoiceAsPaid(firstInvoice.id, 'PIX', '2026-11-10')
+    expect(paidRes.success).toBe(true)
+    if (!paidRes.success) return
+    expect(paidRes.data.status).toBe('paid')
+    expect(paidRes.data.paymentDate).toBe('2026-11-10')
+    expect(getInvoiceEffectiveStatus(paidRes.data)).toBe('paid')
+
+    // 3. Desfaz pagamento
+    const undoRes = await contractService.undoInvoicePayment(firstInvoice.id)
+    expect(undoRes.success).toBe(true)
+    if (!undoRes.success) return
+    expect(undoRes.data.status).toBe('pending')
+    expect(undoRes.data.paymentDate).toBeNull()
+
+    // 4. Cria fatura retroativa vencida para testar getContractOverdueInfo
+    const overdueRes = await contractService.saveInvoice({
+      contractId: contract.data.id,
+      clientName: contract.data.clientName,
+      amount: 199.9,
+      dueDate: '2026-01-10', // data no passado
+      status: 'pending',
+    })
+    expect(overdueRes.success).toBe(true)
+    if (!overdueRes.success) return
+
+    const allInvoices = await contractService.listInvoices(contract.data.id)
+    expect(allInvoices.success).toBe(true)
+    if (!allInvoices.success) return
+
+    const overdueInfo = getContractOverdueInfo(contract.data.id, allInvoices.data)
+    expect(overdueInfo.hasOverdue).toBe(true)
+    expect(overdueInfo.overdueCount).toBeGreaterThanOrEqual(1)
+    expect(overdueInfo.totalOverdueAmount).toBeGreaterThan(0)
   })
 })

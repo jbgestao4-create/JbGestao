@@ -11,12 +11,25 @@ import {
   Sparkles,
   CheckCircle2,
   Package,
+  Receipt,
+  AlertTriangle,
+  Printer,
+  Trash2,
+  Plus,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
+import { formatCurrency } from '@shared/utils/monetary'
 import { ALL_PLATFORM_DASHBOARD_MODULES } from '../services/company-management.service'
-import { contractService, type SoftwareContract } from '../services/contract.service'
+import {
+  contractService,
+  type SoftwareContract,
+  type ContractInvoice,
+  getInvoiceEffectiveStatus,
+} from '../services/contract.service'
 import { accessPlanService, type AccessPlan } from '../services/access-plan.service'
 import type { ManagedCompany } from '../services/company-management.service'
+import { ContractInvoicePrintModal } from './ContractInvoicePrintModal'
 
 /**
  * Converte códigos de módulos/subfeatures do plano (ex: 'MOD-01', 'MOD-02')
@@ -195,6 +208,124 @@ export function ContractFormModal({
     initialContract?.customTerms || '',
   )
 
+  // Gerador de Faturas do Contrato
+  const [contractInvoices, setContractInvoices] = useState<ContractInvoice[]>([])
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false)
+  const [autoGenerateFirstInvoices, setAutoGenerateFirstInvoices] = useState(true)
+  const [invRefMonth, setInvRefMonth] = useState(() => {
+    const d = new Date()
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  })
+  const [invAmount, setInvAmount] = useState(monthlyAmount)
+  const [invDueDate, setInvDueDate] = useState(() => {
+    const d = new Date()
+    const day = String(Math.min(billingDay || 10, 28)).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    return `${d.getFullYear()}-${mm}-${day}`
+  })
+  const [viewingInvoice, setViewingInvoice] = useState<ContractInvoice | null>(null)
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
+  const [invoiceFeedback, setInvoiceFeedback] = useState<string | null>(null)
+
+  const loadContractInvoices = async () => {
+    if (!initialContract?.id) return
+    setIsLoadingInvoices(true)
+    const res = await contractService.listInvoices(initialContract.id)
+    if (res.success && res.data) {
+      setContractInvoices(res.data)
+    }
+    setIsLoadingInvoices(false)
+  }
+
+  useEffect(() => {
+    if (initialContract?.id) {
+      void loadContractInvoices()
+    }
+  }, [initialContract?.id])
+
+  // Mantém os campos da nova fatura sincronizados com a mensalidade e vencimento do contrato
+  useEffect(() => {
+    setInvAmount(monthlyAmount)
+  }, [monthlyAmount])
+
+  useEffect(() => {
+    const parts = invRefMonth.split('/')
+    if (parts.length === 2) {
+      const mm = parts[0].padStart(2, '0')
+      const yyyy = parts[1]
+      const day = String(Math.min(billingDay || 10, 28)).padStart(2, '0')
+      setInvDueDate(`${yyyy}-${mm}-${day}`)
+    }
+  }, [billingDay, invRefMonth])
+
+  const handleCreateSingleInvoice = async () => {
+    if (!initialContract?.id) return
+    const num = parseFloat(invAmount.replace(',', '.'))
+    if (isNaN(num) || num <= 0) {
+      setInvoiceFeedback('Informe um valor de mensalidade válido para a fatura.')
+      return
+    }
+
+    const seq = contractInvoices.length + 1
+    const invNumber = contractService.generateInvoiceNumber(contractNumber, seq)
+
+    const res = await contractService.saveInvoice({
+      contractId: initialContract.id,
+      companyId: selectedCompanyId || null,
+      invoiceNumber: invNumber,
+      clientName: clientName.trim(),
+      clientDocument: clientDocument.trim() || undefined,
+      referenceMonth: invRefMonth.trim(),
+      amount: num,
+      dueDate: invDueDate,
+      paymentMethod,
+      status: 'pending',
+      notes: `Mensalidade referente ao aluguel de software - ${planName}`,
+    })
+
+    if (res.success) {
+      setInvoiceFeedback(`Fatura #${invNumber} gerada com sucesso!`)
+      setTimeout(() => setInvoiceFeedback(null), 3000)
+      void loadContractInvoices()
+    }
+  }
+
+  const handleGenerateCarnet = async (months = 6) => {
+    if (!initialContract?.id) return
+    const targetContract: SoftwareContract = {
+      ...initialContract,
+      id: initialContract.id,
+      contractNumber,
+      clientName,
+      clientDocument,
+      monthlyAmount: parseFloat(monthlyAmount.replace(',', '.')) || 0,
+      billingDay,
+      paymentMethod,
+      planName,
+    }
+    const res = await contractService.generateInvoicesBatch(targetContract, months)
+    if (res.success && res.data) {
+      setInvoiceFeedback(`${res.data.length} faturas geradas com sucesso!`)
+      setTimeout(() => setInvoiceFeedback(null), 3500)
+      void loadContractInvoices()
+    }
+  }
+
+  const handleToggleInvoicePaid = async (inv: ContractInvoice) => {
+    if (inv.status === 'paid') {
+      await contractService.undoInvoicePayment(inv.id)
+    } else {
+      await contractService.markInvoiceAsPaid(inv.id, inv.paymentMethod || 'PIX')
+    }
+    void loadContractInvoices()
+  }
+
+  const handleDeleteInvoice = async (invId: string) => {
+    if (!window.confirm('Deseja realmente excluir esta fatura?')) return
+    await contractService.deleteInvoice(invId)
+    void loadContractInvoices()
+  }
+
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -273,6 +404,13 @@ export function ContractFormModal({
 
       const res = await contractService.saveContract(payload)
       if (res.success && res.data) {
+        if (!isEditing && autoGenerateFirstInvoices) {
+          try {
+            await contractService.generateInvoicesBatch(res.data, 6)
+          } catch {
+            // non-blocking
+          }
+        }
         onSuccess(res.data, printImmediately)
         onClose()
       } else {
@@ -765,6 +903,222 @@ export function ContractFormModal({
             />
           </div>
 
+          {/* Seção 6: Gerador de Faturas e Mensalidades do Contrato */}
+          <div className="space-y-4 pt-3 border-t border-gray-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                <Receipt className="h-4 w-4" />
+                6. Gerador de Faturas & Mensalidades do Contrato
+              </h3>
+              {isEditing && (
+                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                  {contractInvoices.length} {contractInvoices.length === 1 ? 'fatura gerada' : 'faturas geradas'}
+                </span>
+              )}
+            </div>
+
+            {invoiceFeedback && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>{invoiceFeedback}</span>
+              </div>
+            )}
+
+            {isEditing ? (
+              <div className="space-y-4">
+                {/* Painel do Gerador Rápido */}
+                <div className="p-4 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200 flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-emerald-600" />
+                      Emitir Nova Mensalidade / Cobrança:
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleGenerateCarnet(6)}
+                      className="gap-1.5 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:text-emerald-300 dark:border-emerald-800 font-bold"
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      Gerar Carnê (Próximos 6 Meses)
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-400 mb-1">
+                        Mês Ref. (MM/AAAA)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 12/2026"
+                        value={invRefMonth}
+                        onChange={(e) => setInvRefMonth(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-400 mb-1">
+                        Data de Vencimento
+                      </label>
+                      <input
+                        type="date"
+                        value={invDueDate}
+                        onChange={(e) => setInvDueDate(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-400 mb-1">
+                        Valor da Fatura (R$)
+                      </label>
+                      <input
+                        type="text"
+                        value={invAmount}
+                        onChange={(e) => setInvAmount(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400"
+                      />
+                    </div>
+
+                    <div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void handleCreateSingleInvoice()}
+                        className="w-full gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Gerar Fatura Deste Mês
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabela de Faturas do Contrato */}
+                {isLoadingInvoices ? (
+                  <div className="py-6 text-center text-xs text-gray-400">Carregando faturas...</div>
+                ) : contractInvoices.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-gray-200 dark:border-slate-800 text-center text-xs text-gray-400">
+                    Nenhuma fatura gerada para este contrato ainda. Utilize o gerador acima para criar a primeira fatura ou gerar o carnê dos próximos meses.
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 dark:bg-slate-800/80 font-semibold text-gray-500 dark:text-slate-400 uppercase text-[10px]">
+                        <tr>
+                          <th className="p-2.5">Fatura Nº</th>
+                          <th className="p-2.5">Mês Ref.</th>
+                          <th className="p-2.5">Vencimento</th>
+                          <th className="p-2.5">Valor</th>
+                          <th className="p-2.5">Situação</th>
+                          <th className="p-2.5 text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                        {contractInvoices.map((inv) => {
+                          const effStatus = getInvoiceEffectiveStatus(inv)
+                          const isPaid = effStatus === 'paid'
+                          const isOverdue = effStatus === 'overdue'
+
+                          return (
+                            <tr key={inv.id} className="hover:bg-gray-50/60 dark:hover:bg-slate-800/40">
+                              <td className="p-2.5 font-mono font-bold text-gray-900 dark:text-white">
+                                #{inv.invoiceNumber}
+                              </td>
+                              <td className="p-2.5 font-medium">{inv.referenceMonth}</td>
+                              <td className="p-2.5">
+                                <span className={isOverdue ? 'font-bold text-rose-600 dark:text-rose-400' : ''}>
+                                  {inv.dueDate.split('-').reverse().join('/')}
+                                </span>
+                              </td>
+                              <td className="p-2.5 font-bold text-emerald-700 dark:text-emerald-400">
+                                {formatCurrency(inv.amount.toFixed(2))}
+                              </td>
+                              <td className="p-2.5">
+                                {isPaid ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Pago ({inv.paymentDate?.split('-').reverse().slice(0, 2).join('/') || 'OK'})
+                                  </span>
+                                ) : isOverdue ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 animate-pulse border border-rose-300">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Vencida
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                                    Pendente
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void handleToggleInvoicePaid(inv)}
+                                    className={`px-2 py-1 h-auto text-[11px] font-bold ${
+                                      isPaid
+                                        ? 'text-gray-600 hover:text-gray-800 border-gray-200'
+                                        : 'text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-300'
+                                    }`}
+                                    title={isPaid ? 'Desfazer baixa de pagamento' : 'Registrar pagamento recebido'}
+                                  >
+                                    {isPaid ? 'Desfazer' : 'Dar Baixa / Pago'}
+                                  </Button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setViewingInvoice(inv)
+                                      setIsInvoiceModalOpen(true)
+                                    }}
+                                    className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg"
+                                    title="Visualizar e Imprimir Fatura"
+                                  >
+                                    <Printer className="h-3.5 w-3.5" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDeleteInvoice(inv.id)}
+                                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg"
+                                    title="Excluir Fatura"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/40 border border-gray-200 dark:border-slate-800 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="auto-gen-invoices"
+                  checked={autoGenerateFirstInvoices}
+                  onChange={(e) => setAutoGenerateFirstInvoices(e.target.checked)}
+                  className="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="auto-gen-invoices" className="text-xs text-gray-700 dark:text-slate-300 cursor-pointer">
+                  <span className="font-bold block text-gray-900 dark:text-white">
+                    Gerar automaticamente as faturas dos primeiros 6 meses ao salvar o contrato
+                  </span>
+                  As cobranças mensais serão criadas automaticamente com o valor da mensalidade e dia de vencimento definidos, prontas para controle financeiro e envio ao cliente.
+                </label>
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Rodapé com Ações */}
@@ -798,6 +1152,17 @@ export function ContractFormModal({
         </div>
 
       </div>
+
+      {/* Modal de Impressão da Fatura */}
+      <ContractInvoicePrintModal
+        invoice={viewingInvoice}
+        contract={initialContract}
+        isOpen={isInvoiceModalOpen}
+        onClose={() => {
+          setIsInvoiceModalOpen(false)
+          setViewingInvoice(null)
+        }}
+      />
     </div>
   )
 }

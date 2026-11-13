@@ -34,6 +34,11 @@ import { EditCompanyModal } from '../components/EditCompanyModal'
 import { TrialPeriodModal } from '../components/TrialPeriodModal'
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
 import { formatLastAccess } from '@shared/services/screen-time.service'
+import {
+  contractService,
+  type ContractInvoice,
+  getInvoiceEffectiveStatus,
+} from '../services/contract.service'
 
 export function CompanyManagementPage() {
   const { user } = useAuth()
@@ -41,6 +46,7 @@ export function CompanyManagementPage() {
   const navigate = useNavigate()
 
   const [companies, setCompanies] = useState<ManagedCompany[]>([])
+  const [invoices, setInvoices] = useState<ContractInvoice[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
@@ -69,9 +75,15 @@ export function CompanyManagementPage() {
 
   const loadCompanies = async () => {
     setIsLoading(true)
-    const res = await companyManagementService.listAll()
-    if (res.success) {
-      setCompanies(res.data)
+    const [cRes, iRes] = await Promise.all([
+      companyManagementService.listAll(),
+      contractService.listInvoices(),
+    ])
+    if (cRes.success) {
+      setCompanies(cRes.data)
+    }
+    if (iRes.success && iRes.data) {
+      setInvoices(iRes.data)
     }
     setIsLoading(false)
   }
@@ -79,6 +91,16 @@ export function CompanyManagementPage() {
   useEffect(() => {
     void loadCompanies()
   }, [])
+
+  const overdueCompanyIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const inv of invoices) {
+      if (inv.companyId && getInvoiceEffectiveStatus(inv) === 'overdue') {
+        ids.add(inv.companyId)
+      }
+    }
+    return ids
+  }, [invoices])
 
   const filteredCompanies = useMemo(() => {
     return companies.filter((c) => {
@@ -377,6 +399,12 @@ export function CompanyManagementPage() {
                               <span className="font-bold text-gray-900 dark:text-white">
                                 {comp.name}
                               </span>
+                              {overdueCompanyIds.has(comp.id) && (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 dark:bg-rose-950/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-800 dark:text-rose-300 border border-rose-300 animate-pulse">
+                                  <AlertTriangle className="h-3 w-3 text-rose-600 dark:text-rose-400 shrink-0" />
+                                  FATURA VENCIDA
+                                </span>
+                              )}
                               <span
                                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                                   comp.accessPlanName
@@ -518,11 +546,15 @@ export function CompanyManagementPage() {
                             onClick={() => {
                               void navigate(`/admin/contracts?companyId=${comp.id}`)
                             }}
-                            className="gap-1.5 text-xs font-semibold text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400 dark:hover:bg-purple-950/50"
-                            title="Gerar contrato de aluguel para esta empresa"
+                            className={`gap-1.5 text-xs font-semibold ${
+                              overdueCompanyIds.has(comp.id)
+                                ? 'text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 dark:text-rose-300 dark:border-rose-800 dark:bg-rose-950/40'
+                                : 'text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400 dark:hover:bg-purple-950/50'
+                            }`}
+                            title={overdueCompanyIds.has(comp.id) ? 'Empresa com mensalidade vencida! Clique para gerenciar' : 'Gerar ou consultar contrato desta empresa'}
                           >
                             <FileSignature className="h-3.5 w-3.5" />
-                            Contrato
+                            {overdueCompanyIds.has(comp.id) ? 'Fatura Vencida' : 'Contrato'}
                           </Button>
 
                           <Button

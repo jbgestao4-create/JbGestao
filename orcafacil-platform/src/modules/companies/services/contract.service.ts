@@ -4,6 +4,53 @@ import type { ServiceResult } from '@shared/types/common'
 
 export type ContractStatus = 'active' | 'draft' | 'cancelled' | 'suspended'
 
+export type InvoiceStatus = 'pending' | 'paid' | 'overdue' | 'cancelled'
+
+export interface ContractInvoice {
+  id: string
+  contractId: string
+  companyId?: string | null
+  invoiceNumber: string
+  clientName: string
+  clientDocument?: string
+  referenceMonth: string // Ex: "11/2026"
+  amount: number
+  dueDate: string // YYYY-MM-DD
+  paymentDate?: string | null // YYYY-MM-DD
+  paymentMethod?: string | null
+  status: InvoiceStatus
+  pixKey?: string | null
+  notes?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export function getInvoiceEffectiveStatus(inv: ContractInvoice): 'paid' | 'overdue' | 'pending' | 'cancelled' {
+  if (inv.status === 'paid') return 'paid'
+  if (inv.status === 'cancelled') return 'cancelled'
+  const today = new Date().toISOString().split('T')[0]
+  if (inv.dueDate < today) return 'overdue'
+  return 'pending'
+}
+
+export function getContractOverdueInfo(contractId: string, invoices: ContractInvoice[]) {
+  const contractInvoices = invoices.filter((inv) => inv.contractId === contractId)
+  const overdueInvoices = contractInvoices.filter(
+    (inv) => getInvoiceEffectiveStatus(inv) === 'overdue',
+  )
+  const sortedOverdue = [...overdueInvoices].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const oldest = sortedOverdue[0] || null
+  const totalOverdueAmount = overdueInvoices.reduce((acc, inv) => acc + (inv.amount || 0), 0)
+
+  return {
+    hasOverdue: overdueInvoices.length > 0,
+    overdueCount: overdueInvoices.length,
+    oldestDueDate: oldest ? oldest.dueDate : null,
+    totalOverdueAmount,
+    overdueInvoices,
+  }
+}
+
 export interface SoftwareContract {
   id: string
   companyId?: string | null
@@ -39,6 +86,7 @@ export interface SoftwareContract {
 }
 
 const LOCAL_STORAGE_KEY = 'jb_software_contracts'
+const LOCAL_STORAGE_INVOICES_KEY = 'jb_contract_invoices'
 
 function getLocalContracts(): SoftwareContract[] {
   if (typeof window === 'undefined') return []
@@ -56,6 +104,27 @@ function setLocalContracts(contracts: SoftwareContract[]): void {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(contracts))
+  } catch {
+    // ignore
+  }
+}
+
+function getLocalInvoices(): ContractInvoice[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_INVOICES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function setLocalInvoices(invoices: ContractInvoice[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(LOCAL_STORAGE_INVOICES_KEY, JSON.stringify(invoices))
   } catch {
     // ignore
   }
@@ -244,6 +313,257 @@ export const contractService = {
       await supabase.from('software_contracts').delete().eq('id', id)
     } catch (err) {
       logger.warn('Erro ao deletar contrato remoto', { error: String(err) })
+    }
+
+    return { success: true, data: undefined }
+  },
+
+  /**
+   * Gera número sequencial amigável para a fatura.
+   */
+  generateInvoiceNumber(contractNumber: string, seq: number): string {
+    const cleanNum = contractNumber.replace('CTR-', '')
+    const seqStr = String(seq).padStart(2, '0')
+    return `FAT-${cleanNum}-${seqStr}`
+  },
+
+  /**
+   * Lista todas as faturas cadastradas (opcionalmente filtradas por contrato).
+   */
+  async listInvoices(contractId?: string): Promise<ServiceResult<ContractInvoice[]>> {
+    try {
+      let query = supabase.from('software_contract_invoices').select('*')
+
+      if (contractId) {
+        query = query.eq('contract_id', contractId)
+      }
+
+      const { data, error } = await query.order('due_date', { ascending: false })
+
+      if (error) {
+        logger.warn('Tabela software_contract_invoices não disponível, usando fallback local', {
+          message: error.message,
+        })
+        let local = getLocalInvoices()
+        if (contractId) {
+          local = local.filter((inv) => inv.contractId === contractId)
+        }
+        return { success: true, data: local }
+      }
+
+      const mapped: ContractInvoice[] = (data || []).map((row: any) => ({
+        id: row.id,
+        contractId: row.contract_id,
+        companyId: row.company_id,
+        invoiceNumber: row.invoice_number,
+        clientName: row.client_name,
+        clientDocument: row.client_document,
+        referenceMonth: row.reference_month,
+        amount: Number(row.amount) || 0,
+        dueDate: row.due_date,
+        paymentDate: row.payment_date,
+        paymentMethod: row.payment_method,
+        status: (row.status as InvoiceStatus) || 'pending',
+        pixKey: row.pix_key,
+        notes: row.notes,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }))
+
+      // Atualiza localmente
+      const currentLocal = getLocalInvoices()
+      const merged = contractId
+        ? [...currentLocal.filter((inv) => inv.contractId !== contractId), ...mapped]
+        : mapped
+      setLocalInvoices(merged)
+
+      return { success: true, data: mapped }
+    } catch (err: any) {
+      logger.error('Erro ao listar faturas', err)
+      let local = getLocalInvoices()
+      if (contractId) {
+        local = local.filter((inv) => inv.contractId === contractId)
+      }
+      return { success: true, data: local }
+    }
+  },
+
+  /**
+   * Salva ou atualiza uma fatura.
+   */
+  async saveInvoice(invoice: Partial<ContractInvoice>): Promise<ServiceResult<ContractInvoice>> {
+    const isNew = !invoice.id
+    const now = new Date().toISOString()
+    const id = invoice.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `inv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`)
+
+    const cleanInvoice: ContractInvoice = {
+      id,
+      contractId: invoice.contractId || '',
+      companyId: invoice.companyId || null,
+      invoiceNumber: invoice.invoiceNumber?.trim() || `FAT-${Date.now()}`,
+      clientName: invoice.clientName?.trim() || 'Cliente',
+      clientDocument: invoice.clientDocument?.trim() || undefined,
+      referenceMonth: invoice.referenceMonth?.trim() || 'Mensalidade',
+      amount: Number(invoice.amount) || 0,
+      dueDate: invoice.dueDate || now.split('T')[0],
+      paymentDate: invoice.paymentDate || null,
+      paymentMethod: invoice.paymentMethod?.trim() || 'PIX',
+      status: invoice.status || 'pending',
+      pixKey: invoice.pixKey?.trim() || null,
+      notes: invoice.notes?.trim() || null,
+      createdAt: invoice.createdAt || now,
+      updatedAt: now,
+    }
+
+    // Salva no LocalStorage
+    const local = getLocalInvoices()
+    const idx = local.findIndex((i) => i.id === cleanInvoice.id)
+    if (idx >= 0) {
+      local[idx] = cleanInvoice
+    } else {
+      local.unshift(cleanInvoice)
+    }
+    setLocalInvoices(local)
+
+    // Tenta persistir no Supabase
+    try {
+      const payload: any = {
+        id: cleanInvoice.id,
+        contract_id: cleanInvoice.contractId,
+        company_id: cleanInvoice.companyId || null,
+        invoice_number: cleanInvoice.invoiceNumber,
+        client_name: cleanInvoice.clientName,
+        client_document: cleanInvoice.clientDocument || null,
+        reference_month: cleanInvoice.referenceMonth,
+        amount: cleanInvoice.amount,
+        due_date: cleanInvoice.dueDate,
+        payment_date: cleanInvoice.paymentDate || null,
+        payment_method: cleanInvoice.paymentMethod || null,
+        status: cleanInvoice.status,
+        pix_key: cleanInvoice.pixKey || null,
+        notes: cleanInvoice.notes || null,
+        updated_at: now,
+      }
+      if (isNew) {
+        payload.created_at = now
+      }
+
+      await supabase.from('software_contract_invoices').upsert(payload)
+    } catch (err) {
+      logger.warn('Erro ao sincronizar fatura com Supabase (mantida localmente)', { error: String(err) })
+    }
+
+    return { success: true, data: cleanInvoice }
+  },
+
+  /**
+   * Gera um lote de faturas mensais para um contrato (ex: próximos 3, 6 ou 12 meses).
+   */
+  async generateInvoicesBatch(
+    contract: SoftwareContract,
+    monthsCount = 6,
+  ): Promise<ServiceResult<ContractInvoice[]>> {
+    const generated: ContractInvoice[] = []
+    const existingResult = await this.listInvoices(contract.id)
+    const existing = existingResult.success && existingResult.data ? existingResult.data : []
+    const existingRefs = new Set(existing.map((e) => e.referenceMonth))
+
+    const startDate = new Date()
+    const billingDay = Math.min(contract.billingDay || 10, 28)
+
+    for (let i = 0; i < monthsCount; i++) {
+      const targetDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1)
+      const yyyy = targetDate.getFullYear()
+      const mm = String(targetDate.getMonth() + 1).padStart(2, '0')
+      const refMonth = `${mm}/${yyyy}`
+
+      if (existingRefs.has(refMonth)) {
+        continue // Já existe fatura para esse mês
+      }
+
+      const dayStr = String(billingDay).padStart(2, '0')
+      const dueDate = `${yyyy}-${mm}-${dayStr}`
+      const invNum = this.generateInvoiceNumber(contract.contractNumber, existing.length + generated.length + 1)
+
+      const saveRes = await this.saveInvoice({
+        contractId: contract.id,
+        companyId: contract.companyId,
+        invoiceNumber: invNum,
+        clientName: contract.clientName,
+        clientDocument: contract.clientDocument,
+        referenceMonth: refMonth,
+        amount: contract.monthlyAmount,
+        dueDate,
+        paymentMethod: contract.paymentMethod || 'PIX',
+        status: 'pending',
+        notes: `Mensalidade referente ao aluguel de software - ${contract.planName}`,
+      })
+
+      if (saveRes.success && saveRes.data) {
+        generated.push(saveRes.data)
+      }
+    }
+
+    return { success: true, data: generated }
+  },
+
+  /**
+   * Marca uma fatura como paga.
+   */
+  async markInvoiceAsPaid(
+    invoiceId: string,
+    paymentMethod = 'PIX',
+    paymentDate?: string,
+  ): Promise<ServiceResult<ContractInvoice>> {
+    const today = new Date().toISOString().split('T')[0]
+    const local = getLocalInvoices()
+    const target = local.find((i) => i.id === invoiceId)
+    if (!target) {
+      return { success: false, error: 'Fatura não encontrada.' }
+    }
+
+    const updated: ContractInvoice = {
+      ...target,
+      status: 'paid',
+      paymentDate: paymentDate || today,
+      paymentMethod: paymentMethod || target.paymentMethod || 'PIX',
+      updatedAt: new Date().toISOString(),
+    }
+
+    return this.saveInvoice(updated)
+  },
+
+  /**
+   * Desfaz a baixa do pagamento, retornando para pendente.
+   */
+  async undoInvoicePayment(invoiceId: string): Promise<ServiceResult<ContractInvoice>> {
+    const local = getLocalInvoices()
+    const target = local.find((i) => i.id === invoiceId)
+    if (!target) {
+      return { success: false, error: 'Fatura não encontrada.' }
+    }
+
+    const updated: ContractInvoice = {
+      ...target,
+      status: 'pending',
+      paymentDate: null,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return this.saveInvoice(updated)
+  },
+
+  /**
+   * Exclui uma fatura.
+   */
+  async deleteInvoice(invoiceId: string): Promise<ServiceResult<void>> {
+    const local = getLocalInvoices().filter((i) => i.id !== invoiceId)
+    setLocalInvoices(local)
+
+    try {
+      await supabase.from('software_contract_invoices').delete().eq('id', invoiceId)
+    } catch (err) {
+      logger.warn('Erro ao deletar fatura no Supabase', { error: String(err) })
     }
 
     return { success: true, data: undefined }
