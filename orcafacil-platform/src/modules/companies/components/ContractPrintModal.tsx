@@ -369,7 +369,7 @@ export function ContractPrintModal({ contract, isOpen, onClose }: ContractPrintM
               </p>
               {contract.hasTrialPeriod ? (
                 <p>
-                  2.1.1. <strong>PERÍODO DE TESTE GRATUITO (DEGUSTAÇÃO):</strong> Fica expressamente concedido à <strong>LICENCIATÁRIA</strong> o benefício de <strong>01 (um) mês de teste gratuito</strong>, contado a partir da data de início deste instrumento, durante o qual não haverá cobrança de mensalidade pelo uso do software. A cobrança da mensalidade regular estipulada no item 2.1 terá início apenas a partir do 2º mês de contrato.
+                  2.1.1. <strong>PERÍODO DE TESTE GRATUITO:</strong> Fica expressamente concedido à <strong>LICENCIATÁRIA</strong> o benefício de <strong>01 (um) mês de teste gratuito</strong>, contado a partir da data de início deste instrumento, durante o qual não haverá cobrança de mensalidade pelo uso do software. A cobrança da mensalidade regular estipulada no item 2.1 terá início apenas a partir do 2º mês de contrato.
                 </p>
               ) : null}
               <p>

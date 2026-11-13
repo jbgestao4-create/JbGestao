@@ -178,13 +178,11 @@ export function ContractFormModal({
 
   // Planos cadastrados em Empresas Cadastradas
   const [availablePlans, setAvailablePlans] = useState<AccessPlan[]>(DEFAULT_ACCESS_PLANS)
-  const [isLoadingPlans, setIsLoadingPlans] = useState(false)
 
   // Carrega os planos cadastrados via accessPlanService
   useEffect(() => {
     let isMounted = true
     async function loadPlans() {
-      setIsLoadingPlans(true)
       try {
         const res = await accessPlanService.list()
         if (isMounted && res.success && Array.isArray(res.data) && res.data.length > 0) {
@@ -192,8 +190,6 @@ export function ContractFormModal({
         }
       } catch {
         // Mantém planos padrão caso offline
-      } finally {
-        if (isMounted) setIsLoadingPlans(false)
       }
     }
     void loadPlans()
@@ -201,13 +197,6 @@ export function ContractFormModal({
       isMounted = false
     }
   }, [])
-
-  // Aplica um plano pré-configurado: define o nome e marca os módulos do plano
-  const handleApplyPlan = (plan: AccessPlan) => {
-    setPlanName(plan.name)
-    const mapped = getModuleNamesFromCodes(plan.modules)
-    setIncludedModules(mapped.length > 0 ? mapped : ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.name))
-  }
 
   // Observações e Cláusulas personalizadas
   const [customTerms, setCustomTerms] = useState(
@@ -733,7 +722,7 @@ export function ContractFormModal({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
                       <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      Período de Teste Gratuito de 1 Mês (Degustação)
+                      Período de Teste Gratuito de 1 Mês
                     </span>
                     <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
                       1º Mês Isento de Mensalidade
@@ -749,7 +738,7 @@ export function ContractFormModal({
                 <div className="ml-7 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Gratuidade ativada para o 1º mês:</strong> A mensalidade normal ({monthlyAmount ? `R$ ${monthlyAmount}` : 'R$ 0,00'}/mês) não será cobrada no primeiro mês. A primeira cobrança financeira só começará após o encerramento dos 30 dias de degustação.
+                    <strong>Gratuidade ativada para o 1º mês:</strong> A mensalidade normal ({monthlyAmount ? `R$ ${monthlyAmount}` : 'R$ 0,00'}/mês) não será cobrada no primeiro mês. A primeira cobrança financeira só começará após o encerramento dos 30 dias de teste.
                   </span>
                 </div>
               )}
@@ -875,72 +864,52 @@ export function ContractFormModal({
               4. Plano de Acesso do Software Contratado
             </h3>
 
-            {/* Planos de Acesso Cadastrados em Empresas */}
+            {/* Apenas mostra qual plano foi adicionado ao usuário */}
             <div className="p-4 rounded-xl bg-purple-50/60 dark:bg-purple-950/25 border border-purple-200/80 dark:border-purple-900/50 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                  Selecione o Plano de Acesso da Licença:
-                </span>
-                {isLoadingPlans && (
-                  <span className="text-[10px] text-purple-600 dark:text-purple-400 animate-pulse font-medium">
-                    Carregando planos...
-                  </span>
-                )}
-              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300">
+                    <Package className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 block uppercase tracking-wider">
+                      Plano Vinculado à Empresa / Usuário
+                    </span>
+                    <h4 className="text-base font-bold text-gray-900 dark:text-white leading-tight">
+                      {planName || 'Plano Completo'}
+                    </h4>
+                  </div>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {availablePlans.map((plan) => {
-                  const isSelected = planName.trim().toLowerCase() === plan.name.trim().toLowerCase()
-                  const planMods = getModuleNamesFromCodes(plan.modules)
-                  const count = planMods.length > 0 ? planMods.length : ALL_PLATFORM_DASHBOARD_MODULES.length
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => handleApplyPlan(plan)}
-                      className={`p-3 rounded-xl text-xs font-medium flex items-start gap-2.5 border transition-all text-left ${
-                        isSelected
-                          ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-500/20 font-semibold'
-                          : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 hover:border-purple-300 hover:bg-purple-50/70 dark:hover:bg-slate-700/60'
-                      }`}
-                    >
-                      {isSelected ? (
-                        <CheckCircle2 className="h-4 w-4 text-white shrink-0 mt-0.5" />
-                      ) : (
-                        <Package className="h-4 w-4 text-purple-500 dark:text-purple-400 shrink-0 mt-0.5" />
-                      )}
-                      <div>
-                        <div className="leading-tight font-bold">{plan.name}</div>
-                        <div className={`text-[11px] mt-0.5 ${isSelected ? 'text-purple-100' : 'text-gray-500 dark:text-slate-400'}`}>
-                          {plan.description || `${count} módulos inclusos`}
-                        </div>
-                        <div className={`text-[10px] mt-1 font-semibold ${isSelected ? 'text-purple-200' : 'text-purple-600 dark:text-purple-400'}`}>
-                          {count} {count === 1 ? 'módulo incluso' : 'módulos inclusos'}
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
+                <span className="self-start sm:self-center inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/70 px-3 py-1 text-xs font-bold text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800">
+                  <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                  {includedModules.length} {includedModules.length === 1 ? 'módulo ativo' : 'módulos ativos'}
+                </span>
               </div>
 
               {/* Módulos do Plano Selecionado (Exibição Informativa) */}
               <div className="pt-2.5 border-t border-purple-200/60 dark:border-purple-900/40">
-                <span className="text-[11px] font-bold text-purple-900 dark:text-purple-300 block mb-1.5">
-                  Módulos incluídos no {planName}:
+                <span className="text-xs font-bold text-purple-950 dark:text-purple-200 block mb-2">
+                  Módulos incluídos neste plano:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {includedModules.map((modName) => (
-                    <span
-                      key={modName}
-                      className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shadow-2xs"
-                    >
-                      ✓ {modName}
+                  {includedModules.length > 0 ? (
+                    includedModules.map((modName) => (
+                      <span
+                        key={modName}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shadow-2xs"
+                      >
+                        ✓ {modName}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">
+                      Todos os módulos da plataforma habilitados.
                     </span>
-                  ))}
+                  )}
                 </div>
-                <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80 mt-2">
-                  💡 Os módulos de cada plano são gerenciados centralmente no menu de Cadastro de Planos de Acesso.
+                <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80 mt-2.5">
+                  💡 Os módulos e configurações de cada plano são gerenciados centralmente em <strong>Cadastro de Planos</strong> em Empresas Cadastradas.
                 </p>
               </div>
             </div>
