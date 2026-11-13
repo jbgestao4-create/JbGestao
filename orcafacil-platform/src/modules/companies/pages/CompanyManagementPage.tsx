@@ -5,6 +5,7 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  FileSignature,
   Infinity,
   Layers,
   Lock,
@@ -32,6 +33,7 @@ import { ManageCompanyModulesModal } from '../components/ManageCompanyModulesMod
 import { EditCompanyModal } from '../components/EditCompanyModal'
 import { TrialPeriodModal } from '../components/TrialPeriodModal'
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
+import { ContractsManagementSection } from '../components/ContractsManagementSection'
 import { formatLastAccess } from '@shared/services/screen-time.service'
 
 export function CompanyManagementPage() {
@@ -42,6 +44,10 @@ export function CompanyManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+
+  // Aba Principal: 'companies' (Empresas Cadastradas) ou 'contracts' (Gerar Contratos)
+  const [activeMainTab, setActiveMainTab] = useState<'companies' | 'contracts'>('companies')
+  const [selectedCompanyForContract, setSelectedCompanyForContract] = useState<ManagedCompany | null>(null)
 
   // Modais
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
@@ -222,7 +228,65 @@ export function CompanyManagementPage() {
         </div>
       )}
 
-      {/* Cards de Métricas */}
+      {/* Abas de Navegação: Empresas Cadastradas & Gerar Contratos */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('companies')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            activeMainTab === 'companies'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-2 ring-blue-400/30'
+              : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          <span>Empresas Cadastradas</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+              activeMainTab === 'companies'
+                ? 'bg-white/20 text-white'
+                : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
+            }`}
+          >
+            {companies.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedCompanyForContract(null)
+            setActiveMainTab('contracts')
+          }}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            activeMainTab === 'contracts'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-500/25 ring-2 ring-purple-400/30'
+              : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <FileSignature className="h-4 w-4" />
+          <span>Gerar Contratos</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+              activeMainTab === 'contracts'
+                ? 'bg-white/20 text-white'
+                : 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
+            }`}
+          >
+            Locação / Aluguel
+          </span>
+        </button>
+      </div>
+
+      {activeMainTab === 'contracts' ? (
+        <ContractsManagementSection
+          existingCompanies={companies}
+          prefillCompanyForNewContract={selectedCompanyForContract}
+          onClearPrefillCompany={() => setSelectedCompanyForContract(null)}
+        />
+      ) : (
+        <>
+          {/* Cards de Métricas */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
           <div className="flex items-center justify-between">
@@ -505,6 +569,20 @@ export function CompanyManagementPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => {
+                              setSelectedCompanyForContract(comp)
+                              setActiveMainTab('contracts')
+                            }}
+                            className="gap-1.5 text-xs font-semibold text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400 dark:hover:bg-purple-950/50"
+                            title="Gerar contrato de aluguel para esta empresa"
+                          >
+                            <FileSignature className="h-3.5 w-3.5" />
+                            Contrato
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
                               setSelectedCompanyForUsers(comp)
                             }}
                             className="gap-1.5 text-xs font-semibold text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:text-blue-400 dark:hover:bg-blue-950/50"
@@ -536,6 +614,8 @@ export function CompanyManagementPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Modal de Cadastro de Nova Empresa (Requisito 2) */}
       <RegisterCompanyModal
