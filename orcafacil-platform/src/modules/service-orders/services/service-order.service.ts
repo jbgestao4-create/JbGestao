@@ -261,7 +261,39 @@ export const serviceOrderService = {
     try {
       const { data, error } = await supabase
         .from('service_orders')
-        .select('*')
+        .select(`
+          id,
+          organization_id,
+          order_number,
+          status,
+          priority,
+          customer_id,
+          customer_name,
+          customer_phone,
+          customer_document,
+          equipment_name,
+          equipment_brand,
+          equipment_model,
+          serial_number,
+          reported_problem,
+          solution_applied,
+          technician_name,
+          estimated_delivery_date,
+          damage_notes,
+          damage_checklist,
+          internal_notes,
+          products_subtotal,
+          services_subtotal,
+          subtotal,
+          discount,
+          total,
+          sale_id,
+          sale_number,
+          creator_name,
+          closed_at,
+          created_at,
+          updated_at
+        `)
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false })
 

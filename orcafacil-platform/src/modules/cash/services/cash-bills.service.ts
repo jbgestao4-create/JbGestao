@@ -162,7 +162,7 @@ interface CashBillRow {
   cash_entry_id: string | null
   attachment_name: string | null
   attachment_path: string | null
-  attachment_data_url: string | null
+  attachment_data_url?: string | null
   notes: string | null
   creator_name: string | null
   created_at: string
@@ -191,7 +191,7 @@ function mapBillRow(row: CashBillRow): CashBill {
     cashEntryId: row.cash_entry_id,
     attachmentName: row.attachment_name,
     attachmentPath: row.attachment_path,
-    attachmentDataUrl: row.attachment_data_url,
+    attachmentDataUrl: row.attachment_data_url || null,
     notes: row.notes,
     creatorName: row.creator_name,
     createdAt: row.created_at,
@@ -202,12 +202,39 @@ function mapBillRow(row: CashBillRow): CashBill {
 export const cashBillsService = {
   /**
    * Lista todos os boletos e contas a pagar da organização
+   * Otimização: remove attachment_data_url para evitar download de PDFs em base64 na listagem geral
    */
   async listBills(organizationId: UUID): Promise<ServiceResult<CashBill[]>> {
     try {
       const { data, error } = await supabase
         .from('cash_bills')
-        .select('*, suppliers(name)')
+        .select(`
+          id,
+          organization_id,
+          description,
+          beneficiary_name,
+          supplier_id,
+          category,
+          amount,
+          due_date,
+          barcode,
+          status,
+          paid_at,
+          paid_amount,
+          payment_method,
+          cash_session_id,
+          cash_entry_id,
+          attachment_name,
+          attachment_path,
+          notes,
+          created_by,
+          creator_name,
+          created_at,
+          updated_at,
+          suppliers (
+            name
+          )
+        `)
         .eq('organization_id', organizationId)
         .order('due_date', { ascending: true })
 
@@ -218,13 +245,40 @@ export const cashBillsService = {
 
       return {
         success: true,
-        data: ((data ?? []) as CashBillRow[])
+        data: ((data ?? []) as unknown as CashBillRow[])
           .map(mapBillRow)
           .sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
       }
     } catch (err) {
       logger.error('Erro inesperado ao consultar boletos no Supabase', err)
       return { success: false, error: 'Não foi possível carregar os boletos e contas a pagar.' }
+    }
+  },
+
+  /**
+   * Busca o anexo (PDF / imagem) do boleto sob demanda, somente quando solicitado pelo usuário
+   */
+  async getBillAttachment(organizationId: UUID, billId: string): Promise<ServiceResult<string | null>> {
+    try {
+      const { data, error } = await supabase
+        .from('cash_bills')
+        .select('attachment_data_url')
+        .eq('organization_id', organizationId)
+        .eq('id', billId)
+        .maybeSingle()
+
+      if (error) {
+        logger.error('Erro ao consultar anexo do boleto no Supabase', error)
+        return { success: false, error: 'Não foi possível carregar o anexo do boleto.' }
+      }
+
+      return {
+        success: true,
+        data: (data as { attachment_data_url: string | null } | null)?.attachment_data_url || null,
+      }
+    } catch (err) {
+      logger.error('Erro inesperado ao consultar anexo do boleto no Supabase', err)
+      return { success: false, error: 'Não foi possível carregar o anexo do boleto.' }
     }
   },
 

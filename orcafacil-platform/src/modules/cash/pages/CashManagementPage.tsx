@@ -115,20 +115,14 @@ export function CashManagementPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // Carrega a sessão ativa do Caixa Geral (/cash), vendas e movimentações massivas
-  const loadActiveSession = useCallback(async () => {
+  // Carrega movimentações e vendas globais para os cartões de Saldo em Conta
+  const loadAccountTotals = useCallback(async () => {
     if (!currentOrganization) return;
-    setIsLoadingSession(true);
-
     try {
-      const [res, salesRes, allMovsRes] = await Promise.all([
-        cashSessionService.getOpenCashManagementSession(currentOrganization.id),
+      const [salesRes, allMovsRes] = await Promise.all([
         salesService.listSales(currentOrganization.id),
         cashSessionService.listAllMovements(currentOrganization.id),
       ]);
-
-      const session = res.success ? res.data : null;
-      setActiveSession(session);
 
       if (salesRes.success && salesRes.data) {
         setAllOrgSales(salesRes.data);
@@ -141,9 +135,28 @@ export function CashManagementPage() {
       } else {
         setAllOrgMovements([]);
       }
+    } catch {
+      // Ignora erro
+    }
+  }, [currentOrganization]);
+
+  // Carrega a sessão ativa do Caixa Geral (/cash) filtrando vendas apenas a partir da abertura da sessão
+  const loadActiveSession = useCallback(async () => {
+    if (!currentOrganization) return;
+    setIsLoadingSession(true);
+
+    try {
+      const res = await cashSessionService.getOpenCashManagementSession(currentOrganization.id);
+      const session = res.success ? res.data : null;
+      setActiveSession(session);
 
       if (session) {
-        const movRes = await cashSessionService.listMovements(currentOrganization.id, session.id);
+        // Otimização: busca apenas vendas e movimentações ocorridas a partir da data de abertura da sessão
+        const [movRes, salesRes] = await Promise.all([
+          cashSessionService.listMovements(currentOrganization.id, session.id),
+          salesService.listSales(currentOrganization.id, { sinceDate: session.openedAt }),
+        ]);
+
         if (movRes.success && movRes.data) {
           setSessionMovements(movRes.data);
         } else {
@@ -226,6 +239,24 @@ export function CashManagementPage() {
     }
   }, [currentOrganization]);
 
+  const handleOpenBillAttachment = useCallback(async (b: CashBill) => {
+    let dataUrl = b.attachmentDataUrl;
+    if (!dataUrl && currentOrganization) {
+      const res = await cashBillsService.getBillAttachment(currentOrganization.id, b.id);
+      if (res.success && res.data) {
+        dataUrl = res.data;
+        b.attachmentDataUrl = dataUrl;
+      }
+    }
+    if (!dataUrl) return;
+    const win = window.open();
+    if (win) {
+      win.document.write(
+        `<iframe src="${dataUrl}" style="width:100%;height:100vh;border:none;" title="${b.attachmentName || b.description}"></iframe>`
+      );
+    }
+  }, [currentOrganization]);
+
   const handleOpenOpenModal = useCallback(async () => {
     setClosureModalOpen(false);
     setClosureSession(null);
@@ -238,20 +269,22 @@ export function CashManagementPage() {
   const handleRefreshAll = useCallback(async () => {
     setIsRefreshing(true);
     await Promise.all([
+      loadAccountTotals(),
       loadActiveSession(),
       loadBills(),
       loadHistory(),
       loadLastClosure(),
     ]);
     setIsRefreshing(false);
-  }, [loadActiveSession, loadBills, loadHistory, loadLastClosure]);
+  }, [loadAccountTotals, loadActiveSession, loadBills, loadHistory, loadLastClosure]);
 
   useEffect(() => {
+    void loadAccountTotals();
     void loadActiveSession();
     void loadBills();
     void loadHistory();
     void loadLastClosure();
-  }, [loadActiveSession, loadBills, loadHistory, loadLastClosure]);
+  }, [loadAccountTotals, loadActiveSession, loadBills, loadHistory, loadLastClosure]);
 
   // Abre modal de abertura de Caixa Geral quando acionado via ?openCash=true ou evento global
   useEffect(() => {
@@ -273,15 +306,14 @@ export function CashManagementPage() {
     };
   }, [handleOpenOpenModal]);
 
-  // Atualização em tempo real (Supabase Realtime Channel + Interval de contingência)
+  // Atualização em tempo real (Supabase Realtime Channel + Interval de contingência otimizado)
   useEffect(() => {
     if (!currentOrganization) return;
 
-    // Contingência: atualização a cada 10 segundos
+    // Contingência: atualização a cada 45 segundos apenas da sessão ativa (sem polling pesado de boletos)
     const interval = setInterval(() => {
       void loadActiveSession();
-      void loadBills();
-    }, 10000);
+    }, 45000);
 
     // Canal Realtime do Supabase
     const channelName = `cash-mgmt-${currentOrganization.id}-${Math.random().toString(36).substring(2, 9)}`
@@ -329,7 +361,7 @@ export function CashManagementPage() {
       clearInterval(interval);
       void supabase.removeChannel(channel);
     };
-  }, [currentOrganization, loadActiveSession, loadBills]);
+  }, [currentOrganization, loadActiveSession]);
 
   // Handler para Abertura do Caixa Geral (/cash)
   const handleOpenSession = async (e: React.FormEvent) => {
@@ -1472,15 +1504,14 @@ export function CashManagementPage() {
                               )}
                             </td>
                             <td className="p-3.5 text-right space-x-2">
-                              {b.attachmentDataUrl && (
-                                <a
-                                  href={b.attachmentDataUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                              {(b.attachmentName || b.attachmentDataUrl) && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleOpenBillAttachment(b)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
                                 >
                                   <Eye className="h-3.5 w-3.5" /> PDF
-                                </a>
+                                </button>
                               )}
                               {b.status === 'pending' && (
                                 <Button

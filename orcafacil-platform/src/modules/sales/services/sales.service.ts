@@ -217,10 +217,14 @@ export function encodeSaleNotes(metadata: SaleMetadata, userNotes?: string): str
 export const salesService = {
   /**
    * Lista todas as vendas da organização (excluindo orçamentos puros)
+   * Permite filtrar por data inicial (sinceDate) para reconciliação otimizada de caixas
    */
-  async listSales(organizationId: UUID): Promise<ServiceResult<SaleListItem[]>> {
+  async listSales(
+    organizationId: UUID,
+    options?: { sinceDate?: string; limit?: number },
+  ): Promise<ServiceResult<SaleListItem[]>> {
     try {
-      const { data: quotes, error } = await supabase
+      let query = supabase
         .from('quotes')
         .select(`
           id,
@@ -251,7 +255,16 @@ export const salesService = {
           )
         `)
         .eq('organization_id', organizationId)
-        .order('created_at', { ascending: false })
+
+      if (options?.sinceDate) {
+        query = query.gte('created_at', options.sinceDate)
+      }
+
+      if (options?.limit) {
+        query = query.limit(options.limit)
+      }
+
+      const { data: quotes, error } = await query.order('created_at', { ascending: false })
 
       if (error) {
         logger.error('Erro ao listar vendas', error)

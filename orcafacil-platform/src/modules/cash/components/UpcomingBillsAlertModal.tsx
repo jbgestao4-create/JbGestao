@@ -262,12 +262,20 @@ export function UpcomingBillsAlertModal({
     }
   }
 
-  const handleOpenAttachment = (bill: CashBillAlert) => {
-    if (!bill.attachmentDataUrl) return
+  const handleOpenAttachment = async (bill: CashBillAlert) => {
+    let dataUrl = bill.attachmentDataUrl
+    if (!dataUrl && currentOrganization) {
+      const res = await cashBillsService.getBillAttachment(currentOrganization.id, bill.id)
+      if (res.success && res.data) {
+        dataUrl = res.data
+        bill.attachmentDataUrl = dataUrl
+      }
+    }
+    if (!dataUrl) return
     const win = window.open()
     if (win) {
       win.document.write(
-        `<iframe src="${bill.attachmentDataUrl}" style="width:100%;height:100vh;border:none;" title="${bill.attachmentName || bill.description}"></iframe>`,
+        `<iframe src="${dataUrl}" style="width:100%;height:100vh;border:none;" title="${bill.attachmentName || bill.description}"></iframe>`,
       )
     }
   }
@@ -455,7 +463,7 @@ export function UpcomingBillsAlertModal({
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {bill.attachmentDataUrl && (
+                      {(bill.attachmentName || bill.attachmentDataUrl) && (
                         <button
                           type="button"
                           onClick={() => handleOpenAttachment(bill)}
