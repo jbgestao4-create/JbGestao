@@ -35,15 +35,19 @@ interface ContractsManagementSectionProps {
   existingCompanies: ManagedCompany[]
   prefillCompanyForNewContract?: ManagedCompany | null
   onClearPrefillCompany?: () => void
+  initialTab?: 'contracts' | 'payments'
+  initialCompanyId?: string
 }
 
 export function ContractsManagementSection({
   existingCompanies,
   prefillCompanyForNewContract,
   onClearPrefillCompany,
+  initialTab = 'contracts',
+  initialCompanyId,
 }: ContractsManagementSectionProps) {
   // Controle de Abas: 'contracts' (Contratos) ou 'payments' (Faturas & Pagamentos)
-  const [activeTab, setActiveTab] = useState<'contracts' | 'payments'>('contracts')
+  const [activeTab, setActiveTab] = useState<'contracts' | 'payments'>(initialTab)
 
   const [contracts, setContracts] = useState<SoftwareContract[]>([])
   const [invoices, setInvoices] = useState<ContractInvoice[]>([])
@@ -54,8 +58,9 @@ export function ContractsManagementSection({
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
   // Filtros de Faturas / Pagamentos
+  const [selectedClientFilter, setSelectedClientFilter] = useState<string>('')
   const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('')
-  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all')
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<'all' | 'paid' | 'unpaid' | 'overdue'>('all')
 
   // Modais
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
@@ -85,6 +90,23 @@ export function ContractsManagementSection({
     void loadData()
   }, [])
 
+  // Sincroniza aba inicial caso mude via URL
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [initialTab])
+
+  // Se houver uma empresa pré-selecionada via URL para visualizar faturas ou contrato
+  useEffect(() => {
+    if (initialCompanyId && existingCompanies.length > 0) {
+      const found = existingCompanies.find((c) => c.id === initialCompanyId)
+      if (found) {
+        setSelectedClientFilter(found.name)
+      }
+    }
+  }, [initialCompanyId, existingCompanies])
+
   // Se houver uma empresa pré-selecionada para gerar contrato
   useEffect(() => {
     if (prefillCompanyForNewContract) {
@@ -93,6 +115,57 @@ export function ContractsManagementSection({
       setIsFormModalOpen(true)
     }
   }, [prefillCompanyForNewContract])
+
+  // Lista única de clientes para o seletor da aba de faturas
+  const clientOptions = useMemo(() => {
+    const map = new Map<string, { total: number; paid: number; unpaid: number }>()
+    for (const inv of invoices) {
+      const name = inv.clientName || 'Cliente'
+      const stat = map.get(name) || { total: 0, paid: 0, unpaid: 0 }
+      stat.total++
+      if (getInvoiceEffectiveStatus(inv) === 'paid') {
+        stat.paid++
+      } else {
+        stat.unpaid++
+      }
+      map.set(name, stat)
+    }
+    for (const c of contracts) {
+      if (!map.has(c.clientName)) {
+        map.set(c.clientName, { total: 0, paid: 0, unpaid: 0 })
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [invoices, contracts])
+
+  // Dados do cliente selecionado no filtro de faturas
+  const selectedClientContract = useMemo(() => {
+    if (!selectedClientFilter) return null
+    return contracts.find((c) => c.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase()) || null
+  }, [contracts, selectedClientFilter])
+
+  const selectedClientStats = useMemo(() => {
+    if (!selectedClientFilter) return null
+    const list = invoices.filter((i) => i.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase())
+    let paid = 0
+    let unpaid = 0
+    let paidAmount = 0
+    let unpaidAmount = 0
+    let overdueCount = 0
+
+    for (const inv of list) {
+      const eff = getInvoiceEffectiveStatus(inv)
+      if (eff === 'paid') {
+        paid++
+        paidAmount += inv.amount || 0
+      } else if (eff !== 'cancelled') {
+        unpaid++
+        unpaidAmount += inv.amount || 0
+        if (eff === 'overdue') overdueCount++
+      }
+    }
+    return { paid, unpaid, paidAmount, unpaidAmount, overdueCount, total: list.length }
+  }, [invoices, selectedClientFilter])
 
   // Métricas de Contratos
   const metrics = useMemo(() => {
@@ -139,6 +212,31 @@ export function ContractsManagementSection({
     }
   }, [invoices])
 
+  // Contagens contextuais para os botões de filtro da aba de faturas (baseadas no cliente selecionado se houver)
+  const currentTabCounts = useMemo(() => {
+    const list = selectedClientFilter
+      ? invoices.filter((i) => i.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase())
+      : invoices
+
+    let paid = 0
+    let unpaid = 0
+    let overdue = 0
+    let pending = 0
+
+    for (const inv of list) {
+      const eff = getInvoiceEffectiveStatus(inv)
+      if (eff === 'paid') {
+        paid++
+      } else if (eff !== 'cancelled') {
+        unpaid++
+        if (eff === 'overdue') overdue++
+        if (eff === 'pending') pending++
+      }
+    }
+
+    return { total: list.length, paid, unpaid, overdue, pending }
+  }, [invoices, selectedClientFilter])
+
   // Contagem de contratos com alguma fatura vencida
   const overdueContractsCount = useMemo(() => {
     return contracts.filter((c) => getContractOverdueInfo(c.id, invoices).hasOverdue).length
@@ -171,6 +269,10 @@ export function ContractsManagementSection({
   // Filtro de Faturas
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
+      const matchClient = !selectedClientFilter
+        ? true
+        : inv.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase()
+
       const matchSearch =
         inv.clientName.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
         inv.invoiceNumber.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
@@ -183,13 +285,15 @@ export function ContractsManagementSection({
           ? true
           : invoiceStatusFilter === 'paid'
             ? eff === 'paid'
-            : invoiceStatusFilter === 'overdue'
-              ? eff === 'overdue'
-              : eff === 'pending'
+            : invoiceStatusFilter === 'unpaid'
+              ? eff !== 'paid' && eff !== 'cancelled'
+              : invoiceStatusFilter === 'overdue'
+                ? eff === 'overdue'
+                : eff === 'pending'
 
-      return matchSearch && matchStatus
+      return matchClient && matchSearch && matchStatus
     })
-  }, [invoices, invoiceSearchTerm, invoiceStatusFilter])
+  }, [invoices, selectedClientFilter, invoiceSearchTerm, invoiceStatusFilter])
 
   const handleDelete = async (contract: SoftwareContract) => {
     if (!window.confirm(`Deseja realmente excluir o Contrato #${contract.contractNumber} (${contract.clientName})?`)) {
@@ -621,11 +725,12 @@ export function ContractsManagementSection({
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
-                                  setEditingContract(c)
-                                  setIsFormModalOpen(true)
+                                  setSelectedClientFilter(c.clientName)
+                                  setInvoiceStatusFilter('all')
+                                  setActiveTab('payments')
                                 }}
                                 className="gap-1.5 text-xs font-bold text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-300 dark:border-emerald-800"
-                                title="Gerador de Faturas e Cobranças deste Contrato"
+                                title="Abrir aba de faturas deste cliente (ver todas pagas e não pagas)"
                               >
                                 <Receipt className="h-3.5 w-3.5" />
                                 Faturas
@@ -683,6 +788,116 @@ export function ContractsManagementSection({
       {/* CONTEÚDO DA ABA 2: PAGAMENTOS & FATURAS (CONTROLE FINANCEIRO) */}
       {activeTab === 'payments' && (
         <div className="space-y-6">
+          {/* Seletor de Cliente para Visualização de Faturas */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <div className="flex-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400 mb-1.5 flex items-center gap-1.5">
+                <Receipt className="h-4 w-4 text-emerald-600" />
+                <span>Selecionar Cliente para Visualizar Faturas (Pagas e Não Pagas)</span>
+              </label>
+              <select
+                value={selectedClientFilter}
+                onChange={(e) => {
+                  setSelectedClientFilter(e.target.value)
+                  setInvoiceStatusFilter('all')
+                }}
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50/80 dark:bg-slate-800 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:border-emerald-500 focus:outline-none"
+              >
+                <option value="">🏢 Todos os Clientes (Visão Geral da Carteira - {invoices.length} faturas)</option>
+                {clientOptions.map(([clientName, stat]) => (
+                  <option key={clientName} value={clientName}>
+                    {clientName} — {stat.total} {stat.total === 1 ? 'fatura' : 'faturas'} ({stat.paid} pagas / {stat.unpaid} não pagas)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedClientFilter ? (
+              <div className="flex items-center gap-2 self-start md:self-end">
+                {selectedClientContract && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setEditingContract(selectedClientContract)
+                      setIsFormModalOpen(true)
+                    }}
+                    className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                    title="Emitir novas faturas / carnê para este cliente"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Gerar Faturas / Carnê
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedClientFilter('')
+                    setInvoiceStatusFilter('all')
+                  }}
+                  className="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-slate-300"
+                >
+                  Ver Todos os Clientes
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Banner em Destaque do Cliente Selecionado */}
+          {selectedClientFilter && selectedClientStats && (
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/25 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
+                    Cliente Selecionado:
+                  </span>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    {selectedClientFilter}
+                  </h3>
+                  {selectedClientContract && (
+                    <span className="rounded-md bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-xs font-bold px-2 py-0.5 border border-purple-200 dark:border-purple-800">
+                      Contrato #{selectedClientContract.contractNumber} ({selectedClientContract.planName})
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 dark:text-slate-400 mt-1">
+                  {selectedClientContract ? (
+                    <>
+                      Mensalidade: <strong>{formatCurrency(selectedClientContract.monthlyAmount.toFixed(2))}</strong> • Vencimento: Todo dia {String(selectedClientContract.billingDay).padStart(2, '0')} • Responsável: <strong>{selectedClientContract.clientResponsibleName}</strong>
+                    </>
+                  ) : (
+                    'Faturas emitidas para este cliente na plataforma.'
+                  )}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="rounded-xl bg-white dark:bg-slate-800 px-3.5 py-2 border border-emerald-200 dark:border-emerald-900/40 text-center shadow-xs">
+                  <div className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400">Faturas Pagas</div>
+                  <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">
+                    {selectedClientStats.paid} ({formatCurrency(selectedClientStats.paidAmount.toFixed(2))})
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white dark:bg-slate-800 px-3.5 py-2 border border-amber-200 dark:border-amber-900/40 text-center shadow-xs">
+                  <div className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">Não Pagas</div>
+                  <div className="text-sm font-extrabold text-amber-700 dark:text-amber-300">
+                    {selectedClientStats.unpaid} ({formatCurrency(selectedClientStats.unpaidAmount.toFixed(2))})
+                  </div>
+                </div>
+
+                {selectedClientStats.overdueCount > 0 && (
+                  <div className="rounded-xl bg-rose-100 dark:bg-rose-950/80 px-3.5 py-2 border border-rose-300 dark:border-rose-800 text-center shadow-xs animate-pulse">
+                    <div className="text-[10px] uppercase font-extrabold text-rose-800 dark:text-rose-300">⚠️ Vencidas em Atraso</div>
+                    <div className="text-sm font-extrabold text-rose-800 dark:text-rose-200">
+                      {selectedClientStats.overdueCount} {selectedClientStats.overdueCount === 1 ? 'fatura' : 'faturas'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Cards Financeiros de Faturas e Pagamentos */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-5 shadow-xs">
@@ -775,7 +990,7 @@ export function ContractsManagementSection({
                     : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
                 }`}
               >
-                Todas ({invoices.length})
+                Todas ({currentTabCounts.total})
               </button>
               <button
                 type="button"
@@ -786,18 +1001,18 @@ export function ContractsManagementSection({
                     : 'text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/40 hover:bg-emerald-100'
                 }`}
               >
-                ✓ Pagas / Recebidas ({invoiceMetrics.paidCount})
+                ✓ Pagas ({currentTabCounts.paid})
               </button>
               <button
                 type="button"
-                onClick={() => setInvoiceStatusFilter('pending')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  invoiceStatusFilter === 'pending'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100'
+                onClick={() => setInvoiceStatusFilter('unpaid')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  invoiceStatusFilter === 'unpaid'
+                    ? 'bg-amber-600 text-white'
+                    : 'text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100'
                 }`}
               >
-                Pendentes a Vencer ({invoiceMetrics.pendingCount})
+                ⏳ Não Pagas ({currentTabCounts.unpaid})
               </button>
               <button
                 type="button"
@@ -808,7 +1023,7 @@ export function ContractsManagementSection({
                     : 'text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100'
                 }`}
               >
-                ⚠️ Vencidas em Atraso ({invoiceMetrics.overdueCount})
+                ⚠️ Vencidas em Atraso ({currentTabCounts.overdue})
               </button>
             </div>
           </div>
@@ -824,11 +1039,27 @@ export function ContractsManagementSection({
               <div className="py-16 text-center space-y-3">
                 <Receipt className="mx-auto h-12 w-12 text-gray-300 dark:text-slate-600" />
                 <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">
-                  Nenhuma fatura encontrada.
+                  {selectedClientFilter
+                    ? `Nenhuma fatura encontrada para ${selectedClientFilter}.`
+                    : 'Nenhuma fatura encontrada.'}
                 </p>
                 <p className="text-xs text-gray-400 dark:text-slate-500 max-w-sm mx-auto">
-                  As faturas podem ser geradas dentro do contrato na aba "Contratos de Licença" (clique em "Faturas" ou "Editar Contrato").
+                  {selectedClientFilter && selectedClientContract
+                    ? 'Clique no botão abaixo para gerar faturas mensais ou carnê de pagamento para este cliente.'
+                    : 'As faturas podem ser geradas dentro de cada contrato na aba "Contratos de Licença".'}
                 </p>
+                {selectedClientFilter && selectedClientContract && (
+                  <Button
+                    onClick={() => {
+                      setEditingContract(selectedClientContract)
+                      setIsFormModalOpen(true)
+                    }}
+                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white mt-2 shadow-xs"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Gerar Faturas para {selectedClientFilter}
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -914,23 +1145,23 @@ export function ContractsManagementSection({
                               <div>
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                                  Pago
+                                  PAGA
                                 </span>
                                 {inv.paymentDate && (
                                   <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5 font-medium">
-                                    {inv.paymentDate.split('-').reverse().join('/')}
+                                    Pago em {inv.paymentDate.split('-').reverse().join('/')}
                                   </div>
                                 )}
                               </div>
                             ) : isOverdue ? (
                               <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 dark:bg-rose-950/80 px-2.5 py-1 text-xs font-extrabold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse">
                                 <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
-                                Vencida em Atraso
+                                NÃO PAGA (Vencida)
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                                 <Clock className="h-3.5 w-3.5 text-amber-600" />
-                                Pendente a Vencer
+                                NÃO PAGA (Pendente)
                               </span>
                             )}
                           </td>
@@ -1025,26 +1256,6 @@ export function ContractsManagementSection({
         onClose={() => {
           setIsInvoicePrintModalOpen(false)
           setViewingInvoice(null)
-        }}
-      />
-
-      {/* Modal de Criação / Edição */}
-      <ContractFormModal
-        isOpen={isFormModalOpen}
-        onClose={handleCloseFormModal}
-        onSuccess={handleFormSuccess}
-        initialContract={editingContract}
-        prefillCompany={prefillCompanyForNewContract}
-        existingCompanies={existingCompanies}
-      />
-
-      {/* Modal de Impressão Oficial */}
-      <ContractPrintModal
-        contract={printingContract}
-        isOpen={isPrintModalOpen}
-        onClose={() => {
-          setIsPrintModalOpen(false)
-          setPrintingContract(null)
         }}
       />
     </div>

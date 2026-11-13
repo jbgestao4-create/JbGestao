@@ -151,12 +151,12 @@ export function DeveloperSettingsPage() {
     },
     {
       id: 'contracts',
-      title: 'Gerar Contratos',
+      title: 'Gerar Contratos / Faturas',
       badge: contractsCount !== null ? `${contractsCount} contratos` : undefined,
       badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 font-semibold',
       description:
-        'Gere e administre contratos de locação/aluguel do sistema para futuros clientes, definindo mensalidade, data, responsável legal e cláusulas para impressão e PDF.',
-      actionText: 'Gerar Contratos',
+        'Gere e administre contratos de locação/aluguel e faturas mensais do sistema para futuros clientes, definindo mensalidade, data, responsável e controle financeiro de pagamentos.',
+      actionText: 'Gerar Contratos / Faturas',
       path: '/admin/contracts',
       icon: FileSignature,
       iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/70 dark:text-purple-400',

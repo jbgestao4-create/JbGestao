@@ -225,7 +225,7 @@ export function CompanyManagementPage() {
             className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400"
           >
             <FileSignature className="h-4 w-4" />
-            Gerar Contratos
+            Gerar Contratos / Faturas
           </Button>
 
           {/* Botão de cadastro transferido da tela de login (Item 2 do requisito) */}
@@ -544,14 +544,15 @@ export function CompanyManagementPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              void navigate(`/admin/contracts?companyId=${comp.id}`)
+                              const isOverdue = overdueCompanyIds.has(comp.id)
+                              void navigate(`/admin/contracts?companyId=${comp.id}${isOverdue ? '&tab=invoices' : ''}`)
                             }}
                             className={`gap-1.5 text-xs font-semibold ${
                               overdueCompanyIds.has(comp.id)
                                 ? 'text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 dark:text-rose-300 dark:border-rose-800 dark:bg-rose-950/40'
                                 : 'text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400 dark:hover:bg-purple-950/50'
                             }`}
-                            title={overdueCompanyIds.has(comp.id) ? 'Empresa com mensalidade vencida! Clique para gerenciar' : 'Gerar ou consultar contrato desta empresa'}
+                            title={overdueCompanyIds.has(comp.id) ? 'Empresa com mensalidade vencida! Clique para gerenciar faturas' : 'Gerar ou consultar contrato desta empresa'}
                           >
                             <FileSignature className="h-3.5 w-3.5" />
                             {overdueCompanyIds.has(comp.id) ? 'Fatura Vencida' : 'Contrato'}

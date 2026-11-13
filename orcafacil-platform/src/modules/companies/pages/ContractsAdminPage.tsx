@@ -15,6 +15,7 @@ export function ContractsAdminPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const prefillCompanyId = searchParams.get('companyId')
+  const initialTab = searchParams.get('tab') === 'invoices' ? 'payments' : 'contracts'
 
   const [companies, setCompanies] = useState<ManagedCompany[]>([])
 
@@ -41,7 +42,7 @@ export function ContractsAdminPage() {
         </div>
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Acesso Restrito ao Desenvolvedor</h1>
         <p className="text-sm text-gray-500 dark:text-slate-400">
-          O módulo de Gerar Contratos de Aluguel de Software é restrito exclusivamente ao desenvolvedor e proprietário da plataforma.
+          O módulo de Gerar Contratos / Faturas de Software é restrito exclusivamente ao desenvolvedor e proprietário da plataforma.
         </p>
         <button
           type="button"
@@ -73,7 +74,7 @@ export function ContractsAdminPage() {
 
           <span className="text-xs font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
             <FileSignature className="h-3.5 w-3.5" />
-            Gerar Contratos
+            Gerar Contratos / Faturas
           </span>
         </div>
 
@@ -85,10 +86,12 @@ export function ContractsAdminPage() {
         </Link>
       </div>
 
-      {/* Seção Principal de Contratos */}
+      {/* Seção Principal de Contratos e Faturas */}
       <ContractsManagementSection
         existingCompanies={companies}
         prefillCompanyForNewContract={prefillCompany}
+        initialTab={initialTab}
+        initialCompanyId={prefillCompanyId || undefined}
       />
     </div>
   )
