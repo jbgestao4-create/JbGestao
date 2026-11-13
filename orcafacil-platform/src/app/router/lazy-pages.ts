@@ -210,6 +210,12 @@ export const PrivacyPolicyPage = lazy(() =>
   })),
 )
 
+export const ContractsAdminPage = lazy(() =>
+  import('@modules/companies/pages/ContractsAdminPage').then((module) => ({
+    default: module.ContractsAdminPage,
+  })),
+)
+
 
 
 

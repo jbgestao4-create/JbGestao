@@ -47,6 +47,7 @@ import {
   SystemNotificationsAdminPage,
   SystemUpdatesAdminPage,
   PrivacyPolicyPage,
+  ContractsAdminPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -155,6 +156,20 @@ export const router = createBrowserRouter([
   {
     path: '/system-updates',
     element: <Navigate to="/admin/system-updates" replace />,
+  },
+  {
+    path: '/admin/contracts',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <ContractsAdminPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/contracts',
+    element: <Navigate to="/admin/contracts" replace />,
   },
   {
     path: '/suggestions',

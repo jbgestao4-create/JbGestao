@@ -13,12 +13,14 @@ import {
   Key,
   Check,
   CheckCircle2,
+  FileSignature,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import { companyManagementService } from '../services/company-management.service'
+import { contractService } from '../services/contract.service'
 import { announcementService, type SystemAnnouncement } from '@shared/services/announcement.service'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { systemNotificationService } from '@shared/services/system-notification.service'
@@ -44,6 +46,7 @@ export function DeveloperSettingsPage() {
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
   const [activeNotificationsCount, setActiveNotificationsCount] = useState<number | null>(null)
   const [updatesCount, setUpdatesCount] = useState<number | null>(null)
+  const [contractsCount, setContractsCount] = useState<number | null>(null)
   const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey())
   const [apiKeySaved, setApiKeySaved] = useState(false)
   const [testingAi, setTestingAi] = useState(false)
@@ -54,12 +57,13 @@ export function DeveloperSettingsPage() {
 
     const loadStats = async () => {
       try {
-        const [compRes, annRes, maintRes, notifRes, updRes] = await Promise.all([
+        const [compRes, annRes, maintRes, notifRes, updRes, contractRes] = await Promise.all([
           companyManagementService.listAll(),
           announcementService.listAll(),
           systemMaintenanceService.getStatus(),
           systemNotificationService.listAll(),
           systemUpdateService.listAll(),
+          contractService.listContracts(),
         ])
 
         if (isMounted) {
@@ -77,6 +81,9 @@ export function DeveloperSettingsPage() {
           }
           if (updRes.success && updRes.data) {
             setUpdatesCount(updRes.data.length)
+          }
+          if (contractRes.success && contractRes.data) {
+            setContractsCount(contractRes.data.length)
           }
         }
 
@@ -141,6 +148,20 @@ export function DeveloperSettingsPage() {
       iconBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-400',
       cardHoverBorder: 'hover:border-indigo-400 dark:hover:border-indigo-600',
       accentColor: 'indigo',
+    },
+    {
+      id: 'contracts',
+      title: 'Gerar Contratos',
+      badge: contractsCount !== null ? `${contractsCount} contratos` : undefined,
+      badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 font-semibold',
+      description:
+        'Gere e administre contratos de locação/aluguel do sistema para futuros clientes, definindo mensalidade, data, responsável legal e cláusulas para impressão e PDF.',
+      actionText: 'Gerar Contratos',
+      path: '/admin/contracts',
+      icon: FileSignature,
+      iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/70 dark:text-purple-400',
+      cardHoverBorder: 'hover:border-purple-400 dark:hover:border-purple-600',
+      accentColor: 'purple',
     },
     {
       id: 'announcements',

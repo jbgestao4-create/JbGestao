@@ -42,16 +42,20 @@ describe('contractService', () => {
 
     const saveResult = await contractService.saveContract(contractData)
     expect(saveResult.success).toBe(true)
+    if (!saveResult.success) return
+
     expect(saveResult.data).toBeDefined()
-    expect(saveResult.data?.clientName).toBe('Oficina Central Ltda')
-    expect(saveResult.data?.clientResponsibleName).toBe('Carlos Alberto')
-    expect(saveResult.data?.monthlyAmount).toBe(250.0)
-    expect(saveResult.data?.billingDay).toBe(15)
+    expect(saveResult.data.clientName).toBe('Oficina Central Ltda')
+    expect(saveResult.data.clientResponsibleName).toBe('Carlos Alberto')
+    expect(saveResult.data.monthlyAmount).toBe(250.0)
+    expect(saveResult.data.billingDay).toBe(15)
 
     const listResult = await contractService.listContracts()
     expect(listResult.success).toBe(true)
-    expect(listResult.data?.length).toBe(1)
-    expect(listResult.data?.[0].clientName).toBe('Oficina Central Ltda')
+    if (!listResult.success) return
+
+    expect(listResult.data.length).toBe(1)
+    expect(listResult.data[0].clientName).toBe('Oficina Central Ltda')
   })
 
   it('deve atualizar um contrato existente e permitir exclusão', async () => {
@@ -63,7 +67,9 @@ describe('contractService', () => {
     })
 
     expect(created.success).toBe(true)
-    const id = created.data!.id
+    if (!created.success) return
+
+    const id = created.data.id
 
     // Atualiza
     const updated = await contractService.saveContract({
@@ -73,14 +79,19 @@ describe('contractService', () => {
     })
 
     expect(updated.success).toBe(true)
-    expect(updated.data?.monthlyAmount).toBe(200.0)
-    expect(updated.data?.clientResponsibleName).toBe('Maria Silva Santos')
+    if (!updated.success) return
+
+    expect(updated.data.monthlyAmount).toBe(200.0)
+    expect(updated.data.clientResponsibleName).toBe('Maria Silva Santos')
 
     // Exclui
     const deleteRes = await contractService.deleteContract(id)
     expect(deleteRes.success).toBe(true)
 
     const listAfter = await contractService.listContracts()
-    expect(listAfter.data?.length).toBe(0)
+    expect(listAfter.success).toBe(true)
+    if (!listAfter.success) return
+
+    expect(listAfter.data.length).toBe(0)
   })
 })
