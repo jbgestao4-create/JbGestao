@@ -287,6 +287,11 @@ export function CashClosureModal({
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-5">
+          {/* Aviso de Controle Gerencial Interno (Termos de Uso) */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 leading-relaxed">
+            <strong>Aviso Importante (Termos de Uso):</strong> O sistema realiza controle gerencial interno. A emissão fiscal oficial e o pagamento de boletos/tributos devem ser realizados nos canais governamentais e bancários oficiais.
+          </div>
+
           <div className="flex items-center justify-between rounded-xl bg-zinc-50 p-3.5 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
             <div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">Terminal Aberto</p>

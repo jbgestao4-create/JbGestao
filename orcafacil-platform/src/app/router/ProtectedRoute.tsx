@@ -1,5 +1,5 @@
 import { useEffect, useState, Suspense, type ReactNode } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useNavigate } from 'react-router-dom'
@@ -130,9 +130,18 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
           <div className="w-16 h-16 bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-200 dark:border-rose-800">
             <Lock className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Acesso da Empresa Desativado</h2>
-          <p className="text-sm text-gray-600 dark:text-slate-300 mb-6 leading-relaxed">
-            O acesso para a empresa <strong>{currentOrganization.name}</strong> (Identificador: <span className="font-mono text-xs text-blue-600 dark:text-blue-400">{currentOrganization.slug}</span>) foi desativado. Entre em contato com a equipe de Suporte do ControleSoft para reativar seu acesso.
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            Acesso da Empresa Suspenso / Desativado
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-slate-300 mb-3 leading-relaxed">
+            O acesso para a empresa <strong>{currentOrganization.name}</strong> (Identificador:{' '}
+            <span className="font-mono text-xs text-blue-600 dark:text-blue-400">
+              {currentOrganization.slug}
+            </span>
+            ) encontra-se temporariamente suspenso devido a pendência financeira de assinatura ou inativação administrativa.
+          </p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mb-6 leading-relaxed">
+            Seus dados permanecem preservados pelo período de carência contratual (30 a 90 dias). Entre em contato pelos canais abaixo para regularização do plano ou solicitações relativas à LGPD:
           </p>
           <div className="space-y-3">
             <a
@@ -144,10 +153,26 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 shadow-sm transition-colors"
             >
               <WhatsAppIcon className="h-5 w-5" />
+              <span>Regularizar Acesso no WhatsApp</span>
             </a>
+            <div className="text-xs text-gray-500 dark:text-slate-400">
+              E-mail DPO / Suporte:{' '}
+              <a
+                href="mailto:privacidade@controlesoft.com.br"
+                className="font-semibold text-blue-600 dark:text-blue-400 underline"
+              >
+                privacidade@controlesoft.com.br
+              </a>
+            </div>
+            <Link
+              to="/politica-de-privacidade"
+              className="block text-xs font-medium text-gray-500 hover:text-blue-600 dark:text-slate-400 underline"
+            >
+              Consultar Política de Privacidade e Retenção de Dados (LGPD)
+            </Link>
             <button
               onClick={() => void signOut().then(() => navigate('/login', { state: { deactivated: true, orgName: currentOrganization.name } }))}
-              className="w-full text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200 py-2"
+              className="w-full text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200 py-2 cursor-pointer"
             >
               Sair da Conta e Voltar ao Login
             </button>
@@ -174,12 +199,14 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
           <div className="w-16 h-16 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-200 dark:border-amber-800">
             <Clock className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Tempo de teste expirado</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            Período de Teste Gratuito (Trial) Encerrado
+          </h2>
           <p className="text-sm text-gray-700 dark:text-slate-200 mb-2 leading-relaxed font-semibold">
             Tempo de teste expirado, entre em contato com a ControleSoft
           </p>
-          <p className="text-xs text-gray-500 dark:text-slate-400 mb-6">
-            O período de avaliação da empresa <strong>{currentOrganization.name}</strong> encerrou-se em {expiredDateFormatted}. O acesso às funcionalidades do sistema está suspenso até a regularização.
+          <p className="text-xs text-gray-500 dark:text-slate-400 mb-6 leading-relaxed">
+            O período de avaliação da empresa <strong>{currentOrganization.name}</strong> encerrou-se em {expiredDateFormatted}. O acesso às funcionalidades está suspenso até a contratação ou renovação do plano, permanecendo seus dados preservados pelo período de carência (30 a 90 dias).
           </p>
           <div className="space-y-3">
             <a
@@ -191,10 +218,26 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 shadow-sm transition-colors"
             >
               <WhatsAppIcon className="h-5 w-5" />
+              <span>Contratar / Regularizar no WhatsApp</span>
             </a>
+            <div className="text-xs text-gray-500 dark:text-slate-400">
+              E-mail DPO / Suporte:{' '}
+              <a
+                href="mailto:privacidade@controlesoft.com.br"
+                className="font-semibold text-blue-600 dark:text-blue-400 underline"
+              >
+                privacidade@controlesoft.com.br
+              </a>
+            </div>
+            <Link
+              to="/politica-de-privacidade"
+              className="block text-xs font-medium text-gray-500 hover:text-blue-600 dark:text-slate-400 underline"
+            >
+              Consultar Política de Privacidade e Retenção de Dados (LGPD)
+            </Link>
             <button
               onClick={() => void signOut().then(() => navigate('/login', { state: { trialExpired: true, orgName: currentOrganization.name } }))}
-              className="w-full text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200 py-2"
+              className="w-full text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200 py-2 cursor-pointer"
             >
               Sair da Conta e Voltar ao Login
             </button>

@@ -902,6 +902,14 @@ export function CashManagementPage() {
         </div>
       </div>
 
+      {/* Aviso de Boas Práticas Financeiras e Bancárias (MOD-05) */}
+      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200 flex items-start gap-2.5">
+        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <p className="leading-relaxed">
+          <strong>Boas Práticas Operacionais (MOD-05):</strong> O registro de pagamentos em PIX/Cartão e a baixa de contas ou boletos (PDF) neste painel têm finalidade exclusiva de <strong>controle gerencial interno</strong> e não realizam liquidação bancária automática. Efetue os pagamentos reais no seu <em>Internet Banking</em> e confira sempre os dados extraídos automaticamente de boletos.
+        </p>
+      </div>
+
       {/* Tabs Navigation */}
       <div className="border-b border-zinc-200 dark:border-zinc-800">
         <nav className="-mb-px flex space-x-6">

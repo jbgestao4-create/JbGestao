@@ -46,6 +46,7 @@ import {
   DeveloperSettingsPage,
   SystemNotificationsAdminPage,
   SystemUpdatesAdminPage,
+  PrivacyPolicyPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -56,6 +57,18 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/privacy',
+    element: <PrivacyPolicyPage />,
+  },
+  {
+    path: '/politica-de-privacidade',
+    element: <PrivacyPolicyPage />,
+  },
+  {
+    path: '/terms',
+    element: <Navigate to="/politica-de-privacidade?tab=terms" replace />,
   },
   {
     path: '/register',
@@ -196,6 +209,10 @@ export const router = createBrowserRouter([
   {
     path: '/settings/theme',
     element: <Navigate to="/settings/organization?tab=customization" replace />,
+  },
+  {
+    path: '/settings/privacy',
+    element: <Navigate to="/settings/organization?tab=privacy" replace />,
   },
 
   // Rotas do módulo ControleSoft (protegidas por autenticação e concessão de módulo)

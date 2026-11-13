@@ -4,6 +4,7 @@ import { useAuth } from '@modules/auth/context/AuthContext'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { BrandLogo } from '@shared/components/BrandLogo'
+import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
 
 export function RegisterPage() {
   const { signUp } = useAuth()
@@ -12,6 +13,7 @@ export function RegisterPage() {
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -31,10 +33,16 @@ export function RegisterPage() {
       return
     }
 
+    if (!acceptedTerms) {
+      setError('Você deve ler e concordar com os Termos de Uso e a Política de Privacidade.')
+      return
+    }
+
     setIsLoading(true)
     const res = await signUp({ email, password, displayName })
 
     if (res.success) {
+      void termsAcceptanceService.recordAcceptance(email, Boolean(res.data.session))
       if (res.data.session) {
         navigate('/')
       } else {
@@ -102,6 +110,33 @@ export function RegisterPage() {
               placeholder="Mínimo 8 caracteres"
               required
             />
+
+            <label className="flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 accent-blue-600"
+                required
+              />
+              <span className="leading-relaxed">
+                Li e concordo com os{' '}
+                <Link
+                  to="/politica-de-privacidade?tab=terms"
+                  className="font-semibold text-blue-600 hover:underline"
+                >
+                  Termos de Uso
+                </Link>{' '}
+                e a{' '}
+                <Link
+                  to="/politica-de-privacidade"
+                  className="font-semibold text-blue-600 hover:underline"
+                >
+                  Política de Privacidade
+                </Link>
+                .
+              </span>
+            </label>
 
             <Button type="submit" className="w-full" isLoading={isLoading}>
               Criar Conta Gratuita

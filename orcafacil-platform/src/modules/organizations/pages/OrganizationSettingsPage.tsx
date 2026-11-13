@@ -14,6 +14,7 @@ import { Input } from '@shared/components/ui/Input'
 import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { SystemCustomizationSection } from '../components/SystemCustomizationSection'
+import { OrganizationPrivacyLgpdSection } from '../components/OrganizationPrivacyLgpdSection'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import {
   ShieldCheck,
@@ -149,12 +150,20 @@ export function OrganizationSettingsPage() {
   const initialTab =
     searchParams.get('tab') === 'customization' || searchParams.get('tab') === 'personalizacao'
       ? 'customization'
-      : 'general'
-  const [activeTab, setActiveTab] = useState<'general' | 'customization'>(initialTab)
+      : searchParams.get('tab') === 'privacy' || searchParams.get('tab') === 'lgpd'
+        ? 'privacy'
+        : 'general'
+  const [activeTab, setActiveTab] = useState<'general' | 'customization' | 'privacy'>(initialTab)
 
-  const handleTabChange = (tab: 'general' | 'customization') => {
+  const handleTabChange = (tab: 'general' | 'customization' | 'privacy') => {
     setActiveTab(tab)
-    setSearchParams(tab === 'customization' ? { tab: 'customization' } : {})
+    setSearchParams(
+      tab === 'customization'
+        ? { tab: 'customization' }
+        : tab === 'privacy'
+          ? { tab: 'privacy' }
+          : {},
+    )
   }
 
   const [members, setMembers] = useState<OrganizationMemberDetail[]>([])
@@ -646,10 +655,30 @@ export function OrganizationSettingsPage() {
             }`}
           />
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('privacy')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+            activeTab === 'privacy'
+              ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-xs border border-emerald-300 dark:border-emerald-700'
+              : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          Privacidade e LGPD
+        </button>
       </div>
 
       {activeTab === 'customization' ? (
         <SystemCustomizationSection />
+      ) : activeTab === 'privacy' ? (
+        <OrganizationPrivacyLgpdSection
+          organization={currentOrganization}
+          userRole={userRole}
+          userEmail={user?.email}
+          userName={profile?.displayName}
+        />
       ) : (
         <>
           {/* DADOS DA ORGANIZAÇÃO */}
@@ -710,6 +739,17 @@ export function OrganizationSettingsPage() {
         </CardHeader>
 
         <CardContent className="p-0">
+          {/* AVISO DE AUDITORIA E GESTÃO DE CREDENCIAIS / LGPD */}
+          <div className="m-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900 space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-amber-700 shrink-0" />
+              Diretriz de Segurança, Permissões e Desligamento de Funcionários (LGPD):
+            </p>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              Gerencie ativamente as permissões granulares (<code>MOD-01</code> a <code>MOD-11</code>) de cada colaborador e <strong>remova imediatamente o acesso de funcionários demitidos ou afastados</strong>. Todos os logs de auditoria de vendas, caixa e estoque são vinculados individualmente à conta do operador logado — portanto, <strong>não compartilhe credenciais de nível Administrador (<code>admin</code>)</strong> entre múltiplos funcionários.
+            </p>
+          </div>
+
           {memberPasswordResetMessage && (
             <div
               role="status"

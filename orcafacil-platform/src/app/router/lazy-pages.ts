@@ -204,5 +204,12 @@ export const SystemUpdatesAdminPage = lazy(() =>
   })),
 )
 
+export const PrivacyPolicyPage = lazy(() =>
+  import('@modules/auth/pages/PrivacyPolicyPage').then((module) => ({
+    default: module.PrivacyPolicyPage,
+  })),
+)
+
+
 
 

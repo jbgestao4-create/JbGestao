@@ -1053,7 +1053,12 @@ export function ServiceOrderFormPage() {
               value={devicePassword}
               onChange={(e) => setDevicePassword(e.target.value)}
               placeholder="Ex.: PIN 1234, Senha do Windows..."
+              helperText="Uso estrito para testes técnicos sob responsabilidade e sigilo da assistência (LGPD)."
             />
+          </div>
+
+          <div className="rounded-xl border border-blue-200/80 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20 p-3 text-[11px] text-blue-900 dark:text-blue-200 leading-relaxed">
+            <strong>Termo de Consentimento e Sigilo (MOD-10 / LGPD):</strong> Ao registrar a senha de desbloqueio do equipamento (<code>device_password</code>) e fotos de vistoria, certifique-se de colher a autorização do cliente na via impressa ou digital da O.S. para realização dos testes técnicos. A guarda física do aparelho e o sigilo das credenciais informadas competem exclusivamente à equipe da empresa contratante, eximindo a fornecedora do software de responsabilidade sobre o manuseio do dispositivo.
           </div>
 
           {/* Checklist de Avarias */}

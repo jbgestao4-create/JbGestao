@@ -24,6 +24,7 @@ import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { SystemMaintenanceScreen } from '@shared/components/SystemMaintenanceScreen'
+import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
 
 export function LoginPage() {
   const { signIn, signOut } = useAuth()
@@ -37,6 +38,9 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState<boolean>(() =>
+    Boolean(termsAcceptanceService.getLocalAcceptance()),
+  )
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
@@ -62,11 +66,18 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!acceptedTerms) {
+      setError('Você precisa ler e concordar com os Termos de Uso e a Política de Privacidade para continuar.')
+      return
+    }
+
     setIsLoading(true)
 
     const res = await signIn({ email, password })
 
     if (res.success) {
+      void termsAcceptanceService.recordAcceptance(email, true)
       if (res.data.user.app_metadata.must_change_password === true) {
         navigate('/profile', { replace: true })
         setIsLoading(false)
@@ -281,21 +292,31 @@ export function LoginPage() {
                     </div>
                     <div className="flex-1">
                       <h3 className="text-sm font-bold text-rose-900">
-                        Acesso da Empresa Desativado
+                        Acesso da Empresa Suspenso / Desativado
                       </h3>
                       <p className="mt-1 text-xs text-rose-800 leading-relaxed">
-                        O acesso {deactivatedOrgName ? `da empresa "${deactivatedOrgName}"` : 'da sua empresa'} está temporariamente desativado. Entre em contato com a equipe de Suporte do ControleSoft para regularizar ou reativar seu acesso.
+                        O acesso {deactivatedOrgName ? `da empresa "${deactivatedOrgName}"` : 'da sua empresa'} encontra-se temporariamente suspenso devido a pendência financeira de assinatura ou inativação administrativa.
                       </p>
-                      <div className="mt-3">
+                      <p className="mt-1 text-[11px] text-rose-700 leading-relaxed">
+                        Seus dados permanecem íntegros pelo período de carência contratual (30 a 90 dias). Entre em contato pelos canais abaixo para regularizar sua assinatura ou solicitar suporte/exportação LGPD:
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2.5">
                         <a
                           href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20desativado.%20Gostaria%20de%20solicitar%20suporte."
                           target="_blank"
                           rel="noreferrer"
                           title="Suporte no WhatsApp"
                           aria-label="Suporte no WhatsApp"
-                          className="inline-flex items-center justify-center rounded-xl bg-emerald-600 p-2.5 text-white hover:bg-emerald-700 transition-colors shadow-xs hover:scale-105 active:scale-95"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
                         >
-                          <WhatsAppIcon className="h-5 w-5" />
+                          <WhatsAppIcon className="h-4 w-4" />
+                          Regularizar via WhatsApp
+                        </a>
+                        <a
+                          href="mailto:privacidade@controlesoft.com.br"
+                          className="text-[11px] font-semibold text-rose-900 underline hover:text-rose-700"
+                        >
+                          privacidade@controlesoft.com.br
                         </a>
                       </div>
                     </div>
@@ -314,24 +335,31 @@ export function LoginPage() {
                     </div>
                     <div className="flex-1">
                       <h3 className="text-sm font-bold text-amber-950">
-                        Tempo de teste expirado
+                        Período de Avaliação Gratuita (Trial) Encerrado
                       </h3>
                       <p className="mt-1 text-xs font-semibold text-amber-900 leading-relaxed">
                         Tempo de teste expirado, entre em contato com a ControleSoft
                       </p>
                       <p className="mt-0.5 text-xs text-amber-800 leading-relaxed">
-                        O período de teste {expiredOrgName ? `da empresa "${expiredOrgName}"` : 'da sua empresa'} encerrou. Entre em contato com nossa equipe para regularizar e continuar utilizando todos os recursos.
+                        O período de teste gratuito {expiredOrgName ? `da empresa "${expiredOrgName}"` : 'da sua empresa'} chegou ao fim. Seus dados estão preservados pelo período de carência (30 a 90 dias). Fale com nossa equipe para ativar seu plano definitivo:
                       </p>
-                      <div className="mt-3">
+                      <div className="mt-3 flex flex-wrap items-center gap-2.5">
                         <a
                           href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20tempo%20de%20teste%20da%20minha%20empresa%20expirou.%20Gostaria%20de%20renovar%20o%20acesso%20com%20a%20JB%20Software."
                           target="_blank"
                           rel="noreferrer"
                           title="Falar com a ControleSoft no WhatsApp"
                           aria-label="Falar com a ControleSoft no WhatsApp"
-                          className="inline-flex items-center justify-center rounded-xl bg-emerald-600 p-2.5 text-white hover:bg-emerald-700 transition-colors shadow-xs hover:scale-105 active:scale-95"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
                         >
-                          <WhatsAppIcon className="h-5 w-5" />
+                          <WhatsAppIcon className="h-4 w-4" />
+                          Ativar Plano no WhatsApp
+                        </a>
+                        <a
+                          href="mailto:privacidade@controlesoft.com.br"
+                          className="text-[11px] font-semibold text-amber-900 underline hover:text-amber-700"
+                        >
+                          privacidade@controlesoft.com.br
                         </a>
                       </div>
                     </div>
@@ -378,6 +406,33 @@ export function LoginPage() {
                   </Link>
                 </div>
 
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 accent-[#2563EB]"
+                    required
+                  />
+                  <span className="leading-relaxed">
+                    Li e concordo com os{' '}
+                    <Link
+                      to="/politica-de-privacidade?tab=terms"
+                      className="font-semibold text-[#2563EB] hover:underline"
+                    >
+                      Termos de Uso
+                    </Link>{' '}
+                    e a{' '}
+                    <Link
+                      to="/politica-de-privacidade"
+                      className="font-semibold text-[#2563EB] hover:underline"
+                    >
+                      Política de Privacidade
+                    </Link>{' '}
+                    (registro de aceite com data, hora e IP).
+                  </span>
+                </label>
+
                 <Button
                   type="submit"
                   className="h-11 w-full rounded-lg bg-[#2563EB] text-sm font-semibold hover:bg-blue-700"
@@ -391,7 +446,21 @@ export function LoginPage() {
             </div>
 
             <p className="mt-6 text-center text-xs leading-5 text-slate-500">
-              Acesso seguro à sua plataforma de gestão.
+              Ao entrar, você concorda com nossos{' '}
+              <Link
+                to="/politica-de-privacidade?tab=terms"
+                className="font-semibold text-[#2563EB] hover:underline"
+              >
+                Termos de Uso
+              </Link>{' '}
+              e com a{' '}
+              <Link
+                to="/politica-de-privacidade"
+                className="font-semibold text-[#2563EB] hover:underline"
+              >
+                Política de Privacidade (LGPD)
+              </Link>
+              .
             </p>
           </div>
         </div>
@@ -399,9 +468,19 @@ export function LoginPage() {
         <footer className="w-full max-w-[600px] pt-6 text-center text-xs leading-5 text-slate-500">
           <span>© 2026 ControleSoft. Todos os direitos reservados.</span>
           <span className="mx-2 hidden sm:inline">|</span>
-          <span className="block sm:inline">Termos de Uso</span>
+          <Link
+            to="/politica-de-privacidade?tab=terms"
+            className="block sm:inline font-medium text-slate-600 hover:text-[#2563EB] hover:underline"
+          >
+            Termos de Uso
+          </Link>
           <span className="mx-2 hidden sm:inline">|</span>
-          <span className="block sm:inline">Privacidade</span>
+          <Link
+            to="/politica-de-privacidade"
+            className="block sm:inline font-medium text-slate-600 hover:text-[#2563EB] hover:underline"
+          >
+            Política de Privacidade e LGPD
+          </Link>
         </footer>
       </section>
     </main>

@@ -46,6 +46,7 @@ export function buildServiceOrderReadyWhatsAppMessage(
     msg += `• *Valor Total:* *${formatCurrency(order.total)}*\n`
   }
   msg += `\nVocê já pode comparecer ao nosso estabelecimento para retirar o seu equipamento.\n\n`
+  msg += `_Nota: Os testes técnicos, termos de garantia e o sigilo de eventuais credenciais/dados de diagnóstico são de responsabilidade exclusiva de ${organizationName || 'nossa assistência técnica'}, conforme autorizado na abertura da O.S._\n\n`
   msg += `Qualquer dúvida, estamos à inteira disposição!\n`
   msg += `*${organizationName || 'ControleSoft'}*`
 

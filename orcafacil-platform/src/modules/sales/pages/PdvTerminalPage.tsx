@@ -2266,6 +2266,11 @@ export function PdvTerminalPage() {
                   </p>
                 </div>
               )}
+
+              {/* AVISO DE BOAS PRÁTICAS BANCÁRIAS E FISCAIS (MOD-01) */}
+              <div className="rounded-xl border border-amber-300/80 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 p-3 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed">
+                <strong>Aviso de Boas Práticas (MOD-01):</strong> O registro de pagamentos em PIX ou Cartão neste terminal é um controle gerencial interno e <strong>não realiza liquidação bancária automática</strong> — confira sempre a aprovação na maquininha (POS) ou no extrato bancário antes de liberar a mercadoria. Documentos fiscais internos operam em caráter de controle/homologação, não substituindo o emissor oficial SEFAZ/Prefeitura.
+              </div>
             </div>
 
             {/* BOTÃO CONFIRMAR PAGAMENTO */}
@@ -2328,6 +2333,9 @@ export function PdvTerminalPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto py-4 space-y-4 text-xs">
+              <div className="rounded-xl border border-amber-300/80 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 p-3 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed">
+                <strong>Aviso Importante (Termos de Uso):</strong> O sistema realiza controle gerencial interno. A emissão fiscal oficial e o pagamento de boletos/tributos devem ser realizados nos canais governamentais e bancários oficiais.
+              </div>
               {closureError && (
                 <div className="rounded-xl bg-rose-500/10 p-3 text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />

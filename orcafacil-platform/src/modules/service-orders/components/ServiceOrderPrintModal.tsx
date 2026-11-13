@@ -294,11 +294,17 @@ export function ServiceOrderPrintModal({
             </div>
           )}
 
-          {/* Termos de Garantia e Assinaturas */}
-          <div className="text-[11px] text-gray-600 border border-gray-200 rounded-lg p-2.5">
-            <strong>Termos de Garantia:</strong>{' '}
-            {order.warrantyTerms ||
-              'Garantia legal referente exclusivamente aos serviços executados e peças substituídas descritas nesta Ordem de Serviço.'}
+          {/* Termos de Garantia, Autorização de Testes e Assinaturas */}
+          <div className="text-[11px] text-gray-600 border border-gray-200 rounded-lg p-2.5 space-y-1.5">
+            <div>
+              <strong>Termos de Garantia:</strong>{' '}
+              {order.warrantyTerms ||
+                'Garantia legal referente exclusivamente aos serviços executados e peças substituídas descritas nesta Ordem de Serviço.'}
+            </div>
+            <div className="border-t border-gray-100 pt-1 text-[10px] text-gray-500 leading-snug">
+              <strong>Autorização de Testes e Tratamento de Dados (LGPD):</strong> O cliente autoriza expressamente a equipe técnica de{' '}
+              <strong>{organizationName || 'Assistência Técnica'}</strong> a realizar os testes necessários no equipamento (incluindo o uso eventual de senha de desbloqueio informada estritamente para diagnóstico funcional). A guarda do bem, os serviços executados e o sigilo das informações do dispositivo são de responsabilidade exclusiva do estabelecimento prestador, eximindo a fornecedora do software de gestão (ControleSoft) de qualquer responsabilidade sobre o manuseio ou conteúdo do aparelho.
+            </div>
           </div>
 
           <div className="pt-8 grid grid-cols-2 gap-8 text-center text-[11px] text-gray-600">

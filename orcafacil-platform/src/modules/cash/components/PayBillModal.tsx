@@ -143,6 +143,11 @@ export function PayBillModal({
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          {/* Aviso de Controle Gerencial Interno (Termos de Uso / MOD-05) */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-[11px] text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200 leading-relaxed">
+            <strong>Aviso Importante (MOD-05):</strong> Dar baixa em um boleto ou registrar pagamento em PIX/Cartão neste módulo é estritamente um <strong>controle gerencial interno de caixa</strong> e <strong>não realiza liquidação ou movimentação bancária real</strong>. Certifique-se de efetuar o pagamento real em seu <em>Internet Banking</em> ou instituição financeira.
+          </div>
+
           {/* Alerta de Caixa Fechado */}
           {!hasOpenSession && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">

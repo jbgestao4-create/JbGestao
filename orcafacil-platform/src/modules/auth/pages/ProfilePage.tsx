@@ -1,8 +1,9 @@
 import { useState, useEffect, type SyntheticEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { authService } from '../services/auth.service'
+import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
@@ -66,6 +67,7 @@ export function ProfilePage() {
   const [isAvatarLoading, setIsAvatarLoading] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [acceptedFirstAccessTerms, setAcceptedFirstAccessTerms] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -164,6 +166,11 @@ export function ProfilePage() {
       return
     }
 
+    if (mustChangePassword && !acceptedFirstAccessTerms) {
+      setError('Você precisa marcar que leu e concorda com os Termos de Uso e a Política de Privacidade para concluir o primeiro acesso.')
+      return
+    }
+
     setIsLoading(true)
     const res = mustChangePassword
       ? await authService.completeForcedPasswordChange(newPassword)
@@ -171,6 +178,7 @@ export function ProfilePage() {
 
     if (res.success) {
       if (mustChangePassword) {
+        await termsAcceptanceService.recordAcceptance(user?.email, true)
         await refreshUser()
         navigate('/', { replace: true })
         return
@@ -229,6 +237,36 @@ export function ProfilePage() {
                 onChange={(event) => setConfirmPassword(event.currentTarget.value)}
                 required
               />
+              <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedFirstAccessTerms}
+                  onChange={(e) => setAcceptedFirstAccessTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 accent-blue-600"
+                  required
+                />
+                <span className="leading-relaxed">
+                  Li e concordo com os{' '}
+                  <Link
+                    to="/politica-de-privacidade?tab=terms"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-blue-600 hover:underline"
+                  >
+                    Termos de Uso
+                  </Link>{' '}
+                  e a{' '}
+                  <Link
+                    to="/politica-de-privacidade"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-blue-600 hover:underline"
+                  >
+                    Política de Privacidade
+                  </Link>{' '}
+                  (confirmação ativa de primeiro acesso com registro de data, hora e IP).
+                </span>
+              </label>
               <Button type="submit" isLoading={isLoading} className="w-full">
                 Salvar nova senha e continuar
               </Button>

@@ -87,11 +87,11 @@ export function FiscalInvoiceModal({
                 <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
                   <ShieldCheck className="h-5 w-5 text-emerald-600" />
                   <span>
-                    {invoice.type === 'nfce' ? 'NFC-e (Nota de Consumidor)' : 'NF-e (Nota Fiscal Eletrônica)'} AUTORIZADA
+                    {invoice.type === 'nfce' ? 'NFC-e (Nota de Consumidor)' : 'NF-e (Nota Fiscal Eletrônica)'} — CONTROLE INTERNO / HOMOLOGAÇÃO
                   </span>
                 </div>
                 <p className="text-xs text-emerald-700 mt-1">
-                  Documento fiscal autorizado com sucesso pela SEFAZ.
+                  Documento gerado em caráter de controle gerencial interno e homologação (não substitui a emissão oficial perante a SEFAZ/Prefeitura).
                 </p>
               </div>
 
@@ -199,10 +199,10 @@ export function FiscalInvoiceModal({
                 </div>
               </div>
 
-              <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3.5 text-xs text-blue-900 space-y-1">
-                <p className="font-semibold">Informações Tributárias Automáticas:</p>
-                <p className="text-[11px] text-blue-700">
-                  CFOP 5.102 · Tributação Simples Nacional · Chave de acesso e protocolo gerados instantaneamente.
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900 space-y-1">
+                <p className="font-bold">Aviso Operacional e Fiscal (Termos de Uso):</p>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  A geração de notas neste painel opera em caráter de <strong>controle gerencial interno / homologação</strong> e não substitui os emissores oficiais credenciados junto à SEFAZ ou Prefeitura Municipal. A conformidade tributária compete exclusivamente à empresa contratante e à sua contabilidade.
                 </p>
               </div>
             </div>
