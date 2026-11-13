@@ -12,7 +12,6 @@ import {
   Printer,
   Scale,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   UserCheck,
 } from 'lucide-react'
