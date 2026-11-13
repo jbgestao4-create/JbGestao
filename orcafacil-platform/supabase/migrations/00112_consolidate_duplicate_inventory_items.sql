@@ -2,6 +2,10 @@
 -- Unifica produtos em estoque que possuam o mesmo código (SKU ou código de barras) na mesma organização.
 -- Soma as quantidades físicas, preserva vínculos e remove duplicidades.
 
+-- Garante que as colunas deleted_at e delete_reason existam
+ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS delete_reason TEXT;
+
 CREATE OR REPLACE FUNCTION public.consolidate_duplicate_inventory_items(
   p_organization_id UUID
 )

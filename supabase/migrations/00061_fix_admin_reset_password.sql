@@ -223,3 +223,4 @@ $$;
 -- Permissões de execução
 GRANT EXECUTE ON FUNCTION public.admin_reset_company_user_password(UUID, TEXT, TEXT, TEXT) TO authenticated, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.admin_reset_company_user_password(UUID, UUID, TEXT) TO authenticated, anon, service_role;
+

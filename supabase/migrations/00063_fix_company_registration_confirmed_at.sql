@@ -220,3 +220,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.admin_register_company_with_admin(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT[]) TO authenticated, service_role;
+

@@ -165,7 +165,7 @@ CREATE TRIGGER trg_customers_updated_at
   BEFORE UPDATE ON public.customers
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- 11. TABELA QUOTES (Orçamentos do módulo OrçaFácil)
+-- 11. TABELA QUOTES (Orçamentos do módulo JB Software)
 CREATE TABLE IF NOT EXISTS public.quotes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -235,7 +235,7 @@ AS $$
   LIMIT 1;
 $$;
 
--- Função atômica e segura para criar uma organização com seu proprietário e liberar o OrçaFácil
+-- Função atômica e segura para criar uma organização com seu proprietário e liberar o módulo JB Software
 CREATE OR REPLACE FUNCTION public.create_organization_with_owner(
   org_name TEXT,
   org_slug TEXT,
@@ -264,7 +264,7 @@ BEGIN
   INSERT INTO public.organization_members (organization_id, user_id, role)
   VALUES (new_org_id, owner_user_id, 'owner');
 
-  -- 3. Concede o módulo OrçaFácil por padrão
+  -- 3. Concede o módulo JB Software por padrão
   SELECT id INTO orcafacil_mod_id FROM public.modules WHERE code = 'orcafacil' LIMIT 1;
   IF orcafacil_mod_id IS NOT NULL THEN
     INSERT INTO public.organization_modules (organization_id, module_id, status)
@@ -499,8 +499,7 @@ CREATE POLICY "Membros podem excluir itens de orçamentos de sua organização"
 -- ==============================================================================
 INSERT INTO public.modules (code, name, is_globally_available)
 VALUES
-  ('orcafacil', 'OrçaFácil', true),
+  ('orcafacil', 'JB Software', true),
   ('agendapro', 'AgendaPro', false),
   ('estoqueleve', 'EstoqueLeve', false)
 ON CONFLICT (code) DO NOTHING;
-

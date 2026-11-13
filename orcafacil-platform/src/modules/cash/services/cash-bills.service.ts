@@ -442,7 +442,10 @@ export const cashBillsService = {
 
       if (error || !data) {
         logger.error('Erro ao cadastrar boleto no Supabase', error)
-        return { success: false, error: 'Não foi possível salvar o boleto no Supabase.' }
+        const errMsg = error?.message?.includes('row-level security')
+          ? 'Erro de permissão no Supabase (RLS): o usuário atual não tem permissão para cadastrar boletos nesta empresa. Aplique a migration 00117 no Supabase.'
+          : 'Não foi possível salvar o boleto no Supabase.'
+        return { success: false, error: errMsg }
       }
 
       const row = mapBillRow(data as CashBillRow)
@@ -585,7 +588,10 @@ export const cashBillsService = {
 
       if (updateError) {
         logger.error('Erro ao registrar pagamento do boleto no Supabase', updateError)
-        return { success: false, error: 'Não foi possível registrar o pagamento no Supabase.' }
+        const errMsg = updateError?.message?.includes('row-level security')
+          ? 'Erro de permissão no Supabase (RLS): o usuário atual não tem permissão para atualizar boletos nesta empresa. Aplique a migration 00117 no Supabase.'
+          : 'Não foi possível registrar o pagamento no Supabase.'
+        return { success: false, error: errMsg }
       }
 
       const updatedBill: CashBill = {
