@@ -30,7 +30,6 @@ import {
   Building2,
   Palette,
   Phone,
-  Sparkles,
   Receipt,
 } from 'lucide-react'
 import type {
@@ -655,11 +654,6 @@ export function OrganizationSettingsPage() {
             <Palette className="w-4 h-4" />
           </span>
           <span>Personalização do Sistema</span>
-          <Sparkles
-            className={`w-3.5 h-3.5 transition-transform group-hover:rotate-12 ${
-              activeTab === 'customization' ? 'text-amber-300 animate-pulse' : 'text-amber-500'
-            }`}
-          />
         </button>
 
         <button

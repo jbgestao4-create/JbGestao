@@ -8,7 +8,7 @@ import {
   UserCheck,
   X,
   FileText,
-  Sparkles,
+  Clock,
   CheckCircle2,
   Package,
   Receipt,
@@ -721,7 +721,7 @@ export function ContractFormModal({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       Período de Teste Gratuito de 1 Mês
                     </span>
                     <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
@@ -882,7 +882,6 @@ export function ContractFormModal({
                 </div>
 
                 <span className="self-start sm:self-center inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/70 px-3 py-1 text-xs font-bold text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800">
-                  <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
                   {includedModules.length} {includedModules.length === 1 ? 'módulo ativo' : 'módulos ativos'}
                 </span>
               </div>

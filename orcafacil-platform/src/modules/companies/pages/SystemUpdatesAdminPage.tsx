@@ -18,8 +18,6 @@ import {
   ShieldCheck,
   Tag,
   X,
-  Star,
-  Sparkles,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { isSystemOwner } from '@shared/utils/system-owner'
@@ -459,7 +457,7 @@ export function SystemUpdatesAdminPage() {
 
                         {isCurrentVersion && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800">
-                            <Star className="w-3.5 h-3.5 fill-emerald-500 text-emerald-600" />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             Versão Atual do Sistema
                           </span>
                         )}
@@ -482,7 +480,7 @@ export function SystemUpdatesAdminPage() {
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 cursor-pointer transition"
                             title="Tornar esta a versão atual ativa no sistema"
                           >
-                            <Sparkles className="w-3.5 h-3.5" />
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                             Definir como Atual
                           </button>
                         )}
@@ -734,7 +732,7 @@ export function SystemUpdatesAdminPage() {
                     className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-gray-900 dark:text-white"
                   >
                     <option value="feature">🚀 Nova Funcionalidade</option>
-                    <option value="improvement">✨ Melhoria / Otimização</option>
+                    <option value="improvement">Melhoria / Otimização</option>
                     <option value="bugfix">🐛 Correção de Bug</option>
                     <option value="security">🔒 Segurança / Banco de Dados</option>
                     <option value="maintenance">🛠️ Manutenção Geral</option>
