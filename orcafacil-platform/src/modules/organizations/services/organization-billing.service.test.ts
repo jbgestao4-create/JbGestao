@@ -194,5 +194,47 @@ describe('organizationBillingService', () => {
       expect(res.maxDaysOverdue).toBe(8)
       expect(res.oldestOverdueInvoice?.id).toBe('inv-suspended')
     })
+
+    it('deve reconhecer gratuidade se o contrato tiver período de teste de 1 mês ativo', async () => {
+      const futureDate = new Date()
+      futureDate.setDate(futureDate.getDate() + 20)
+
+      vi.spyOn(contractService, 'getContractForOrganization').mockResolvedValue({
+        id: 'c-trial',
+        contractNumber: 'CTR-TRIAL-001',
+        clientName: 'Empresa Teste',
+        clientResponsibleName: 'Gestor',
+        clientDocument: '111',
+        planName: 'Plano Pro',
+        monthlyAmount: 180,
+        billingDay: 10,
+        paymentMethod: 'PIX',
+        startDate: '2026-11-01',
+        durationMonths: 12,
+        hasTrialPeriod: true,
+        trialDurationMonths: 1,
+        trialEndsAt: futureDate.toISOString(),
+        status: 'active',
+        licensorName: 'Licenciante',
+        licensorDocument: '000',
+        licensorResponsible: 'Resp',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+
+      vi.spyOn(contractService, 'listInvoicesForOrganization').mockResolvedValue([])
+
+      const res = await organizationBillingService.getBillingInfo({
+        id: 'org-trial',
+        name: 'Empresa Teste',
+        trialEndsAt: null, // sem trial direto na organização
+      })
+
+      expect(res.isTrial).toBe(true)
+      expect(res.trialDaysRemaining).toBeGreaterThan(0)
+      expect(res.isSuspended).toBe(false)
+      expect(res.hasOverdueWarning).toBe(false)
+      expect(res.hasUpcomingWarning).toBe(false)
+    })
   })
 })

@@ -391,17 +391,34 @@ export function OrganizationSystemInvoicesSection({
 
                       {/* Valor */}
                       <td className="px-4 py-4">
-                        <div className="font-bold text-emerald-700 dark:text-emerald-400 text-sm">
-                          {formatCurrency(inv.amount.toFixed(2))}
-                        </div>
+                        {inv.amount === 0 ? (
+                          <div className="font-bold text-emerald-600 dark:text-emerald-400 text-sm flex items-center gap-1">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            R$ 0,00 (Grátis)
+                          </div>
+                        ) : (
+                          <div className="font-bold text-emerald-700 dark:text-emerald-400 text-sm">
+                            {formatCurrency(inv.amount.toFixed(2))}
+                          </div>
+                        )}
                         <div className="text-[10px] text-gray-400">
-                          {inv.paymentMethod || 'PIX / Boleto'}
+                          {inv.amount === 0 ? 'Período de Teste' : (inv.paymentMethod || 'PIX / Boleto')}
                         </div>
                       </td>
 
                       {/* Situação */}
                       <td className="px-4 py-4">
-                        {isPaid ? (
+                        {inv.amount === 0 ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                              <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                              ISENTO (TESTE)
+                            </span>
+                            <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                              Sem custos no 1º mês
+                            </div>
+                          </div>
+                        ) : isPaid ? (
                           <div>
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -429,7 +446,7 @@ export function OrganizationSystemInvoicesSection({
                       {/* Opções de Pagamento */}
                       <td className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {!isPaid && (
+                          {!isPaid && inv.amount > 0 && (
                             <Button
                               size="sm"
                               onClick={() => setSelectedPixInvoice(inv)}

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
-import { ALL_PLATFORM_DASHBOARD_MODULES } from '../services/company-management.service'
+import { ALL_PLATFORM_DASHBOARD_MODULES, companyManagementService } from '../services/company-management.service'
 import {
   contractService,
   type SoftwareContract,
@@ -153,6 +153,9 @@ export function ContractFormModal({
   )
   const [durationMonths, setDurationMonths] = useState<number>(
     initialContract ? initialContract.durationMonths : 12,
+  )
+  const [hasTrialPeriod, setHasTrialPeriod] = useState<boolean>(
+    initialContract?.hasTrialPeriod ?? false,
   )
   const [status, setStatus] = useState<SoftwareContract['status']>(
     initialContract?.status || 'active',
@@ -371,6 +374,14 @@ export function ContractFormModal({
     setIsSaving(true)
 
     try {
+      let trialEndsAt: string | null = null
+      if (hasTrialPeriod) {
+        const start = startDate ? new Date(startDate) : new Date()
+        const end = new Date(start)
+        end.setMonth(end.getMonth() + 1)
+        trialEndsAt = end.toISOString()
+      }
+
       const payload: Partial<SoftwareContract> = {
         id: initialContract?.id,
         companyId: selectedCompanyId || null,
@@ -391,6 +402,9 @@ export function ContractFormModal({
         paymentMethod: paymentMethod.trim(),
         startDate,
         durationMonths: Number(durationMonths) || 12,
+        hasTrialPeriod,
+        trialDurationMonths: hasTrialPeriod ? 1 : undefined,
+        trialEndsAt,
         status,
         includedModules,
         customTerms: customTerms.trim() || null,
@@ -398,6 +412,14 @@ export function ContractFormModal({
 
       const res = await contractService.saveContract(payload)
       if (res.success && res.data) {
+        if (selectedCompanyId) {
+          try {
+            await companyManagementService.setTrialPeriod(selectedCompanyId, hasTrialPeriod ? trialEndsAt : null)
+          } catch {
+            // non-blocking
+          }
+        }
+
         if (!isEditing && autoGenerateFirstInvoices) {
           try {
             await contractService.generateInvoicesBatch(res.data, 6)
@@ -691,6 +713,41 @@ export function ContractFormModal({
                   <option value="Transferência Bancária">Transferência Bancária</option>
                 </select>
               </div>
+            </div>
+
+            {/* Opção de Período de Teste Gratuito de 1 Mês */}
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-gradient-to-r from-emerald-50/80 via-white to-emerald-50/40 dark:from-emerald-950/30 dark:via-slate-800 dark:to-emerald-950/20 p-3.5 space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hasTrialPeriod}
+                  onChange={(e) => setHasTrialPeriod(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-emerald-300 dark:border-emerald-700 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      Período de Teste Gratuito de 1 Mês (Degustação)
+                    </span>
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+                      1º Mês Isento de Mensalidade
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
+                    O sistema <strong>não cobrará a mensalidade</strong> durante o 1º mês. O cliente usufruirá de 30 dias de uso completo gratuito sem geração de custos.
+                  </p>
+                </div>
+              </label>
+
+              {hasTrialPeriod && (
+                <div className="ml-7 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Gratuidade ativada para o 1º mês:</strong> A mensalidade normal ({monthlyAmount ? `R$ ${monthlyAmount}` : 'R$ 0,00'}/mês) não será cobrada no primeiro mês. A primeira cobrança financeira só começará após o encerramento dos 30 dias de degustação.
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">

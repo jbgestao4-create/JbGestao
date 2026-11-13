@@ -296,6 +296,14 @@ export function ContractPrintModal({ contract, isOpen, onClose }: ContractPrintM
                     <td className="font-bold bg-slate-50 border border-slate-300 p-2">Forma de Pagamento:</td>
                     <td className="border border-slate-300 p-2">{contract.paymentMethod}</td>
                   </tr>
+                  {contract.hasTrialPeriod ? (
+                    <tr>
+                      <td className="font-bold bg-slate-50 border border-slate-300 p-2">Período de Teste:</td>
+                      <td colSpan={3} className="border border-slate-300 p-2 font-bold text-emerald-700">
+                        1 Mês Gratuito (Isenção total da mensalidade no 1º mês)
+                      </td>
+                    </tr>
+                  ) : null}
                   {contract.setupFee && contract.setupFee > 0 ? (
                     <tr>
                       <td className="font-bold bg-slate-50 border border-slate-300 p-2">Taxa de Implantação:</td>
@@ -359,6 +367,11 @@ export function ContractPrintModal({ contract, isOpen, onClose }: ContractPrintM
               <p>
                 2.1. Pela locação mensal da plataforma, manutenção e infraestrutura, a <strong>LICENCIATÁRIA</strong> pagará à <strong>LICENCIANTE</strong> o valor mensal recorrente de <strong>{formatCurrency(contract.monthlyAmount.toFixed(2))}</strong> ({contract.monthlyAmount > 0 ? 'reais' : 'isenção concedida'}).
               </p>
+              {contract.hasTrialPeriod ? (
+                <p>
+                  2.1.1. <strong>PERÍODO DE TESTE GRATUITO (DEGUSTAÇÃO):</strong> Fica expressamente concedido à <strong>LICENCIATÁRIA</strong> o benefício de <strong>01 (um) mês de teste gratuito</strong>, contado a partir da data de início deste instrumento, durante o qual não haverá cobrança de mensalidade pelo uso do software. A cobrança da mensalidade regular estipulada no item 2.1 terá início apenas a partir do 2º mês de contrato.
+                </p>
+              ) : null}
               <p>
                 2.2. A mensalidade vencerá impreterivelmente todo <strong>dia {String(contract.billingDay).padStart(2, '0')}</strong> de cada mês subsequente ao início da prestação, a ser quitada preferencialmente via <strong>{contract.paymentMethod}</strong>.
               </p>

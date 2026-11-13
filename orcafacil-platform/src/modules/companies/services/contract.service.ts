@@ -71,6 +71,9 @@ export interface SoftwareContract {
   paymentMethod: string
   startDate: string
   durationMonths: number
+  hasTrialPeriod?: boolean
+  trialDurationMonths?: number
+  trialEndsAt?: string | null
   status: ContractStatus
   licensorName: string
   licensorTradeName?: string
@@ -177,6 +180,9 @@ export const contractService = {
         paymentMethod: row.payment_method || 'PIX / Boleto',
         startDate: row.start_date,
         durationMonths: Number(row.duration_months) || 12,
+        hasTrialPeriod: Boolean(row.has_trial_period),
+        trialDurationMonths: row.trial_duration_months ? Number(row.trial_duration_months) : undefined,
+        trialEndsAt: row.trial_ends_at || null,
         status: (row.status as ContractStatus) || 'active',
         licensorName: row.licensor_name,
         licensorTradeName: row.licensor_trade_name,
@@ -229,6 +235,9 @@ export const contractService = {
       paymentMethod: contract.paymentMethod?.trim() || 'PIX / Boleto Bancário',
       startDate: contract.startDate || now.split('T')[0],
       durationMonths: Number(contract.durationMonths) || 12,
+      hasTrialPeriod: Boolean(contract.hasTrialPeriod),
+      trialDurationMonths: contract.hasTrialPeriod ? (Number(contract.trialDurationMonths) || 1) : undefined,
+      trialEndsAt: contract.trialEndsAt || null,
       status: contract.status || 'active',
       licensorName: contract.licensorName?.trim() || 'JB SOFTWARE & TECNOLOGIA LTDA',
       licensorTradeName: contract.licensorTradeName?.trim() || 'JB Software Gestão Inteligente',
@@ -485,6 +494,10 @@ export const contractService = {
       const dueDate = `${yyyy}-${mm}-${dayStr}`
       const invNum = this.generateInvoiceNumber(contract.contractNumber, existing.length + generated.length + 1)
 
+      const isFirstTrialMonth = Boolean(
+        contract.hasTrialPeriod && i === 0 && existing.length === 0,
+      )
+
       const saveRes = await this.saveInvoice({
         contractId: contract.id,
         companyId: contract.companyId,
@@ -492,11 +505,14 @@ export const contractService = {
         clientName: contract.clientName,
         clientDocument: contract.clientDocument,
         referenceMonth: refMonth,
-        amount: contract.monthlyAmount,
+        amount: isFirstTrialMonth ? 0 : contract.monthlyAmount,
         dueDate,
-        paymentMethod: contract.paymentMethod || 'PIX',
-        status: 'pending',
-        notes: `Mensalidade referente ao aluguel de software - ${contract.planName}`,
+        paymentMethod: isFirstTrialMonth ? 'Isenção / Período de Teste' : (contract.paymentMethod || 'PIX'),
+        status: isFirstTrialMonth ? 'paid' : 'pending',
+        paymentDate: isFirstTrialMonth ? new Date().toISOString().split('T')[0] : null,
+        notes: isFirstTrialMonth
+          ? `Período de Teste Gratuito de 1 Mês - Isenção total de mensalidade (${contract.planName})`
+          : `Mensalidade referente ao aluguel de software - ${contract.planName}`,
       })
 
       if (saveRes.success && saveRes.data) {

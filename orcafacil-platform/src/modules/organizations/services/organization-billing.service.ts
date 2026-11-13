@@ -67,17 +67,37 @@ export const organizationBillingService = {
     name: string
     trialEndsAt?: string | null
   }): Promise<OrganizationBillingInfo> {
-    const isTrial = isOrganizationInTrial(org.trialEndsAt)
-    let trialDaysRemaining = 0
-    if (isTrial && org.trialEndsAt) {
-      const end = new Date(org.trialEndsAt).getTime()
-      trialDaysRemaining = Math.max(0, Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24)))
-    }
-
     const [contract, invoices] = await Promise.all([
       contractService.getContractForOrganization(org.id, org.name),
       contractService.listInvoicesForOrganization(org.id, org.name),
     ])
+
+    let isTrial = isOrganizationInTrial(org.trialEndsAt)
+    let effectiveTrialEndsAt = org.trialEndsAt || null
+
+    // Se a organização não tem trial configurado no cadastro mas o contrato possui período de teste de 1 mês
+    if (!isTrial && contract?.hasTrialPeriod) {
+      let contractTrialEnd = contract.trialEndsAt || null
+      if (!contractTrialEnd && contract.startDate) {
+        try {
+          const d = new Date(contract.startDate)
+          d.setMonth(d.getMonth() + 1)
+          contractTrialEnd = d.toISOString()
+        } catch {
+          contractTrialEnd = null
+        }
+      }
+      if (contractTrialEnd && isOrganizationInTrial(contractTrialEnd)) {
+        isTrial = true
+        effectiveTrialEndsAt = contractTrialEnd
+      }
+    }
+
+    let trialDaysRemaining = 0
+    if (isTrial && effectiveTrialEndsAt) {
+      const end = new Date(effectiveTrialEndsAt).getTime()
+      trialDaysRemaining = Math.max(0, Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24)))
+    }
 
     const paidInvoices: ContractInvoice[] = []
     const unpaidInvoices: ContractInvoice[] = []
@@ -95,7 +115,7 @@ export const organizationBillingService = {
     if (isTrial) {
       return {
         isTrial: true,
-        trialEndsAt: org.trialEndsAt,
+        trialEndsAt: effectiveTrialEndsAt,
         trialDaysRemaining,
         contract,
         invoices,

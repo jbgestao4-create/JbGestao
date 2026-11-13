@@ -160,4 +160,40 @@ describe('contractService', () => {
     expect(overdueInfo.overdueCount).toBeGreaterThanOrEqual(1)
     expect(overdueInfo.totalOverdueAmount).toBeGreaterThan(0)
   })
+
+  it('deve gerar faturas com isenção no 1º mês quando o contrato possui período de teste de 1 mês', async () => {
+    const trialContract = await contractService.saveContract({
+      contractNumber: 'CTR-TRIAL-001',
+      clientName: 'Cliente Teste Degustação',
+      clientResponsibleName: 'Gestor Teste',
+      planName: 'Plano Pro Teste',
+      monthlyAmount: 250,
+      billingDay: 15,
+      paymentMethod: 'PIX',
+      startDate: '2026-11-01',
+      durationMonths: 12,
+      hasTrialPeriod: true,
+      trialDurationMonths: 1,
+      status: 'active',
+    })
+
+    expect(trialContract.success).toBe(true)
+    if (!trialContract.success) return
+
+    const batch = await contractService.generateInvoicesBatch(trialContract.data, 3)
+    expect(batch.success).toBe(true)
+    if (!batch.success) return
+    expect(batch.data.length).toBe(3)
+
+    // A primeira fatura deve ser gratuita (R$ 0,00) e já quitada/isenta
+    const firstInvoice = batch.data[0]
+    expect(firstInvoice.amount).toBe(0)
+    expect(firstInvoice.status).toBe('paid')
+    expect(firstInvoice.notes).toContain('Período de Teste Gratuito de 1 Mês')
+
+    // A segunda fatura deve ter o valor cheio e status pending
+    const secondInvoice = batch.data[1]
+    expect(secondInvoice.amount).toBe(250)
+    expect(secondInvoice.status).toBe('pending')
+  })
 })
