@@ -568,4 +568,48 @@ export const contractService = {
 
     return { success: true, data: undefined }
   },
+
+  /**
+   * Busca o contrato associado a uma organização específica.
+   */
+  async getContractForOrganization(orgId: string, orgName?: string): Promise<SoftwareContract | null> {
+    const res = await this.listContracts()
+    if (!res.success || !res.data) return null
+    const list = res.data
+    const normalizedName = orgName?.trim().toLowerCase()
+
+    return (
+      list.find((c) => c.companyId === orgId) ||
+      (normalizedName ? list.find((c) => c.clientName.trim().toLowerCase() === normalizedName) : null) ||
+      null
+    )
+  },
+
+  /**
+   * Lista todas as faturas associadas a uma organização específica.
+   */
+  async listInvoicesForOrganization(orgId: string, orgName?: string): Promise<ContractInvoice[]> {
+    const [cRes, iRes] = await Promise.all([this.listContracts(), this.listInvoices()])
+    const contracts = cRes.success && cRes.data ? cRes.data : []
+    const invoices = iRes.success && iRes.data ? iRes.data : []
+
+    const normalizedName = orgName?.trim().toLowerCase()
+
+    const matchingContractIds = new Set(
+      contracts
+        .filter(
+          (c) =>
+            c.companyId === orgId ||
+            (normalizedName && c.clientName.trim().toLowerCase() === normalizedName),
+        )
+        .map((c) => c.id),
+    )
+
+    return invoices.filter(
+      (inv) =>
+        inv.companyId === orgId ||
+        (inv.contractId && matchingContractIds.has(inv.contractId)) ||
+        (normalizedName && inv.clientName.trim().toLowerCase() === normalizedName),
+    )
+  },
 }

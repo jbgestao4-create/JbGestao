@@ -12,6 +12,8 @@ import { GeneralCashStatusBadge } from '@shared/components/GeneralCashStatusBadg
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { SystemNotificationModal } from '@shared/components/SystemNotificationModal'
+import { OrganizationBillingBanner } from '@modules/organizations/components/OrganizationBillingBanner'
+import { OrganizationSuspensionGuard } from '@modules/organizations/components/OrganizationSuspensionGuard'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
@@ -432,6 +434,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         )}
 
+        {/* BANNER DE COBRANÇA E VENCIMENTO DE ASSINATURA (APENAS ADMINISTRADOR) */}
+        <OrganizationBillingBanner />
+
         {!isDashboard && (
           <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] px-3 sm:px-6 lg:px-8 print:hidden">
             <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
@@ -507,6 +512,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <UpcomingBillsAlertModal />
             <FeedbackWidget />
             <SystemNotificationModal />
+            <OrganizationSuspensionGuard />
           </div>
         </div>
       </main>

@@ -15,6 +15,7 @@ import { ListBox } from '@shared/components/ui/ListBox'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { SystemCustomizationSection } from '../components/SystemCustomizationSection'
 import { OrganizationPrivacyLgpdSection } from '../components/OrganizationPrivacyLgpdSection'
+import { OrganizationSystemInvoicesSection } from '../components/OrganizationSystemInvoicesSection'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import {
   ShieldCheck,
@@ -30,6 +31,7 @@ import {
   Palette,
   Phone,
   Sparkles,
+  Receipt,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -152,17 +154,21 @@ export function OrganizationSettingsPage() {
       ? 'customization'
       : searchParams.get('tab') === 'privacy' || searchParams.get('tab') === 'lgpd'
         ? 'privacy'
-        : 'general'
-  const [activeTab, setActiveTab] = useState<'general' | 'customization' | 'privacy'>(initialTab)
+        : searchParams.get('tab') === 'invoices' || searchParams.get('tab') === 'faturas' || searchParams.get('tab') === 'system-invoices'
+          ? 'system-invoices'
+          : 'general'
+  const [activeTab, setActiveTab] = useState<'general' | 'customization' | 'privacy' | 'system-invoices'>(initialTab)
 
-  const handleTabChange = (tab: 'general' | 'customization' | 'privacy') => {
+  const handleTabChange = (tab: 'general' | 'customization' | 'privacy' | 'system-invoices') => {
     setActiveTab(tab)
     setSearchParams(
       tab === 'customization'
         ? { tab: 'customization' }
         : tab === 'privacy'
           ? { tab: 'privacy' }
-          : {},
+          : tab === 'system-invoices'
+            ? { tab: 'system-invoices' }
+            : {},
     )
   }
 
@@ -668,6 +674,21 @@ export function OrganizationSettingsPage() {
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
           Privacidade e LGPD
         </button>
+
+        {canManageMembers && (
+          <button
+            type="button"
+            onClick={() => handleTabChange('system-invoices')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+              activeTab === 'system-invoices'
+                ? 'bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-400 shadow-xs border border-purple-300 dark:border-purple-700'
+                : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <Receipt className="w-4 h-4 text-purple-600" />
+            Faturas do Sistema
+          </button>
+        )}
       </div>
 
       {activeTab === 'customization' ? (
@@ -678,6 +699,12 @@ export function OrganizationSettingsPage() {
           userRole={userRole}
           userEmail={user?.email}
           userName={profile?.displayName}
+        />
+      ) : activeTab === 'system-invoices' ? (
+        <OrganizationSystemInvoicesSection
+          organization={currentOrganization}
+          userRole={userRole}
+          isAdmin={canManageMembers}
         />
       ) : (
         <>
