@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Building2,
   DollarSign,
@@ -8,11 +8,58 @@ import {
   UserCheck,
   X,
   FileText,
+  Sparkles,
+  CheckCircle2,
+  Package,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { ALL_PLATFORM_DASHBOARD_MODULES } from '../services/company-management.service'
 import { contractService, type SoftwareContract } from '../services/contract.service'
+import { accessPlanService, type AccessPlan } from '../services/access-plan.service'
 import type { ManagedCompany } from '../services/company-management.service'
+
+/**
+ * Converte códigos de módulos/subfeatures do plano (ex: 'MOD-01', 'MOD-02')
+ * para os nomes amigáveis exibidos no contrato (ex: 'Vendas', 'Estoque').
+ */
+function getModuleNamesFromCodes(codes: string[]): string[] {
+  if (!codes || codes.length === 0) return []
+  const codeSet = new Set(codes)
+  return ALL_PLATFORM_DASHBOARD_MODULES.filter((m) => {
+    if (codeSet.has(m.code)) return true
+    return m.subFeatures.some((sub) => codeSet.has(sub.code))
+  }).map((m) => m.name)
+}
+
+const DEFAULT_ACCESS_PLANS: AccessPlan[] = [
+  {
+    id: 'default-completo',
+    name: 'Plano Completo',
+    description: 'Todos os módulos disponíveis na plataforma JB Gestão',
+    modules: ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.code),
+    isActive: true,
+    isSystem: true,
+    isLocked: false,
+  },
+  {
+    id: 'default-padrao',
+    name: 'Plano Padrão',
+    description: 'Vendas, Estoque, Clientes, Caixa, Fornecedores e Relatórios',
+    modules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-05', 'MOD-06', 'MOD-07', 'MOD-08'],
+    isActive: true,
+    isSystem: true,
+    isLocked: false,
+  },
+  {
+    id: 'default-basico',
+    name: 'Plano Básico',
+    description: 'Recursos essenciais de Vendas, Estoque, Clientes e Caixa',
+    modules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-05'],
+    isActive: true,
+    isSystem: true,
+    isLocked: false,
+  },
+]
 
 interface ContractFormModalProps {
   isOpen: boolean
@@ -74,7 +121,7 @@ export function ContractFormModal({
     initialContract?.contractNumber || contractService.generateContractNumber(),
   )
   const [planName, setPlanName] = useState(
-    initialContract?.planName || 'Plano Completo JB Gestão',
+    initialContract?.planName || prefillCompany?.accessPlanName || 'Plano Completo',
   )
   const [monthlyAmount, setMonthlyAmount] = useState<string>(
     initialContract ? String(initialContract.monthlyAmount) : '150.00',
@@ -99,9 +146,49 @@ export function ContractFormModal({
   )
 
   // Módulos Inclusos
-  const [includedModules, setIncludedModules] = useState<string[]>(
-    initialContract?.includedModules || ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.name),
-  )
+  const [includedModules, setIncludedModules] = useState<string[]>(() => {
+    if (initialContract?.includedModules && initialContract.includedModules.length > 0) {
+      return initialContract.includedModules
+    }
+    if (prefillCompany?.modules && prefillCompany.modules.length > 0) {
+      const mapped = getModuleNamesFromCodes(prefillCompany.modules)
+      if (mapped.length > 0) return mapped
+    }
+    return ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.name)
+  })
+
+  // Planos cadastrados em Empresas Cadastradas
+  const [availablePlans, setAvailablePlans] = useState<AccessPlan[]>(DEFAULT_ACCESS_PLANS)
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false)
+
+  // Carrega os planos cadastrados via accessPlanService
+  useEffect(() => {
+    let isMounted = true
+    async function loadPlans() {
+      setIsLoadingPlans(true)
+      try {
+        const res = await accessPlanService.list()
+        if (isMounted && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          setAvailablePlans(res.data)
+        }
+      } catch {
+        // Mantém planos padrão caso offline
+      } finally {
+        if (isMounted) setIsLoadingPlans(false)
+      }
+    }
+    void loadPlans()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Aplica um plano pré-configurado: define o nome e marca os módulos do plano
+  const handleApplyPlan = (plan: AccessPlan) => {
+    setPlanName(plan.name)
+    const mapped = getModuleNamesFromCodes(plan.modules)
+    setIncludedModules(mapped.length > 0 ? mapped : ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.name))
+  }
 
   // Observações e Cláusulas personalizadas
   const [customTerms, setCustomTerms] = useState(
@@ -118,10 +205,18 @@ export function ContractFormModal({
     if (found) {
       setClientName(found.name)
       if (found.cnpj) setClientDocument(found.cnpj)
-      if (found.adminName) setClientResponsibleName(found.responsible || found.adminName)
+      if (found.responsible || found.adminName) {
+        setClientResponsibleName(found.responsible || found.adminName)
+      }
       if (found.adminEmail) setClientEmail(found.adminEmail)
       if (found.address) setClientAddress(found.address)
       if (found.accessPlanName) setPlanName(found.accessPlanName)
+      if (found.modules && found.modules.length > 0) {
+        const mapped = getModuleNamesFromCodes(found.modules)
+        if (mapped.length > 0) {
+          setIncludedModules(mapped)
+        }
+      }
     }
   }
 
@@ -514,11 +609,22 @@ export function ContractFormModal({
                 </label>
                 <input
                   type="text"
+                  list="contract-plan-options"
                   placeholder="Ex: Plano Padrão / Completo"
                   value={planName}
                   onChange={(e) => setPlanName(e.target.value)}
                   className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
                 />
+                <datalist id="contract-plan-options">
+                  {availablePlans.map((p) => {
+                    const count = getModuleNamesFromCodes(p.modules).length || ALL_PLATFORM_DASHBOARD_MODULES.length
+                    return (
+                      <option key={p.id} value={p.name}>
+                        {p.name} ({count} {count === 1 ? 'módulo' : 'módulos'})
+                      </option>
+                    )
+                  })}
+                </datalist>
               </div>
 
               <div>
@@ -539,7 +645,7 @@ export function ContractFormModal({
             </div>
           </div>
 
-          {/* Seção 4: Módulos Inclusos na Licença */}
+          {/* Seção 4: Módulos Inclusos na Licença com Planos de Acesso */}
           <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-400 dark:text-slate-400 flex items-center gap-1.5">
@@ -550,7 +656,7 @@ export function ContractFormModal({
                 <button
                   type="button"
                   onClick={() => setIncludedModules(ALL_PLATFORM_DASHBOARD_MODULES.map((m) => m.name))}
-                  className="text-blue-600 hover:underline dark:text-blue-400"
+                  className="text-blue-600 hover:underline dark:text-blue-400 font-medium"
                 >
                   Marcar Todos
                 </button>
@@ -563,6 +669,58 @@ export function ContractFormModal({
                   Desmarcar
                 </button>
               </div>
+            </div>
+
+            {/* Planos de Acesso Cadastrados em Empresas */}
+            <div className="p-3.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/25 border border-purple-200/80 dark:border-purple-900/50 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                  Planos Cadastrados no Sistema (Clique para carregar os módulos no contrato):
+                </span>
+                {isLoadingPlans && (
+                  <span className="text-[10px] text-purple-600 dark:text-purple-400 animate-pulse font-medium">
+                    Carregando planos...
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {availablePlans.map((plan) => {
+                  const isSelected = planName.trim().toLowerCase() === plan.name.trim().toLowerCase()
+                  const planMods = getModuleNamesFromCodes(plan.modules)
+                  const count = planMods.length > 0 ? planMods.length : ALL_PLATFORM_DASHBOARD_MODULES.length
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => handleApplyPlan(plan)}
+                      title={plan.description || plan.name}
+                      className={`px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2.5 border transition-all text-left ${
+                        isSelected
+                          ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-500/20 font-semibold'
+                          : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 hover:border-purple-300 hover:bg-purple-50/70 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      {isSelected ? (
+                        <CheckCircle2 className="h-4 w-4 text-white shrink-0" />
+                      ) : (
+                        <Package className="h-4 w-4 text-purple-500 dark:text-purple-400 shrink-0" />
+                      )}
+                      <div>
+                        <div className="leading-tight font-semibold">{plan.name}</div>
+                        <div className={`text-[10px] ${isSelected ? 'text-purple-100' : 'text-gray-400 dark:text-slate-400'}`}>
+                          {count} {count === 1 ? 'módulo' : 'módulos'}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80">
+                Ao clicar em um plano, os módulos do contrato são marcados automaticamente e o nome do plano é atualizado. Você também pode marcar ou desmarcar qualquer módulo individualmente abaixo.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
