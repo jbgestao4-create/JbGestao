@@ -70,6 +70,7 @@ export function ContractsManagementSection({
   const [viewingInvoice, setViewingInvoice] = useState<ContractInvoice | null>(null)
   const [isInvoicePrintModalOpen, setIsInvoicePrintModalOpen] = useState(false)
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
+  const [signingContractId, setSigningContractId] = useState<string | null>(null)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -303,6 +304,28 @@ export function ContractsManagementSection({
     setFeedbackMsg(`Contrato #${contract.contractNumber} excluído com sucesso.`)
     setTimeout(() => setFeedbackMsg(null), 3000)
     void loadData()
+  }
+
+  const handleToggleContractSigned = async (contract: SoftwareContract) => {
+    setSigningContractId(contract.id)
+    try {
+      const res = await contractService.toggleContractSigned(contract.id)
+      if (res.success && res.data) {
+        setContracts((prev) =>
+          prev.map((c) => (c.id === contract.id ? res.data! : c)),
+        )
+        const msg = res.data.isSigned
+          ? `Contrato #${contract.contractNumber} (${contract.clientName}) marcado como ASSINADO!`
+          : `Contrato #${contract.contractNumber} alterado para NÃO ASSINADO.`
+        setFeedbackMsg(msg)
+        setTimeout(() => setFeedbackMsg(null), 3500)
+      } else {
+        setFeedbackMsg('Não foi possível alterar o status de assinatura.')
+        setTimeout(() => setFeedbackMsg(null), 3500)
+      }
+    } finally {
+      setSigningContractId(null)
+    }
   }
 
   const handleFormSuccess = (savedContract: SoftwareContract, printImmediately = false) => {
@@ -652,6 +675,48 @@ export function ContractsManagementSection({
                                 {c.clientEmail}
                               </div>
                             ) : null}
+
+                            {/* Informação se o contrato foi assinado e botão para marcar/desmarcar */}
+                            <div className="mt-2 pt-1.5 border-t border-gray-100 dark:border-slate-800/80 flex items-center gap-2 flex-wrap">
+                              {c.isSigned ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/70 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs"
+                                  title={c.signedAt ? `Assinado em ${new Date(c.signedAt).toLocaleDateString('pt-BR')}` : 'Contrato assinado'}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  Assinado
+                                  {c.signedAt && (
+                                    <span className="text-[10px] font-normal text-emerald-600/80 dark:text-emerald-400/80 ml-0.5">
+                                      ({new Date(c.signedAt).toLocaleDateString('pt-BR')})
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                                  <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                  Não Assinado
+                                </span>
+                              )}
+
+                              <button
+                                type="button"
+                                disabled={signingContractId === c.id}
+                                onClick={() => void handleToggleContractSigned(c)}
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 ${
+                                  c.isSigned
+                                    ? 'text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700'
+                                    : 'text-white bg-purple-600 hover:bg-purple-700 shadow-xs'
+                                }`}
+                                title={c.isSigned ? 'Clique para desmarcar assinatura deste contrato' : 'Clique para informar que o contrato já foi assinado pelo cliente'}
+                              >
+                                {signingContractId === c.id ? (
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <FileSignature className="h-3 w-3" />
+                                )}
+                                {c.isSigned ? 'Desmarcar Assinatura' : 'Marcar como Assinado'}
+                              </button>
+                            </div>
                           </td>
 
                           {/* Responsável */}

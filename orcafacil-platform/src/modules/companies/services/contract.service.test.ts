@@ -196,4 +196,36 @@ describe('contractService', () => {
     expect(secondInvoice.amount).toBe(250)
     expect(secondInvoice.status).toBe('pending')
   })
+
+  it('deve marcar e desmarcar contrato como assinado pelo cliente contratante', async () => {
+    const contract = await contractService.saveContract({
+      contractNumber: 'CTR-SIGN-001',
+      clientName: 'Cliente Assinatura Teste',
+      clientResponsibleName: 'Gestor Sign',
+      planName: 'Plano Assinatura',
+      monthlyAmount: 300,
+      billingDay: 20,
+      startDate: '2026-11-01',
+      status: 'active',
+      isSigned: false,
+    })
+
+    expect(contract.success).toBe(true)
+    if (!contract.success) return
+    expect(contract.data.isSigned).toBe(false)
+
+    // 1. Marca como assinado
+    const signedRes = await contractService.toggleContractSigned(contract.data.id)
+    expect(signedRes.success).toBe(true)
+    if (!signedRes.success) return
+    expect(signedRes.data.isSigned).toBe(true)
+    expect(signedRes.data.signedAt).toBeTruthy()
+
+    // 2. Desmarca assinatura
+    const unsignedRes = await contractService.toggleContractSigned(contract.data.id)
+    expect(unsignedRes.success).toBe(true)
+    if (!unsignedRes.success) return
+    expect(unsignedRes.data.isSigned).toBe(false)
+    expect(unsignedRes.data.signedAt).toBeNull()
+  })
 })

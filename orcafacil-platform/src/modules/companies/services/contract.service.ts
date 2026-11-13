@@ -74,6 +74,8 @@ export interface SoftwareContract {
   hasTrialPeriod?: boolean
   trialDurationMonths?: number
   trialEndsAt?: string | null
+  isSigned?: boolean
+  signedAt?: string | null
   status: ContractStatus
   licensorName: string
   licensorTradeName?: string
@@ -183,6 +185,8 @@ export const contractService = {
         hasTrialPeriod: Boolean(row.has_trial_period),
         trialDurationMonths: row.trial_duration_months ? Number(row.trial_duration_months) : undefined,
         trialEndsAt: row.trial_ends_at || null,
+        isSigned: Boolean(row.is_signed),
+        signedAt: row.signed_at || null,
         status: (row.status as ContractStatus) || 'active',
         licensorName: row.licensor_name,
         licensorTradeName: row.licensor_trade_name,
@@ -238,6 +242,8 @@ export const contractService = {
       hasTrialPeriod: Boolean(contract.hasTrialPeriod),
       trialDurationMonths: contract.hasTrialPeriod ? (Number(contract.trialDurationMonths) || 1) : undefined,
       trialEndsAt: contract.trialEndsAt || null,
+      isSigned: Boolean(contract.isSigned),
+      signedAt: contract.isSigned ? (contract.signedAt || now) : null,
       status: contract.status || 'active',
       licensorName: contract.licensorName?.trim() || 'JB SOFTWARE & TECNOLOGIA LTDA',
       licensorTradeName: contract.licensorTradeName?.trim() || 'JB Software Gestão Inteligente',
@@ -284,6 +290,11 @@ export const contractService = {
         payment_method: cleanContract.paymentMethod,
         start_date: cleanContract.startDate,
         duration_months: cleanContract.durationMonths,
+        has_trial_period: cleanContract.hasTrialPeriod,
+        trial_duration_months: cleanContract.trialDurationMonths,
+        trial_ends_at: cleanContract.trialEndsAt,
+        is_signed: cleanContract.isSigned,
+        signed_at: cleanContract.signedAt,
         status: cleanContract.status,
         licensor_name: cleanContract.licensorName,
         licensor_trade_name: cleanContract.licensorTradeName,
@@ -325,6 +336,35 @@ export const contractService = {
     }
 
     return { success: true, data: undefined }
+  },
+
+  /**
+   * Alterna ou define se o contrato foi assinado pelo cliente contratante.
+   */
+  async toggleContractSigned(
+    contractId: string,
+    forcedStatus?: boolean,
+  ): Promise<ServiceResult<SoftwareContract>> {
+    const contractsRes = await this.listContracts()
+    if (!contractsRes.success || !contractsRes.data) {
+      return { success: false, error: 'Não foi possível carregar os contratos.' }
+    }
+    const target = contractsRes.data.find((c) => c.id === contractId)
+    if (!target) {
+      return { success: false, error: 'Contrato não encontrado.' }
+    }
+
+    const nextIsSigned = forcedStatus !== undefined ? forcedStatus : !target.isSigned
+    const now = new Date().toISOString()
+
+    const updated: SoftwareContract = {
+      ...target,
+      isSigned: nextIsSigned,
+      signedAt: nextIsSigned ? (target.signedAt || now) : null,
+      updatedAt: now,
+    }
+
+    return this.saveContract(updated)
   },
 
   /**

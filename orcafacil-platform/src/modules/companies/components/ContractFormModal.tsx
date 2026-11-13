@@ -157,6 +157,9 @@ export function ContractFormModal({
   const [hasTrialPeriod, setHasTrialPeriod] = useState<boolean>(
     initialContract?.hasTrialPeriod ?? false,
   )
+  const [isSigned, setIsSigned] = useState<boolean>(
+    initialContract?.isSigned ?? false,
+  )
   const [status, setStatus] = useState<SoftwareContract['status']>(
     initialContract?.status || 'active',
   )
@@ -405,6 +408,8 @@ export function ContractFormModal({
         hasTrialPeriod,
         trialDurationMonths: hasTrialPeriod ? 1 : undefined,
         trialEndsAt,
+        isSigned,
+        signedAt: isSigned ? (initialContract?.signedAt || new Date().toISOString()) : null,
         status,
         includedModules,
         customTerms: customTerms.trim() || null,
@@ -831,6 +836,35 @@ export function ContractFormModal({
                   <option value="cancelled">Cancelado</option>
                 </select>
               </div>
+            </div>
+
+            {/* Opção de Assinatura do Contrato */}
+            <div className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-800/40 p-3.5">
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isSigned}
+                  onChange={(e) => setIsSigned(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                />
+                <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <FileSignature className="h-4 w-4 text-purple-600" />
+                      Contrato Já Assinado pelo Cliente
+                    </span>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                      Indica que o cliente contratante já assinou formalmente o termo contratual (físico ou eletrônico).
+                    </p>
+                  </div>
+                  {isSigned && (
+                    <span className="self-start sm:self-center rounded-full bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      Assinado
+                    </span>
+                  )}
+                </div>
+              </label>
             </div>
           </div>
 
