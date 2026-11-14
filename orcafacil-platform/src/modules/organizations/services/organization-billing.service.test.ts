@@ -6,10 +6,26 @@ import {
 } from './organization-billing.service'
 import { contractService } from '@modules/companies/services/contract.service'
 
+vi.mock('@app/config/supabase', () => ({
+  supabase: {
+    from: vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({ data: null, error: { message: 'Table offline' } }),
+      upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+      delete: vi.fn().mockReturnThis(),
+    })),
+  },
+}))
+
 describe('organizationBillingService', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     localStorage.clear()
+    vi.spyOn(contractService, 'autoGenerateInvoicesDueSoon').mockResolvedValue({
+      success: true,
+      data: [],
+    })
   })
 
   describe('isOrganizationInTrial', () => {

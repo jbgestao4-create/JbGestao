@@ -4,6 +4,8 @@ import {
   type SoftwareContract,
   getInvoiceEffectiveStatus,
   getContractOverdueInfo,
+  getNextCycleInfo,
+  getDiffDaysFromToday,
 } from './contract.service'
 
 vi.mock('@app/config/supabase', () => ({
@@ -227,5 +229,70 @@ describe('contractService', () => {
     if (!unsignedRes.success) return
     expect(unsignedRes.data.isSigned).toBe(false)
     expect(unsignedRes.data.signedAt).toBeNull()
+  })
+
+  it('deve calcular corretamente o próximo ciclo de faturamento', () => {
+    expect(getDiffDaysFromToday('2099-01-01')).toBeGreaterThan(0)
+
+    const nov = getNextCycleInfo('11/2026', '2026-11-10', 10)
+    expect(nov.nextRefMonth).toBe('12/2026')
+    expect(nov.nextDueDate).toBe('2026-12-10')
+
+    const dez = getNextCycleInfo('12/2026', '2026-12-15', 15)
+    expect(dez.nextRefMonth).toBe('01/2027')
+    expect(dez.nextDueDate).toBe('2027-01-15')
+  })
+
+  it('deve gerar nova fatura automaticamente 3 dias antes do vencimento com o mesmo valor da anterior', async () => {
+    // 1. Cria contrato ativo
+    const contractRes = await contractService.saveContract({
+      contractNumber: 'CTR-RENEW-001',
+      clientName: 'Cliente Renovação Automática',
+      clientResponsibleName: 'Gestor Auto',
+      planName: 'Plano Controle Mensal',
+      monthlyAmount: 180.0,
+      billingDay: 10,
+      startDate: '2026-11-01',
+      durationMonths: 12,
+      status: 'active',
+    })
+    expect(contractRes.success).toBe(true)
+    if (!contractRes.success) return
+    const contract = contractRes.data
+
+    // 2. Cria fatura com vencimento daqui a 2 dias (dentro do gatilho de <= 3 dias)
+    const twoDaysFromNow = new Date()
+    twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2)
+    const dueDateStr = twoDaysFromNow.toISOString().split('T')[0]
+
+    const initialInvoice = await contractService.saveInvoice({
+      contractId: contract.id,
+      clientName: contract.clientName,
+      amount: 180.0,
+      dueDate: dueDateStr,
+      referenceMonth: '11/2026',
+      status: 'pending',
+    })
+    expect(initialInvoice.success).toBe(true)
+
+    // 3. Executa a rotina de verificação automática
+    const autoGenRes = await contractService.autoGenerateInvoicesDueSoon()
+    expect(autoGenRes.success).toBe(true)
+    if (!autoGenRes.success) return
+
+    // Deve ter gerado 1 nova fatura para o próximo ciclo
+    expect(autoGenRes.data.length).toBe(1)
+    const newInvoice = autoGenRes.data[0]
+    expect(newInvoice.contractId).toBe(contract.id)
+    expect(newInvoice.referenceMonth).toBe('12/2026')
+    // Deve ter exatamente o mesmo valor da anterior
+    expect(newInvoice.amount).toBe(180.0)
+    expect(newInvoice.status).toBe('pending')
+
+    // 4. Executa a rotina novamente imediatamente (idempotência: não deve duplicar)
+    const secondRun = await contractService.autoGenerateInvoicesDueSoon()
+    expect(secondRun.success).toBe(true)
+    if (!secondRun.success) return
+    expect(secondRun.data.length).toBe(0)
   })
 })

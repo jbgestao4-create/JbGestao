@@ -67,6 +67,13 @@ export const organizationBillingService = {
     name: string
     trialEndsAt?: string | null
   }): Promise<OrganizationBillingInfo> {
+    // Executa rotina de renovação automática quando estiver a 3 dias ou menos do vencimento
+    try {
+      await contractService.autoGenerateInvoicesDueSoon()
+    } catch {
+      // non-blocking
+    }
+
     const [contract, invoices] = await Promise.all([
       contractService.getContractForOrganization(org.id, org.name),
       contractService.listInvoicesForOrganization(org.id, org.name),

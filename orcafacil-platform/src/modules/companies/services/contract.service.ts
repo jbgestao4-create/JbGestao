@@ -33,6 +33,58 @@ export function getInvoiceEffectiveStatus(inv: ContractInvoice): 'paid' | 'overd
   return 'pending'
 }
 
+/**
+ * Calcula a diferença em dias entre uma data YYYY-MM-DD e o dia atual.
+ * Positivo se for no futuro, 0 se for hoje, negativo se for no passado.
+ */
+export function getDiffDaysFromToday(targetDateStr: string): number {
+  try {
+    const [y, m, d] = targetDateStr.split('-').map(Number)
+    const target = new Date(y, m - 1, d)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    target.setHours(0, 0, 0, 0)
+
+    const diffMs = target.getTime() - today.getTime()
+    return Math.round(diffMs / (1000 * 60 * 60 * 24))
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Calcula a referência e data de vencimento do próximo mês a partir de uma fatura ativa.
+ */
+export function getNextCycleInfo(referenceMonth: string, dueDate: string, billingDay?: number) {
+  let nextMonth: number
+  let nextYear: number
+
+  const parts = referenceMonth.split('/')
+  if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+    const curMonth = Number(parts[0])
+    const curYear = Number(parts[1])
+    nextMonth = curMonth === 12 ? 1 : curMonth + 1
+    nextYear = curMonth === 12 ? curYear + 1 : curYear
+  } else {
+    const [y, m] = dueDate.split('-').map(Number)
+    const baseDate = new Date(y, m - 1, 1)
+    baseDate.setMonth(baseDate.getMonth() + 1)
+    nextMonth = baseDate.getMonth() + 1
+    nextYear = baseDate.getFullYear()
+  }
+
+  const mm = String(nextMonth).padStart(2, '0')
+  const nextRefMonth = `${mm}/${nextYear}`
+
+  const targetDay = billingDay
+    ? Math.min(billingDay, 28)
+    : Math.min(Number(dueDate.split('-')[2]) || 10, 28)
+  const dd = String(targetDay).padStart(2, '0')
+  const nextDueDate = `${nextYear}-${mm}-${dd}`
+
+  return { nextRefMonth, nextDueDate }
+}
+
 export function getContractOverdueInfo(contractId: string, invoices: ContractInvoice[]) {
   const contractInvoices = invoices.filter((inv) => inv.contractId === contractId)
   const overdueInvoices = contractInvoices.filter(
@@ -557,6 +609,133 @@ export const contractService = {
 
       if (saveRes.success && saveRes.data) {
         generated.push(saveRes.data)
+      }
+    }
+
+    return { success: true, data: generated }
+  },
+
+  /**
+   * Garante a geração da primeira fatura de um contrato caso ainda não possua nenhuma.
+   */
+  async ensureInitialInvoice(
+    contract: SoftwareContract,
+  ): Promise<ServiceResult<ContractInvoice | null>> {
+    const existingResult = await this.listInvoices(contract.id)
+    const existing = existingResult.success && existingResult.data ? existingResult.data : []
+    if (existing.length > 0) {
+      return { success: true, data: null }
+    }
+
+    const startDate = contract.startDate ? new Date(`${contract.startDate}T00:00:00`) : new Date()
+    const yyyy = startDate.getFullYear()
+    const mm = String(startDate.getMonth() + 1).padStart(2, '0')
+    const refMonth = `${mm}/${yyyy}`
+
+    const billingDay = Math.min(contract.billingDay || 10, 28)
+    const dayStr = String(billingDay).padStart(2, '0')
+    const dueDate = `${yyyy}-${mm}-${dayStr}`
+    const invNum = this.generateInvoiceNumber(contract.contractNumber, 1)
+
+    const isTrial = Boolean(contract.hasTrialPeriod)
+
+    const saveRes = await this.saveInvoice({
+      contractId: contract.id,
+      companyId: contract.companyId,
+      invoiceNumber: invNum,
+      clientName: contract.clientName,
+      clientDocument: contract.clientDocument,
+      referenceMonth: refMonth,
+      amount: isTrial ? 0 : contract.monthlyAmount,
+      dueDate,
+      paymentMethod: isTrial ? 'Isenção / Período de Teste' : (contract.paymentMethod || 'PIX'),
+      status: isTrial ? 'paid' : 'pending',
+      paymentDate: isTrial ? new Date().toISOString().split('T')[0] : null,
+      notes: isTrial
+        ? `Período de Teste Gratuito de 1 Mês - Isenção total de mensalidade (${contract.planName})`
+        : `Mensalidade referente ao aluguel de software - ${contract.planName}`,
+    })
+
+    return saveRes
+  },
+
+  /**
+   * Rotina Automática:
+   * Identifica faturas que estejam a 3 dias ou menos do vencimento (ou vencidas)
+   * e gera automaticamente a nova fatura do próximo ciclo no mesmo valor da anterior.
+   */
+  async autoGenerateInvoicesDueSoon(): Promise<ServiceResult<ContractInvoice[]>> {
+    const generated: ContractInvoice[] = []
+    const [cRes, iRes] = await Promise.all([this.listContracts(), this.listInvoices()])
+    const contracts = cRes.success && cRes.data ? cRes.data : []
+    const allInvoices = iRes.success && iRes.data ? iRes.data : []
+
+    for (const contract of contracts) {
+      if (contract.status === 'cancelled') continue
+
+      const contractInvoices = allInvoices.filter(
+        (inv) => inv.contractId === contract.id && inv.status !== 'cancelled',
+      )
+
+      if (contractInvoices.length === 0) {
+        const initRes = await this.ensureInitialInvoice(contract)
+        if (initRes.success && initRes.data) {
+          generated.push(initRes.data)
+          allInvoices.unshift(initRes.data)
+        }
+        continue
+      }
+
+      // Ordena por vencimento para identificar a fatura mais recente do ciclo
+      const sorted = [...contractInvoices].sort((a, b) => b.dueDate.localeCompare(a.dueDate))
+      const latestInvoice = sorted[0]
+
+      // Condição: 3 dias ou menos antes do vencimento
+      const diffDays = getDiffDaysFromToday(latestInvoice.dueDate)
+
+      if (diffDays <= 3) {
+        const { nextRefMonth, nextDueDate } = getNextCycleInfo(
+          latestInvoice.referenceMonth,
+          latestInvoice.dueDate,
+          contract.billingDay,
+        )
+
+        // Se a fatura para o próximo ciclo já existir, não duplica
+        const alreadyExists = contractInvoices.some(
+          (inv) => inv.referenceMonth === nextRefMonth || inv.dueDate === nextDueDate,
+        )
+        if (alreadyExists) continue
+
+        // Gera a nova fatura no mesmo valor da anterior (ou valor cheio caso a anterior tenha sido teste gratuito R$ 0)
+        let nextAmount = latestInvoice.amount
+        if (nextAmount === 0 && contract.monthlyAmount > 0) {
+          nextAmount = contract.monthlyAmount
+        }
+
+        const nextInvNum = this.generateInvoiceNumber(
+          contract.contractNumber,
+          contractInvoices.length + generated.length + 1,
+        )
+
+        const saveRes = await this.saveInvoice({
+          contractId: contract.id,
+          companyId: contract.companyId,
+          invoiceNumber: nextInvNum,
+          clientName: contract.clientName,
+          clientDocument: contract.clientDocument,
+          referenceMonth: nextRefMonth,
+          amount: nextAmount,
+          dueDate: nextDueDate,
+          paymentMethod: contract.paymentMethod || latestInvoice.paymentMethod || 'PIX',
+          status: 'pending',
+          pixKey: (contract as any).pixKey || latestInvoice.pixKey || null,
+          notes: `Mensalidade referente ao aluguel de software - ${contract.planName || 'Sistema'} (Renovação automática)`,
+        })
+
+        if (saveRes.success && saveRes.data) {
+          generated.push(saveRes.data)
+          allInvoices.unshift(saveRes.data)
+        }
       }
     }
 

@@ -74,6 +74,11 @@ export function ContractsManagementSection({
 
   const loadData = async () => {
     setIsLoading(true)
+    try {
+      await contractService.autoGenerateInvoicesDueSoon()
+    } catch {
+      // non-blocking
+    }
     const [cRes, iRes] = await Promise.all([
       contractService.listContracts(),
       contractService.listInvoices(),

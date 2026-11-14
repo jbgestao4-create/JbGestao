@@ -206,7 +206,6 @@ export function ContractFormModal({
   // Gerador de Faturas do Contrato
   const [contractInvoices, setContractInvoices] = useState<ContractInvoice[]>([])
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false)
-  const [autoGenerateFirstInvoices, setAutoGenerateFirstInvoices] = useState(true)
   const [invRefMonth, setInvRefMonth] = useState(() => {
     const d = new Date()
     return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
@@ -414,9 +413,9 @@ export function ContractFormModal({
           }
         }
 
-        if (!isEditing && autoGenerateFirstInvoices) {
+        if (!isEditing) {
           try {
-            await contractService.generateInvoicesBatch(res.data, 6)
+            await contractService.ensureInitialInvoice(res.data)
           } catch {
             // non-blocking
           }
@@ -1127,20 +1126,14 @@ export function ContractFormModal({
                 )}
               </div>
             ) : (
-              <div className="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/40 border border-gray-200 dark:border-slate-800 flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="auto-gen-invoices"
-                  checked={autoGenerateFirstInvoices}
-                  onChange={(e) => setAutoGenerateFirstInvoices(e.target.checked)}
-                  className="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <label htmlFor="auto-gen-invoices" className="text-xs text-gray-700 dark:text-slate-300 cursor-pointer">
-                  <span className="font-bold block text-gray-900 dark:text-white">
-                    Gerar automaticamente as faturas dos primeiros 6 meses ao salvar o contrato
+              <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 flex items-start gap-3">
+                <Clock className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-gray-700 dark:text-slate-300">
+                  <span className="font-bold block text-emerald-950 dark:text-emerald-200 mb-0.5">
+                    Renovação Automática de Faturas (3 dias antes do vencimento)
                   </span>
-                  As cobranças mensais serão criadas automaticamente com o valor da mensalidade e dia de vencimento definidos, prontas para controle financeiro e envio ao cliente.
-                </label>
+                  Ao salvar o contrato, a primeira fatura será criada automaticamente. Sempre que faltarem 3 dias para o vencimento da fatura ativa, o sistema gerará a fatura do próximo ciclo no mesmo valor da anterior de forma 100% automatizada.
+                </div>
               </div>
             )}
           </div>
