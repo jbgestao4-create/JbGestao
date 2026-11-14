@@ -755,7 +755,7 @@ export const organizationService = {
       const { error: uploadError } = await supabase.storage
         .from('company-assets')
         .upload(filePath, file, {
-          cacheControl: '3600',
+          cacheControl: '2592000',
           upsert: true,
         })
 

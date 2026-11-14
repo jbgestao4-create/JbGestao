@@ -1,4 +1,4 @@
-import { useEffect, useState, Suspense, type ReactNode } from 'react'
+import { useEffect, useState, useCallback, Suspense, type ReactNode } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -27,7 +27,23 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
   const { setInsideSystem } = useTheme()
   const location = useLocation()
 
-  useScreenTimeTracker(user?.id, currentOrganization?.id)
+  const handleInactivityLogout = useCallback(() => {
+    void signOut().then(() => {
+      navigate('/login', { state: { inactivity: true }, replace: true })
+    })
+  }, [signOut, navigate])
+
+  useScreenTimeTracker(user?.id, currentOrganization?.id, handleInactivityLogout)
+
+  useEffect(() => {
+    const handleRequired = () => {
+      handleInactivityLogout()
+    }
+    window.addEventListener('inactivity-logout-required', handleRequired)
+    return () => {
+      window.removeEventListener('inactivity-logout-required', handleRequired)
+    }
+  }, [handleInactivityLogout])
 
   const [maintenance, setMaintenance] = useState<MaintenanceStatus>(() => {
     try {

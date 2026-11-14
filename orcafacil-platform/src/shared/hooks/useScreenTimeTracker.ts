@@ -1,15 +1,36 @@
 import { useEffect, useRef } from 'react'
 import { screenTimeService } from '@shared/services/screen-time.service'
 
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos sem interação pausa o contador de tela
-const SYNC_INTERVAL_SECONDS = 5 // Sincroniza a cada 5 segundos
+const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000 // 2 minutos sem movimentação ou utilização para deslogar por segurança
+const SYNC_INTERVAL_SECONDS = 30 // Sincroniza com Supabase a cada 30 segundos (reduz tráfego contínuo)
 
 /**
- * Hook para monitoramento contínuo do tempo de tela e atualização do último acesso.
+ * Verifica se a aplicação encontra-se no modo Tela Cheia do PDV
  */
-export function useScreenTimeTracker(userId?: string | null, orgId?: string | null) {
+export function isPdvFullscreenActive(): boolean {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return false
+  const inFullscreen = Boolean(document.fullscreenElement)
+  const isPdvLocked = sessionStorage.getItem('pdv_fullscreen_locked') === 'true'
+  const isPdvPath =
+    window.location.pathname.startsWith('/orcafacil/sales') ||
+    window.location.pathname.startsWith('/sales') ||
+    window.location.pathname.includes('/pdv')
+  return inFullscreen && (isPdvLocked || isPdvPath)
+}
+
+/**
+ * Hook para monitoramento contínuo do tempo de tela, atualização do último acesso
+ * e encerramento de sessão automático por inatividade de 2 minutos (exceto tela cheia do PDV).
+ */
+export function useScreenTimeTracker(
+  userId?: string | null,
+  orgId?: string | null,
+  onInactiveLogout?: () => void,
+) {
   const pendingSecondsRef = useRef(0)
   const lastActiveTimestampRef = useRef(Date.now())
+  const lastStorageWriteRef = useRef(Date.now())
+  const hasLoggedOutRef = useRef(false)
 
   useEffect(() => {
     if (!userId) return
@@ -18,13 +39,36 @@ export function useScreenTimeTracker(userId?: string | null, orgId?: string | nu
     void screenTimeService.recordScreenTime(userId, 0, orgId)
 
     const handleUserActivity = () => {
-      lastActiveTimestampRef.current = Date.now()
+      const now = Date.now()
+      lastActiveTimestampRef.current = now
+      hasLoggedOutRef.current = false
+
+      // Debounce na escrita do localStorage para sincronizar abas do mesmo navegador
+      if (now - lastStorageWriteRef.current > 3000) {
+        lastStorageWriteRef.current = now
+        try {
+          localStorage.setItem('jb_last_user_activity', String(now))
+        } catch {
+          // ignore
+        }
+      }
     }
 
     const activityEvents = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
     activityEvents.forEach((event) => {
       window.addEventListener(event, handleUserActivity, { passive: true })
     })
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'jb_last_user_activity' && e.newValue) {
+        const remoteTime = Number(e.newValue)
+        if (!isNaN(remoteTime) && remoteTime > lastActiveTimestampRef.current) {
+          lastActiveTimestampRef.current = remoteTime
+          hasLoggedOutRef.current = false
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorageEvent)
 
     const flush = () => {
       const secs = pendingSecondsRef.current
@@ -39,10 +83,39 @@ export function useScreenTimeTracker(userId?: string | null, orgId?: string | nu
       }
     }
 
-    // 2. Contador de segundos ativo (1 tick por segundo)
+    // 2. Contador de segundos e verificação de inatividade a cada 1 segundo
     const intervalId = window.setInterval(() => {
+      const now = Date.now()
+      const sharedLastActive = Math.max(
+        lastActiveTimestampRef.current,
+        Number(localStorage.getItem('jb_last_user_activity') || 0),
+      )
+      const inactiveDuration = now - sharedLastActive
+
+      // REGRA DE SEGURANÇA: Deslogar após 2 minutos de inatividade (exceto se em tela cheia do PDV)
+      if (inactiveDuration >= INACTIVITY_TIMEOUT_MS && !hasLoggedOutRef.current) {
+        if (isPdvFullscreenActive()) {
+          // No modo tela cheia do PDV, a sessão permanece ativa continuamente sem deslogar
+          lastActiveTimestampRef.current = now
+          try {
+            localStorage.setItem('jb_last_user_activity', String(now))
+          } catch {
+            // ignore
+          }
+        } else {
+          hasLoggedOutRef.current = true
+          flush()
+          if (onInactiveLogout) {
+            onInactiveLogout()
+          } else {
+            window.dispatchEvent(new CustomEvent('inactivity-logout-required'))
+          }
+          return
+        }
+      }
+
       const isVisible = document.visibilityState === 'visible'
-      const isNotIdle = Date.now() - lastActiveTimestampRef.current < IDLE_TIMEOUT_MS
+      const isNotIdle = inactiveDuration < INACTIVITY_TIMEOUT_MS
 
       if (isVisible && isNotIdle) {
         pendingSecondsRef.current += 1
@@ -80,8 +153,9 @@ export function useScreenTimeTracker(userId?: string | null, orgId?: string | nu
       activityEvents.forEach((event) => {
         window.removeEventListener(event, handleUserActivity)
       })
+      window.removeEventListener('storage', handleStorageEvent)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('beforeunload', handleBeforeUnload)
     }
-  }, [userId])
+  }, [userId, orgId, onInactiveLogout])
 }

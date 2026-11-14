@@ -873,7 +873,7 @@ export const cashSessionService = {
       const { error: uploadError } = await supabase.storage
         .from('cash-attachments')
         .upload(filePath, file, {
-          cacheControl: '3600',
+          cacheControl: '2592000',
           upsert: false,
         })
 

@@ -35,6 +35,7 @@ export function LoginPage() {
   const [deactivatedOrgName, setDeactivatedOrgName] = useState<string>((location.state as any)?.orgName || '')
   const [isTrialExpired, setIsTrialExpired] = useState(Boolean((location.state as any)?.trialExpired))
   const [expiredOrgName, setExpiredOrgName] = useState<string>((location.state as any)?.orgName || '')
+  const [isInactiveLoggedOut] = useState(Boolean((location.state as any)?.inactivity))
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -276,6 +277,27 @@ export function LoginPage() {
                       <span className="block mt-2 text-[11px] font-semibold text-amber-700">
                         * Acesso restrito a administradores e desenvolvedores autorizados.
                       </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isInactiveLoggedOut && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-xs"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-amber-100 p-2 text-amber-700 shrink-0 mt-0.5">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-amber-950">
+                        Sessão Encerrada por Inatividade
+                      </h3>
+                      <p className="mt-1 text-xs font-semibold text-amber-900 leading-relaxed">
+                        Por motivos de segurança, você foi desconectado após 2 minutos sem utilização ou movimentação no sistema.
+                      </p>
                     </div>
                   </div>
                 </div>

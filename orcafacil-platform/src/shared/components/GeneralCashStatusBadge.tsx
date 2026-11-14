@@ -54,7 +54,7 @@ export function GeneralCashStatusBadge() {
 
     const interval = window.setInterval(() => {
       void checkGeneralCash()
-    }, 10000)
+    }, 60000)
 
     return () => {
       window.removeEventListener('general-cash-session-opened', handleRefresh)

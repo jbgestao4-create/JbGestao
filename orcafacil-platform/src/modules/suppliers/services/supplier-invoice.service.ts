@@ -132,7 +132,7 @@ export const supplierInvoiceService = {
       const { error: uploadError } = await supabase.storage
         .from(SUPPLIER_INVOICE_BUCKET)
         .upload(filePath, file, {
-          cacheControl: '3600',
+          cacheControl: '2592000',
           contentType: file.type,
           upsert: false,
         })

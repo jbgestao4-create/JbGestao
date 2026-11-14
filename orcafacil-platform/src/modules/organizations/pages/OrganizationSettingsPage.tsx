@@ -307,9 +307,9 @@ export function OrganizationSettingsPage() {
     void loadMembers()
   }, [currentOrganization])
 
-  // Atualiza periodicamente as métricas de tempo de tela e último acesso quando visualizado pelo desenvolvedor
+  // Atualiza periodicamente as métricas de tempo de tela e último acesso quando visualizado pelo desenvolvedor na aba de dados e funcionários
   useEffect(() => {
-    if (!isDeveloper || !currentOrganization) return
+    if (!isDeveloper || !currentOrganization || activeTab !== 'general') return
 
     const intervalId = window.setInterval(() => {
       void organizationService.getMembersWithDetails(currentOrganization.id).then((res) => {
@@ -317,12 +317,12 @@ export function OrganizationSettingsPage() {
           setMembers(res.data)
         }
       })
-    }, 15000)
+    }, 45000)
 
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [isDeveloper, currentOrganization?.id])
+  }, [isDeveloper, currentOrganization?.id, activeTab])
 
   // Lista dos membros e funcionários visíveis para gestão e métricas de tempo de tela
   const visibleMembers = useMemo(() => {
