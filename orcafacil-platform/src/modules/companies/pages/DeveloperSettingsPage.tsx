@@ -6,14 +6,11 @@ import {
   Headset,
   ShieldCheck,
   ArrowRight,
-  Cpu,
   Layers,
   BellRing,
   GitBranch,
-  Key,
-  Check,
-  CheckCircle2,
   FileSignature,
+  Settings,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -26,11 +23,7 @@ import { systemMaintenanceService } from '@shared/services/system-maintenance.se
 import { systemNotificationService } from '@shared/services/system-notification.service'
 import { systemUpdateService } from '@shared/services/system-update.service'
 import { useSystemVersion } from '@shared/hooks/useSystemVersion'
-import {
-  getGeminiApiKey,
-  setGeminiApiKey,
-  supportAiService,
-} from '@modules/suggestions/services/support-ai.service'
+import { systemSettingsService } from '@shared/services/system-settings.service'
 import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
 
 export function DeveloperSettingsPage() {
@@ -47,26 +40,29 @@ export function DeveloperSettingsPage() {
   const [activeNotificationsCount, setActiveNotificationsCount] = useState<number | null>(null)
   const [updatesCount, setUpdatesCount] = useState<number | null>(null)
   const [contractsCount, setContractsCount] = useState<number | null>(null)
-  const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey())
-  const [apiKeySaved, setApiKeySaved] = useState(false)
-  const [testingAi, setTestingAi] = useState(false)
-  const [testResult, setTestResult] = useState<string | null>(null)
+  const [inactivityMinutes, setInactivityMinutes] = useState<number>(() =>
+    systemSettingsService.getLocalInactivityTimeoutMinutes(),
+  )
 
   useEffect(() => {
     let isMounted = true
 
     const loadStats = async () => {
       try {
-        const [compRes, annRes, maintRes, notifRes, updRes, contractRes] = await Promise.all([
+        const [compRes, annRes, maintRes, notifRes, updRes, contractRes, inactRes] = await Promise.all([
           companyManagementService.listAll(),
           announcementService.listAll(),
           systemMaintenanceService.getStatus(),
           systemNotificationService.listAll(),
           systemUpdateService.listAll(),
           contractService.listContracts(),
+          systemSettingsService.getInactivitySettings(),
         ])
 
         if (isMounted) {
+          if (inactRes.success && inactRes.data) {
+            setInactivityMinutes(inactRes.data.timeoutMinutes)
+          }
           if (compRes.success && compRes.data) {
             setCompaniesCount(compRes.data.length)
           }
@@ -235,6 +231,20 @@ export function DeveloperSettingsPage() {
       cardHoverBorder: 'hover:border-cyan-400 dark:hover:border-cyan-600',
       accentColor: 'cyan',
     },
+    {
+      id: 'system-settings',
+      title: 'Configuração do Sistema',
+      badge: `${inactivityMinutes} min de inatividade`,
+      badgeColor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold',
+      description:
+        'Ajuste o tempo limite de bloqueio por inatividade de sessão e gerencie as configurações de diagnóstico técnico e inteligência artificial da plataforma.',
+      actionText: 'Acessar Configurações',
+      path: '/admin/system-settings',
+      icon: Settings,
+      iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-400',
+      cardHoverBorder: 'hover:border-emerald-400 dark:hover:border-emerald-600',
+      accentColor: 'emerald',
+    },
   ]
 
   return (
@@ -316,142 +326,6 @@ export function DeveloperSettingsPage() {
             </div>
           )
         })}
-      </div>
-
-      {/* PAINEL DE CONFIGURAÇÃO DA IA DE SUPORTE E DIAGNÓSTICO */}
-      <div className="bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-900/60 rounded-2xl p-6 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
-              <Headset className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Diagnóstico Técnico & Triagem Automática de Suporte
-                </h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-100 text-violet-800 dark:bg-violet-950/70 dark:text-violet-300">
-                  <Cpu className="w-3 h-3" /> Triagem Ativa
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Atendimento cordial para o cliente, com diagnósticos técnicos detalhados e estruturados para os desenvolvedores via <code className="font-mono text-violet-600 dark:text-violet-400">registrar_analise_suporte</code>.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                apiKeyInput.trim()
-                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
-                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300'
-              }`}
-            >
-              {apiKeyInput.trim() ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Motor de Diagnóstico Conectado
-                </>
-              ) : (
-                'Modo Resiliente (Fallback Ativo)'
-              )}
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <div className="lg:col-span-2 space-y-2">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Chave da API de Diagnóstico e Atendimento (Google Cloud / Studio)
-            </label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => {
-                    setApiKeyInput(e.target.value)
-                    setApiKeySaved(false)
-                  }}
-                  placeholder="AIzaSy... (ou configure VITE_GEMINI_API_KEY no .env.local)"
-                  className="w-full h-10 pl-9 pr-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setGeminiApiKey(apiKeyInput)
-                  setApiKeySaved(true)
-                  setTimeout(() => setApiKeySaved(false), 3000)
-                }}
-                className="h-10 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
-              >
-                {apiKeySaved ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" /> Salvo!
-                  </>
-                ) : (
-                  'Salvar Chave'
-                )}
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              A chave é mantida no ambiente local do seu navegador e não é exposta publicamente. Se preferir, defina <code className="font-mono">VITE_GEMINI_API_KEY</code> no <code className="font-mono">.env.local</code>.
-            </p>
-          </div>
-
-          <div className="space-y-2 flex flex-col justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Simulador de Chamada de Ferramenta
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Testa a ferramenta <code className="font-mono">registrar_analise_suporte</code> em tempo real.
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={testingAi}
-              onClick={async () => {
-                setTestingAi(true)
-                setTestResult(null)
-                try {
-                  const res = await supportAiService.testConnection(apiKeyInput)
-                  setTestResult(
-                    JSON.stringify(
-                      {
-                        origem: res.isFallback
-                          ? 'Fallback Local (A chave não respondeu ou deu erro)'
-                          : `Motor de Diagnóstico Integrado (${res.model})`,
-                        ferramenta_executada: 'registrar_analise_suporte',
-                        sucesso_conexao: res.success,
-                        erro_api: res.error || null,
-                        retorno: res.payload,
-                      },
-                      null,
-                      2,
-                    ),
-                  )
-                } catch (err) {
-                  setTestResult(`Erro no teste: ${String(err)}`)
-                } finally {
-                  setTestingAi(false)
-                }
-              }}
-              className="h-10 w-full rounded-lg border border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-            >
-              <Cpu className="w-4 h-4" />
-              {testingAi ? 'Processando Validação da Ferramenta...' : 'Executar Teste da Ferramenta'}
-            </button>
-          </div>
-        </div>
-
-        {testResult && (
-          <div className="mt-3 p-3 rounded-xl bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto max-h-56">
-            <p className="text-slate-400 font-bold mb-1">// Retorno estruturado da ferramenta registrar_analise_suporte:</p>
-            <pre className="whitespace-pre-wrap">{testResult}</pre>
-          </div>
-        )}
       </div>
 
       {/* PAINEL DE INFORMAÇÕES DE DESENVOLVEDOR */}

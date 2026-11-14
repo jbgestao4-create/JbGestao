@@ -1,8 +1,15 @@
 import { useEffect, useRef } from 'react'
 import { screenTimeService } from '@shared/services/screen-time.service'
+import { systemSettingsService } from '@shared/services/system-settings.service'
 
-const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000 // 2 minutos sem movimentação ou utilização para deslogar por segurança
 const SYNC_INTERVAL_SECONDS = 30 // Sincroniza com Supabase a cada 30 segundos (reduz tráfego contínuo)
+
+/**
+ * Retorna o tempo configurado de inatividade em milissegundos
+ */
+export function getInactivityTimeoutMs(): number {
+  return systemSettingsService.getLocalInactivityTimeoutMinutes() * 60 * 1000
+}
 
 /**
  * Verifica se a aplicação encontra-se no modo Tela Cheia do PDV
@@ -31,6 +38,29 @@ export function useScreenTimeTracker(
   const lastActiveTimestampRef = useRef(Date.now())
   const lastStorageWriteRef = useRef(Date.now())
   const hasLoggedOutRef = useRef(false)
+  const timeoutMsRef = useRef(getInactivityTimeoutMs())
+
+  useEffect(() => {
+    // Escuta alterações locais e sincroniza o tempo de timeout
+    const handleTimeoutChanged = (e: any) => {
+      const mins = e.detail?.timeoutMinutes
+      if (typeof mins === 'number' && mins >= 1) {
+        timeoutMsRef.current = mins * 60 * 1000
+      }
+    }
+    window.addEventListener('inactivity-timeout-changed', handleTimeoutChanged)
+
+    // Consulta configuração remota do Supabase
+    void systemSettingsService.getInactivitySettings().then((res) => {
+      if (res.success && res.data) {
+        timeoutMsRef.current = res.data.timeoutMinutes * 60 * 1000
+      }
+    })
+
+    return () => {
+      window.removeEventListener('inactivity-timeout-changed', handleTimeoutChanged)
+    }
+  }, [])
 
   useEffect(() => {
     if (!userId) return
@@ -92,8 +122,10 @@ export function useScreenTimeTracker(
       )
       const inactiveDuration = now - sharedLastActive
 
-      // REGRA DE SEGURANÇA: Deslogar após 2 minutos de inatividade (exceto se em tela cheia do PDV)
-      if (inactiveDuration >= INACTIVITY_TIMEOUT_MS && !hasLoggedOutRef.current) {
+      // REGRA DE SEGURANÇA: Deslogar após tempo de inatividade configurado (exceto se em tela cheia do PDV)
+      const currentTimeoutMs = timeoutMsRef.current || getInactivityTimeoutMs()
+
+      if (inactiveDuration >= currentTimeoutMs && !hasLoggedOutRef.current) {
         if (isPdvFullscreenActive()) {
           // No modo tela cheia do PDV, a sessão permanece ativa continuamente sem deslogar
           lastActiveTimestampRef.current = now
@@ -115,7 +147,7 @@ export function useScreenTimeTracker(
       }
 
       const isVisible = document.visibilityState === 'visible'
-      const isNotIdle = inactiveDuration < INACTIVITY_TIMEOUT_MS
+      const isNotIdle = inactiveDuration < currentTimeoutMs
 
       if (isVisible && isNotIdle) {
         pendingSecondsRef.current += 1

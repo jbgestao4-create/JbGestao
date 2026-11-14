@@ -44,6 +44,7 @@ import {
   AgendaPage,
   AnnouncementsAdminPage,
   DeveloperSettingsPage,
+  SystemSettingsAdminPage,
   SystemNotificationsAdminPage,
   SystemUpdatesAdminPage,
   PrivacyPolicyPage,
@@ -128,6 +129,20 @@ export const router = createBrowserRouter([
   {
     path: '/developer-settings',
     element: <Navigate to="/admin/developer-settings" replace />,
+  },
+  {
+    path: '/admin/system-settings',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <SystemSettingsAdminPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/system-settings',
+    element: <Navigate to="/admin/system-settings" replace />,
   },
   {
     path: '/admin/system-notifications',

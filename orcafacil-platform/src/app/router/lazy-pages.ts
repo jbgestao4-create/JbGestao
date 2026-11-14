@@ -192,6 +192,12 @@ export const DeveloperSettingsPage = lazy(() =>
   })),
 )
 
+export const SystemSettingsAdminPage = lazy(() =>
+  import('@modules/companies/pages/SystemSettingsAdminPage').then((module) => ({
+    default: module.SystemSettingsAdminPage,
+  })),
+)
+
 export const SystemNotificationsAdminPage = lazy(() =>
   import('@modules/companies/pages/SystemNotificationsAdminPage').then((module) => ({
     default: module.SystemNotificationsAdminPage,
