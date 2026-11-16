@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
+﻿import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -171,12 +171,30 @@ export function PresentationPage() {
   const [activeShowcaseTab, setActiveShowcaseTab] = useState<
     'pdv' | 'os' | 'cash' | 'inventory' | 'reports'
   >('pdv')
+  // Carrossel do PDV: 0 = captura da tela do PDV, 1 = painel de venda
+  const [pdvSlide, setPdvSlide] = useState<0 | 1>(0)
   const [showComparisonTable, setShowComparisonTable] = useState(true)
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
 
   // Modal de escolha de plano e cadastro com 1 mês grátis
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false)
   const [selectedPlanForSignup, setSelectedPlanForSignup] = useState<AccessPlan | null>(null)
+
+  // Primeira troca em 4s; depois alterna a cada 3s
+  const pdvSlideCycled = useRef(false)
+  useEffect(() => {
+    if (activeShowcaseTab !== 'pdv') {
+      pdvSlideCycled.current = false
+      setPdvSlide(0)
+      return
+    }
+    const delay = pdvSlideCycled.current ? 3000 : 4000
+    const timer = window.setTimeout(() => {
+      pdvSlideCycled.current = true
+      setPdvSlide((current) => (current === 0 ? 1 : 0))
+    }, delay)
+    return () => window.clearTimeout(timer)
+  }, [activeShowcaseTab, pdvSlide])
 
   useEffect(() => {
     document.documentElement.classList.remove('dark')
@@ -382,6 +400,19 @@ export function PresentationPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Topo centralizado inspirado na clareza e precisão de produto */}
           <div className="mx-auto max-w-3xl text-center">
+            <div className="mx-auto mb-6 flex justify-center">
+              <div className="relative">
+                <div
+                  aria-hidden="true"
+                  className="absolute -inset-4 rounded-full bg-gradient-to-tr from-blue-500/20 via-sky-400/15 to-emerald-400/25 blur-2xl"
+                />
+                <img
+                  src="/controlesoft-logo-full.jpg"
+                  alt="ControleSoft"
+                  className="relative h-36 w-36 sm:h-44 sm:w-44 rounded-3xl object-cover bg-[#FAF9F6] shadow-xl shadow-blue-900/10 ring-1 ring-slate-200/80"
+                />
+              </div>
+            </div>
             <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl lg:text-6xl leading-[1.12]">
               Toda a gestão da sua empresa,{' '}
               <span className="bg-gradient-to-r from-[#2563EB] via-blue-700 to-sky-600 bg-clip-text text-transparent">
@@ -581,7 +612,26 @@ export function PresentationPage() {
                       </ul>
                     </div>
 
-                    <div className="w-full lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 overflow-hidden">
+                    <div className="w-full lg:col-span-7 grid">
+                    <div
+                      aria-hidden={pdvSlide !== 0}
+                      className={`col-start-1 row-start-1 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden transition-opacity duration-700 ${
+                        pdvSlide === 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      <img
+                        src="/showcase-pdv-venda.jpg"
+                        alt="Tela do PDV ControleSoft com carrinho de compras e finalização de venda"
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div
+                      aria-hidden={pdvSlide !== 1}
+                      className={`col-start-1 row-start-1 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 overflow-hidden transition-opacity duration-700 ${
+                        pdvSlide === 1 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}
+                    >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                         <div>
                           <span className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-600">
@@ -640,6 +690,7 @@ export function PresentationPage() {
                           <span className="text-sm sm:text-base font-black">R$ 554,90</span>
                         </div>
                       </div>
+                    </div>
                     </div>
                   </div>
                 )}
