@@ -225,7 +225,7 @@ export function CompanyManagementPage() {
             className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400"
           >
             <FileSignature className="h-4 w-4" />
-            Gerar Contratos / Faturas
+            Gerenciamento de Planos cadastrados
           </Button>
 
           {/* Botão de cadastro transferido da tela de login (Item 2 do requisito) */}
