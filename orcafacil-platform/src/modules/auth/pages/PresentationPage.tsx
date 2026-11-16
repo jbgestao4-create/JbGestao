@@ -189,8 +189,15 @@ export function PresentationPage() {
       }
     })
 
+    const unsubscribe = accessPlanService.subscribeToPlansUpdates((freshPlans) => {
+      if (isMounted && freshPlans.length > 0) {
+        setPlans(freshPlans)
+      }
+    })
+
     return () => {
       isMounted = false
+      unsubscribe()
     }
   }, [])
 
@@ -1046,9 +1053,6 @@ export function PresentationPage() {
               const includedModulesList = ALL_PLATFORM_DASHBOARD_MODULES.filter(
                 (m) => codeSet.has(m.code) || m.subFeatures.some((s) => codeSet.has(s.code)),
               )
-              const excludedModulesList = ALL_PLATFORM_DASHBOARD_MODULES.filter(
-                (m) => !codeSet.has(m.code) && !m.subFeatures.some((s) => codeSet.has(s.code)),
-              )
 
               return (
                 <div
@@ -1143,18 +1147,6 @@ export function PresentationPage() {
                             </li>
                           )
                         })}
-
-                        {excludedModulesList.slice(0, 3).map((mod) => (
-                          <li
-                            key={mod.code}
-                            className="flex items-start gap-2 text-slate-400 line-through"
-                          >
-                            <span className="h-4 w-4 inline-flex items-center justify-center text-slate-300 shrink-0">
-                              •
-                            </span>
-                            <span>{mod.name}</span>
-                          </li>
-                        ))}
                       </ul>
                       <button
                         type="button"

@@ -1,25 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
-  Calculator,
-  ChartNoAxesCombined,
-  Check,
-  CircleDollarSign,
   Clock,
-  FileText,
-  MessageCircle,
-  ReceiptText,
-  ShoppingCart,
   ShieldAlert,
-  Users,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { cashBillsService } from '@modules/cash/services/cash-bills.service'
 import { organizationService } from '@modules/organizations/services/organization.service'
-import { useLocation } from 'react-router-dom'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
-import { BrandLogo } from '@shared/components/BrandLogo'
 import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
@@ -149,126 +138,41 @@ export function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] lg:flex">
-      <section className="relative hidden min-h-screen w-1/2 overflow-hidden bg-[#0F172A] px-8 py-8 text-white lg:flex lg:flex-col lg:justify-between lg:px-12 xl:px-20">
-        <div className="absolute -right-36 -top-32 h-[28rem] w-[28rem] rounded-full border border-white/10" />
-        <div className="absolute -right-20 -top-16 h-[22rem] w-[22rem] rounded-full border border-white/10" />
+    <main className="relative min-h-screen w-full flex flex-col justify-between items-center bg-gradient-to-br from-[#0B132B] via-[#0F172A] to-[#1E293B] text-slate-100 px-4 py-8 sm:px-6 lg:px-8 overflow-x-hidden selection:bg-blue-600 selection:text-white">
+      {/* Elementos visuais de fundo combinando com a identidade visual da ControleSoft */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      >
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[34rem] w-[56rem] rounded-full bg-gradient-to-tr from-blue-600/25 via-sky-500/20 to-emerald-500/15 blur-3xl opacity-80" />
+        <div className="absolute top-1/2 -left-32 h-80 w-80 rounded-full bg-blue-600/15 blur-3xl" />
+        <div className="absolute -bottom-32 right-1/4 h-80 w-80 rounded-full bg-emerald-500/15 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-25" />
+      </div>
 
-        <div className="relative">
-          <Link
-            to="/apresentacao"
-            title="Voltar para a apresentação do sistema"
-            className="group inline-flex items-center gap-2 rounded-xl transition-transform hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
-          >
-            <BrandLogo dark />
-          </Link>
-
-          <div className="mt-16 max-w-lg">
-            <p className="mb-5 text-sm font-semibold uppercase text-blue-300">Gestão empresarial</p>
-            <h1 className="text-4xl font-semibold leading-tight">
-              Gestão inteligente para o seu negócio.
-            </h1>
-            <p className="mt-5 max-w-md text-base leading-7 text-slate-300">
-              Tenha mais clareza sobre a operação e tome decisões com confiança, em um só lugar.
-            </p>
-          </div>
-
-          <ul className="mt-8 grid grid-cols-2 gap-x-4 gap-y-4">
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <CircleDollarSign aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Controle Financeiro
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <FileText aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Ordem de Serviço e Orçamentos
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <ShoppingCart aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Vendas Rápidas e Vendas PDV
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Relatório Financeiros e Gerencial
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <Calculator aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Controle Geral do Caixa
-            </li>
-            <li className="flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <Users aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Controle de acesso de funcionários
-            </li>
-            <li className="col-span-2 flex items-center gap-3 text-sm font-medium text-slate-200">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-blue-300">
-                <ReceiptText aria-hidden="true" className="h-5 w-5" />
-              </span>
-              Emissão de nota fiscal NFC e NFC-e
-            </li>
-          </ul>
-          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-300">
-            <span className="inline-flex items-center gap-2">
-              <Check aria-hidden="true" className="h-5 w-5 text-emerald-500" />
-              Sem taxa de implantação
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <Check aria-hidden="true" className="h-5 w-5 text-emerald-500" />
-              Sem taxa de cancelamento
-            </span>
-          </div>
-          <div className="mt-6 max-w-md rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4">
-            <p className="text-sm font-semibold text-white">1 mês grátis para sua empresa</p>
-            <p className="mt-1 text-sm leading-6 text-slate-300">
-              Clientes podem solicitar 1 mês grátis de utilização.
-            </p>
-            <a
-              href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20Gostaria%20de%20solicitar%201%20m%C3%AAs%20gr%C3%A1tis%20de%20utiliza%C3%A7%C3%A3o."
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+      <div className="w-full flex-1 flex flex-col items-center justify-center py-6 sm:py-10">
+        <div className="w-full max-w-[480px]">
+          <header className="mb-7 text-center flex flex-col items-center">
+            <Link
+              to="/apresentacao"
+              title="Voltar para a apresentação do sistema"
+              className="group mb-5 inline-block transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
             >
-              <MessageCircle aria-hidden="true" className="h-4 w-4" />
-              Fale pelo WhatsApp
-            </a>
-          </div>
-        </div>
+              <img
+                src="/controlesoft-logo.png"
+                alt="ControleSoft"
+                className="h-20 sm:h-24 md:h-28 w-auto object-contain mx-auto drop-shadow-xl"
+              />
+            </Link>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+              Acesse sua conta
+            </h1>
+            <p className="mt-2 text-xs sm:text-sm text-slate-400">
+              ControleSoft — Potencialize a administração da sua empresa
+            </p>
+          </header>
 
-        <p className="relative text-xs text-slate-400">ControleSoft</p>
-      </section>
-
-      <section className="flex min-h-screen w-full flex-col items-center bg-[#F8FAFC] px-5 py-8 sm:px-8 lg:w-1/2 lg:px-12">
-        <div className="flex w-full flex-1 items-center justify-center py-8">
-          <div className="w-full max-w-[440px]">
-            <header className="mb-8 text-center flex flex-col items-center">
-              <Link
-                to="/apresentacao"
-                title="Voltar para a apresentação do sistema"
-                className="group mb-5 inline-block transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 rounded-2xl"
-              >
-                <img
-                  src="/controlesoft-logo.png"
-                  alt="ControleSoft"
-                  className="h-16 sm:h-20 w-auto object-contain mx-auto drop-shadow-xs"
-                />
-              </Link>
-              <h2 className="text-3xl font-semibold text-slate-900">Acesse sua conta</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-500">
-                ControleSoft — Potencialize a administração da sua empresa
-              </p>
-            </header>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-9 shadow-2xl shadow-black/40 text-slate-900">
               {isMaintenanceActive && (
                 <div
                   role="alert"
@@ -479,18 +383,18 @@ export function LoginPage() {
 
             </div>
 
-            <p className="mt-6 text-center text-xs leading-5 text-slate-500">
+            <p className="mt-6 text-center text-xs leading-5 text-slate-400">
               Ao entrar, você concorda com nossos{' '}
               <Link
                 to="/politica-de-privacidade?tab=terms"
-                className="font-semibold text-[#2563EB] hover:underline"
+                className="font-semibold text-blue-400 hover:text-blue-300 hover:underline"
               >
                 Termos de Uso
               </Link>{' '}
               e com a{' '}
               <Link
                 to="/politica-de-privacidade"
-                className="font-semibold text-[#2563EB] hover:underline"
+                className="font-semibold text-blue-400 hover:text-blue-300 hover:underline"
               >
                 Política de Privacidade (LGPD)
               </Link>
@@ -499,24 +403,23 @@ export function LoginPage() {
           </div>
         </div>
 
-        <footer className="w-full max-w-[600px] pt-6 text-center text-xs leading-5 text-slate-500">
+        <footer className="w-full max-w-[600px] py-6 text-center text-xs leading-5 text-slate-400">
           <span>© 2026 ControleSoft. Todos os direitos reservados.</span>
           <span className="mx-2 hidden sm:inline">|</span>
           <Link
             to="/politica-de-privacidade?tab=terms"
-            className="block sm:inline font-medium text-slate-600 hover:text-[#2563EB] hover:underline"
+            className="block sm:inline font-medium text-slate-400 hover:text-blue-400 hover:underline"
           >
             Termos de Uso
           </Link>
           <span className="mx-2 hidden sm:inline">|</span>
           <Link
             to="/politica-de-privacidade"
-            className="block sm:inline font-medium text-slate-600 hover:text-[#2563EB] hover:underline"
+            className="block sm:inline font-medium text-slate-400 hover:text-blue-400 hover:underline"
           >
             Política de Privacidade e LGPD
           </Link>
         </footer>
-      </section>
-    </main>
+      </main>
   )
 }

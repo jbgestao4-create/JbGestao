@@ -387,6 +387,15 @@ export const accessPlanService = {
       }
       savePlansCache(currentCached)
 
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('controlesoft:plans_updated', { detail: saved }))
+        try {
+          localStorage.setItem('controlesoft_plans_updated_at', String(Date.now()))
+        } catch {
+          // ignore
+        }
+      }
+
       return { success: true, data: saved }
     } catch (error) {
       logger.error('Exceção ao salvar plano de acesso', error)
@@ -408,10 +417,65 @@ export const accessPlanService = {
       if (currentCached) {
         savePlansCache(currentCached.filter((p) => p.id !== id))
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('controlesoft:plans_updated'))
+        try {
+          localStorage.setItem('controlesoft_plans_updated_at', String(Date.now()))
+        } catch {
+          // ignore
+        }
+      }
       return { success: true, data: undefined }
     } catch (error) {
       logger.error('Exceção ao remover plano de acesso', error)
       return { success: false, error: 'Erro inesperado ao remover o plano.' }
+    }
+  },
+
+  /**
+   * Monitora em tempo real alterações nos planos de acesso (via Realtime Supabase e eventos de janela)
+   * garantindo que adições/remoções de módulos reflitam instantaneamente na interface sem necessidade de recarregar.
+   */
+  subscribeToPlansUpdates(onUpdated: (plans: AccessPlan[]) => void): () => void {
+    if (typeof window === 'undefined') return () => {}
+
+    const refresh = async () => {
+      try {
+        const fresh = await accessPlanService.listPublic()
+        onUpdated(fresh)
+      } catch {
+        // ignore
+      }
+    }
+
+    const handleLocalEvent = () => {
+      void refresh()
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'controlesoft_plans_updated_at' || e.key === 'controlesoft_access_plans_v1') {
+        void refresh()
+      }
+    }
+
+    window.addEventListener('controlesoft:plans_updated', handleLocalEvent)
+    window.addEventListener('storage', handleStorage)
+
+    const channel = supabase
+      .channel('realtime_public_access_plans')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'access_plans' },
+        () => {
+          void refresh()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      window.removeEventListener('controlesoft:plans_updated', handleLocalEvent)
+      window.removeEventListener('storage', handleStorage)
+      void supabase.removeChannel(channel)
     }
   },
 }
