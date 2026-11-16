@@ -361,10 +361,26 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     padding-right: 0.75rem;
   }
 
-  /* Garante que tabelas largas tenham rolagem horizontal suave em tablets */
-  table {
+  /* Garante que tabelas largas tenham rolagem horizontal suave em tablets, exceto relatórios ajustados */
+  table:not(.report-fit-table) {
     min-width: 560px;
   }
+}
+
+/* Tabelas de relatório auto-ajustáveis (sem barra de rolagem horizontal e sem cortar colunas) */
+.report-fit-table {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  table-layout: auto;
+  border-collapse: collapse;
+}
+
+.report-fit-table th,
+.report-fit-table td {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Ajustes responsivos para Smartphones (até 575.98px - breakpoint sm do Bootstrap) */
@@ -424,6 +440,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     overflow: visible !important;
     box-shadow: none !important;
     border: none !important;
+    box-sizing: border-box !important;
   }
 
   body,
@@ -439,6 +456,15 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     overflow: visible !important;
     box-shadow: none !important;
     border: none !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Remove qualquer barra de rolagem ou corte horizontal na impressão */
+  .overflow-x-auto,
+  .overflow-hidden,
+  .table-responsive {
+    overflow: visible !important;
+    overflow-x: visible !important;
   }
 
   /* Oculta tudo que não faz parte do documento impresso */
@@ -472,9 +498,12 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     visibility: visible !important;
   }
 
-  /* Tabelas limpas para impressão */
+  /* Tabelas limpas para impressão que sempre cabem 100% na largura da folha */
   table {
     width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto !important;
     border-collapse: collapse !important;
     page-break-inside: auto !important;
     color: #0f172a !important;
@@ -496,17 +525,33 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     background-color: #f1f5f9 !important;
     color: #0f172a !important;
     border: 1px solid #cbd5e1 !important;
-    padding: 6px 8px !important;
-    font-size: 8.5pt !important;
+    padding: 4px 5px !important;
+    font-size: 7.5pt !important;
+    line-height: 1.2 !important;
     font-weight: 700 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
   }
 
   td {
     border: 1px solid #e2e8f0 !important;
-    padding: 5px 8px !important;
-    font-size: 8pt !important;
+    padding: 4px 5px !important;
+    font-size: 7.5pt !important;
+    line-height: 1.25 !important;
     color: #0f172a !important;
     background-color: #ffffff !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+  }
+
+  table .truncate,
+  table .whitespace-nowrap {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: none !important;
   }
 
   /* Cards e caixas impressas */

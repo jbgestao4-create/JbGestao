@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
-  Building2,
   Calendar,
   ChevronDown,
   ChevronUp,
@@ -12,7 +11,6 @@ import {
   FileBarChart,
   FileSpreadsheet,
   GripVertical,
-  Home,
   Package,
   RotateCcw,
   Settings2,
@@ -36,9 +34,6 @@ import {
   announcementService,
   type SystemAnnouncement,
 } from '@shared/services/announcement.service'
-import { ProfileMenu } from '@shared/components/ProfileMenu'
-import { GeneralCashStatusBadge } from '@shared/components/GeneralCashStatusBadge'
-import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import type { DashboardModuleCode } from '@shared/types/database'
 
 type DashboardModule = {
@@ -71,10 +66,9 @@ const DEFAULT_MODULE_IDS = [
 ]
 
 export function DashboardPage() {
-  const { user, profile, signOut } = useAuth()
+  const { user, profile } = useAuth()
   const { currentOrganization, userRole } = useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
-  const { version: systemVersion } = useSystemVersion()
   const navigate = useNavigate()
 
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'offline'>(
@@ -392,14 +386,6 @@ export function DashboardPage() {
     }
   }
 
-  const handleSignOut = async () => {
-    const result = await signOut()
-    if (result.success) {
-      void navigate('/login')
-    }
-    return result
-  }
-
   const connectionLabel = {
     checking: 'Verificando conexão',
     connected: 'Online • Sincronizado',
@@ -407,61 +393,8 @@ export function DashboardPage() {
   }[connectionStatus]
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100">
-      <header className="border-b border-sky-200/70 dark:border-slate-800 bg-[#e6f1fa] dark:bg-[#111827]">
-        <div className="container-fluid mx-auto flex max-w-[1600px] flex-col gap-3 px-3 py-3 sm:px-7 sm:py-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5 shadow-xs ring-1 ring-slate-200/70">
-              <img src="/controlesoft-mark.png" alt="ControleSoft" className="h-full w-full object-contain" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900 dark:text-white">ControleSoft</h1>
-                <span
-                  title={`Versão atual do sistema: ${systemVersion}`}
-                  className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
-                >
-                  {systemVersion}
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">Módulo de Gestão Empresarial</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              disabled
-              aria-label={`Organização atual: ${currentOrganization?.name ?? 'Organização'}`}
-              className="inline-flex h-10 w-full sm:w-56 cursor-not-allowed items-center gap-2 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-800/60 px-3 text-left text-xs font-medium text-slate-600 dark:text-slate-400 opacity-90 shadow-2xs"
-            >
-              <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
-              <span className="truncate">{currentOrganization?.name ?? 'Organização'}</span>
-            </button>
-
-            <GeneralCashStatusBadge />
-
-            <Link
-              to="/"
-              aria-label="Página Inicial"
-              title="Página Inicial"
-              className="inline-flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
-            >
-              <Home aria-hidden="true" className="h-4 w-4" />
-            </Link>
-
-            <ProfileMenu
-              variant="dashboard"
-              displayName={accountName}
-              email={user?.email ?? undefined}
-              avatarUrl={profile?.avatarUrl}
-              onSignOut={handleSignOut}
-            />
-          </div>
-        </div>
-      </header>
-
-      <main className="container-fluid mx-auto w-full max-w-[1600px] space-y-8 px-3 py-5 sm:px-7 sm:py-8">
+    <div className="bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100">
+      <div className="container-fluid mx-auto w-full max-w-[1600px] space-y-8 px-3 py-5 sm:px-7 sm:py-8">
         <section className="relative">
           <div className="row g-4 items-stretch">
             {/* LADO ESQUERDO: ANÚNCIOS (Maior e rotativo de 3s) */}
@@ -649,7 +582,7 @@ export function DashboardPage() {
             {connectionStatus === 'connected' ? 'Sincronizado' : 'Status sujeito à conexão'}
           </span>
         </footer>
-      </main>
+      </div>
     </div>
   )
 }

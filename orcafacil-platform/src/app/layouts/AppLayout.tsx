@@ -1,5 +1,5 @@
 import { UpcomingBillsAlertModal } from '@modules/cash/components/UpcomingBillsAlertModal'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@app/config/supabase'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -31,13 +31,11 @@ import {
   DollarSign,
   Wrench,
   ClipboardList,
-  ChevronLeft,
-  ChevronRight,
   Database,
   Menu,
   X,
   ShieldCheck,
-  ArrowLeft,
+  Home,
   AlertTriangle,
 } from 'lucide-react'
 
@@ -49,9 +47,155 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const isDashboard = location.pathname === '/'
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
   const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null)
   const isMobileMenuOpen = mobileMenuPath === location.pathname
+  const [isBrandDraggingToSidebar, setIsBrandDraggingToSidebar] = useState(false)
+
+  const headerBrandRef = useRef<HTMLDivElement | null>(null)
+  const sidebarBrandRef = useRef<HTMLDivElement | null>(null)
+  const orgBadgeRef = useRef<HTMLButtonElement | null>(null)
+  const cashBadgeRef = useRef<HTMLDivElement | null>(null)
+  const homeButtonRef = useRef<HTMLAnchorElement | null>(null)
+  const profileMenuRef = useRef<HTMLDivElement | null>(null)
+  const prevIsDashboardRef = useRef<boolean>(isDashboard)
+  const prevRectsRef = useRef<{
+    brand?: DOMRect
+    org?: DOMRect
+    cash?: DOMRect
+    home?: DOMRect
+    user?: DOMRect
+  }>({})
+
+  useEffect(() => {
+    setSidebarCollapsed(true)
+  }, [location.pathname])
+
+  useEffect(() => {
+    const captureRects = () => {
+      const brandEl = headerBrandRef.current ?? sidebarBrandRef.current
+      prevRectsRef.current = {
+        brand: brandEl?.getBoundingClientRect(),
+        org: orgBadgeRef.current?.getBoundingClientRect(),
+        cash: cashBadgeRef.current?.getBoundingClientRect(),
+        home: homeButtonRef.current?.getBoundingClientRect(),
+        user: profileMenuRef.current?.getBoundingClientRect(),
+      }
+    }
+
+    window.addEventListener('pointerdown', captureRects, true)
+    window.addEventListener('keydown', captureRects, true)
+    return () => {
+      window.removeEventListener('pointerdown', captureRects, true)
+      window.removeEventListener('keydown', captureRects, true)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const wasDashboard = prevIsDashboardRef.current
+    prevIsDashboardRef.current = isDashboard
+
+    const prev = prevRectsRef.current
+    let brandTimer: number | undefined
+
+    if (wasDashboard !== isDashboard) {
+      const duration = 560
+      const easing = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+      const nextBrandEl = isDashboard ? headerBrandRef.current : sidebarBrandRef.current
+      if (nextBrandEl && prev.brand) {
+        const nextRect = nextBrandEl.getBoundingClientRect()
+        let dx = prev.brand.left - nextRect.left
+        const dy = prev.brand.top - nextRect.top
+
+        if (!isDashboard) {
+          dx = Math.max(dx, 92)
+          setIsBrandDraggingToSidebar(true)
+          brandTimer = window.setTimeout(() => {
+            setIsBrandDraggingToSidebar(false)
+          }, 340)
+        } else {
+          dx = Math.min(dx, -92)
+          setIsBrandDraggingToSidebar(false)
+        }
+
+        if (typeof nextBrandEl.animate === 'function') {
+          nextBrandEl.animate(
+            [
+              {
+                transform: `translate3d(${dx}px, ${dy}px, 0) scale(${!isDashboard ? 1.08 : 0.92})`,
+              },
+              { transform: 'translate3d(0, 0, 0) scale(1)' },
+            ],
+            { duration, easing },
+          )
+        }
+      }
+
+      if (orgBadgeRef.current && prev.org) {
+        const nextRect = orgBadgeRef.current.getBoundingClientRect()
+        let dx = prev.org.left - nextRect.left
+        const dy = prev.org.top - nextRect.top
+        if (!isDashboard && Math.abs(dx) < 80) {
+          dx = 260
+        } else if (isDashboard && Math.abs(dx) < 80) {
+          dx = -260
+        }
+        if (typeof orgBadgeRef.current.animate === 'function') {
+          orgBadgeRef.current.animate(
+            [
+              { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+              { transform: 'translate3d(0, 0, 0)' },
+            ],
+            { duration, easing },
+          )
+        }
+      }
+
+      const rightItems: Array<{ el: HTMLElement | null; rect?: DOMRect }> = [
+        { el: cashBadgeRef.current, rect: prev.cash },
+        { el: homeButtonRef.current, rect: prev.home },
+        { el: profileMenuRef.current, rect: prev.user },
+      ]
+
+      rightItems.forEach(({ el, rect }, idx) => {
+        if (!el || !rect || typeof el.animate !== 'function') return
+        const nextRect = el.getBoundingClientRect()
+        let dx = rect.left - nextRect.left
+        const dy = rect.top - nextRect.top
+
+        if (!isDashboard && Math.abs(dx) < 72) {
+          dx = -88 - idx * 18
+        } else if (isDashboard && Math.abs(dx) < 72) {
+          dx = 88 + idx * 18
+        }
+
+        el.animate(
+          [
+            { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+            { transform: 'translate3d(0, 0, 0)' },
+          ],
+          { duration, easing },
+        )
+      })
+    }
+
+    const updateTimer = window.setTimeout(() => {
+      const brandEl = headerBrandRef.current ?? sidebarBrandRef.current
+      prevRectsRef.current = {
+        brand: brandEl?.getBoundingClientRect(),
+        org: orgBadgeRef.current?.getBoundingClientRect(),
+        cash: cashBadgeRef.current?.getBoundingClientRect(),
+        home: homeButtonRef.current?.getBoundingClientRect(),
+        user: profileMenuRef.current?.getBoundingClientRect(),
+      }
+    }, 600)
+
+    return () => {
+      if (brandTimer) window.clearTimeout(brandTimer)
+      window.clearTimeout(updateTimer)
+    }
+  }, [isDashboard])
 
   const isDeveloper = isSystemOwner(user)
   const { version: systemVersion } = useSystemVersion()
@@ -218,6 +362,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
     )
   }
 
+  const accountName = profile?.displayName || user?.email?.split('@')[0] || 'Usuário'
+
+  const orgBadgeElement = (
+    <button
+      ref={orgBadgeRef}
+      type="button"
+      disabled
+      aria-label={`Organização atual: ${currentOrganization?.name ?? 'Organização'}`}
+      className={`inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-800/60 px-3 text-left text-xs font-medium text-slate-600 dark:text-slate-400 opacity-90 shadow-2xs ${
+        isDashboard ? 'w-full sm:w-56' : 'w-44 sm:w-56'
+      }`}
+    >
+      <Building2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+      <span className="truncate">{currentOrganization?.name ?? 'Organização'}</span>
+    </button>
+  )
+
   return (
     <div className={`min-h-screen bg-gray-50 dark:bg-[#0b0f19] ${isDashboard ? '' : 'flex'}`}>
       {!isDashboard && (
@@ -234,32 +395,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
           )}
         <aside
           id="mobile-navigation"
-          className={`relative shrink-0 flex-col border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-all duration-300 print:hidden ${
+          onMouseEnter={() => {
+            setSidebarCollapsed(false)
+          }}
+          onMouseLeave={() => {
+            if (!isMobileMenuOpen) {
+              setSidebarCollapsed(true)
+            }
+          }}
+          className={`relative shrink-0 flex-col ${
+            isBrandDraggingToSidebar ? 'overflow-visible z-30' : 'overflow-hidden'
+          } border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-all duration-300 print:hidden ${
             isMobileMenuOpen
               ? 'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shadow-xl md:static md:z-auto md:max-w-none md:shadow-none'
               : 'hidden md:flex'
           } ${sidebarCollapsed ? 'md:w-[68px]' : 'md:w-64'}`}
         >
-          {/* BOTÃO DE COLAPSAR/EXPANDIR */}
-          <button
-            onClick={() => {
-              setSidebarCollapsed(!sidebarCollapsed)
-            }}
-            className="absolute -right-3 top-7 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-sky-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs transition-colors hover:bg-sky-50 dark:hover:bg-slate-700 hover:shadow-sm md:flex md:h-6 md:w-6"
-            title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            ) : (
-              <ChevronLeft className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            )}
-          </button>
-
           {/* LOGO */}
-          <div className="p-4 border-b border-sky-200/60 dark:border-slate-800">
-            <div className={`flex items-center justify-between ${sidebarCollapsed ? 'md:justify-center' : ''}`}>
-              <BrandLogo size="sm" showName={!sidebarCollapsed} />
+          <div className={`py-4 border-b border-sky-200/60 dark:border-slate-800 ${sidebarCollapsed ? 'px-2' : 'px-4'}`}>
+            <div className={`flex min-w-0 items-center ${sidebarCollapsed ? 'md:justify-center' : 'justify-between'}`}>
+              <div ref={sidebarBrandRef} className="inline-flex min-w-0 max-w-full items-center">
+                <BrandLogo size="sm" showName={!sidebarCollapsed || isBrandDraggingToSidebar} />
+              </div>
               <button
                 type="button"
                 aria-label="Fechar menu"
@@ -276,11 +433,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           {/* NAVEGAÇÃO MODULAR */}
           <nav
             aria-label="Navegação principal"
-            className={`flex-1 p-3 space-y-6 overflow-y-auto ${sidebarCollapsed ? 'px-2' : ''}`}
+            className={`flex-1 p-3 space-y-6 overflow-y-auto overflow-x-hidden ${sidebarCollapsed ? 'px-2' : ''}`}
           >
             <div>
               {!sidebarCollapsed && organizations.length > 0 && (
-                <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                   Geral
                 </span>
               )}
@@ -301,7 +458,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 canAccessServiceOrders) && (
                 <div>
                   {!sidebarCollapsed && organizations.length > 0 && (
-                    <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                    <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                       ControleSoft
                     </span>
                   )}
@@ -371,7 +528,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             {canAccessOrganization && (
               <div>
                 {!sidebarCollapsed && organizations.length > 0 && (
-                  <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                  <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                     Administração
                   </span>
                 )}
@@ -388,7 +545,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             {isSystemOwner(user) && (
               <div>
                 {!sidebarCollapsed && organizations.length > 0 && (
-                  <span className="px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                  <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                     Desenvolvedor
                   </span>
                 )}
@@ -437,68 +594,92 @@ export function AppLayout({ children }: { children: ReactNode }) {
         {/* BANNER DE COBRANÇA E VENCIMENTO DE ASSINATURA (APENAS ADMINISTRADOR) */}
         <OrganizationBillingBanner />
 
-        {!isDashboard && (
-          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] px-3 sm:px-6 lg:px-8 print:hidden">
-            <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-              {/* BOTÃO VOLTAR GLOBAL (EM TODAS AS PÁGINAS) */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.history.length > 1) {
-                    navigate(-1)
-                  } else {
-                    navigate('/')
-                  }
-                }}
-                title="Voltar para a página anterior"
-                aria-label="Voltar para a página anterior"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer mr-1 shrink-0"
-              >
-                <ArrowLeft className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                <span className="hidden xs:inline">Voltar</span>
-              </button>
+        <header className="shrink-0 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] print:hidden">
+          <div
+            className={
+              isDashboard
+                ? 'container-fluid mx-auto flex max-w-[1600px] flex-col gap-3 px-3 py-3 sm:px-7 sm:py-4 xl:flex-row xl:items-center xl:justify-between'
+                : 'flex min-h-16 flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-6 lg:px-8'
+            }
+          >
+            {isDashboard ? (
+              <div ref={headerBrandRef} className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5 shadow-xs ring-1 ring-slate-200/70">
+                  <img
+                    src="/controlesoft-mark.png"
+                    alt="ControleSoft"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-base font-bold text-slate-900 dark:text-white">
+                      ControleSoft
+                    </h1>
+                    <span
+                      title={`Versão atual do sistema: ${systemVersion}`}
+                      className="rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
+                    >
+                      {systemVersion}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Módulo de Gestão Empresarial
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Abrir menu"
+                  aria-controls="mobile-navigation"
+                  aria-expanded={isMobileMenuOpen}
+                  onClick={() => {
+                    setSidebarCollapsed(false)
+                    setMobileMenuPath(location.pathname)
+                  }}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-600 dark:text-slate-300 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-blue-600 md:hidden"
+                >
+                  {isMobileMenuOpen ? (
+                    <X aria-hidden="true" className="h-5 w-5" />
+                  ) : (
+                    <Menu aria-hidden="true" className="h-5 w-5" />
+                  )}
+                </button>
+                {orgBadgeElement}
+              </div>
+            )}
 
-              <button
-                type="button"
-                aria-label="Abrir menu"
-                aria-controls="mobile-navigation"
-                aria-expanded={isMobileMenuOpen}
-                onClick={() => {
-                  setSidebarCollapsed(false)
-                  setMobileMenuPath(location.pathname)
-                }}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-600 dark:text-slate-300 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-blue-600 md:hidden"
-              >
-                {isMobileMenuOpen ? (
-                  <X aria-hidden="true" className="h-5 w-5" />
-                ) : (
-                  <Menu aria-hidden="true" className="h-5 w-5" />
-                )}
-              </button>
-              <Building2 className="hidden h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500 md:block" />
-              <span className="truncate font-semibold text-gray-900 dark:text-white">
-                {currentOrganization?.name || 'ControleSoft'}
-              </span>
-              <span
-                title={`Versão atual do sistema: ${systemVersion}`}
-                className="hidden sm:inline-flex rounded-md border border-sky-200 dark:border-slate-800 bg-white/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-600 dark:text-slate-400 shadow-2xs"
-              >
-                {systemVersion}
-              </span>
-            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+              {isDashboard && orgBadgeElement}
 
-            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-              <GeneralCashStatusBadge />
-              <ProfileMenu
-                variant="header"
-                displayName={profile?.displayName || 'Usuário'}
-                email={user?.email}
-                avatarUrl={profile?.avatarUrl}
-                onSignOut={handleSignOut}
-              />
+              <div ref={cashBadgeRef} className="inline-flex">
+                <GeneralCashStatusBadge />
+              </div>
+
+              <Link
+                ref={homeButtonRef}
+                to="/"
+                aria-label="Página Inicial"
+                title="Página Inicial"
+                className="inline-flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
+              >
+                <Home aria-hidden="true" className="h-4 w-4" />
+              </Link>
+
+              <div ref={profileMenuRef} className="inline-flex">
+                <ProfileMenu
+                  variant="dashboard"
+                  displayName={accountName}
+                  email={user?.email ?? undefined}
+                  avatarUrl={profile?.avatarUrl}
+                  onSignOut={handleSignOut}
+                />
+              </div>
             </div>
-          </header>
-        )}
+          </div>
+        </header>
 
         <div
           className={

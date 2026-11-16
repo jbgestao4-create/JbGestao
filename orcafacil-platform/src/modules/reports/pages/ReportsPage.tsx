@@ -138,6 +138,56 @@ export function ReportsPage() {
     members: [],
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [printOrientationMode, setPrintOrientationMode] = useState<'auto' | 'portrait' | 'landscape'>('auto')
+
+  // Detecta automaticamente se o relatório atual possui muitas colunas (precisando de mais espaço)
+  const isWideReport = useMemo(() => {
+    if (currentView === 'quotes_orders') return true // 8 colunas
+    if (currentView === 'inventory') return true // 7 colunas
+    if (currentView === 'registrations') {
+      return registrationsTab === 'customers' || registrationsTab === 'suppliers' // 8 e 6 colunas
+    }
+    return false
+  }, [currentView, registrationsTab])
+
+  const effectiveOrientation: 'portrait' | 'landscape' = useMemo(() => {
+    if (printOrientationMode === 'auto') {
+      return isWideReport ? 'landscape' : 'portrait'
+    }
+    return printOrientationMode
+  }, [printOrientationMode, isWideReport])
+
+  const applyPrintPageOrientation = useCallback((orientation: 'portrait' | 'landscape') => {
+    let styleEl = document.getElementById('report-print-page-orientation') as HTMLStyleElement | null
+    if (!styleEl) {
+      styleEl = document.createElement('style')
+      styleEl.id = 'report-print-page-orientation'
+      document.head.appendChild(styleEl)
+    }
+    styleEl.textContent = `
+      @media print {
+        @page {
+          size: A4 ${orientation};
+          margin: 0mm;
+        }
+      }
+    `
+  }, [])
+
+  useEffect(() => {
+    applyPrintPageOrientation(effectiveOrientation)
+    return () => {
+      const styleEl = document.getElementById('report-print-page-orientation')
+      if (styleEl) {
+        styleEl.remove()
+      }
+    }
+  }, [effectiveOrientation, applyPrintPageOrientation])
+
+  const handlePrintReport = useCallback(() => {
+    applyPrintPageOrientation(effectiveOrientation)
+    window.print()
+  }, [applyPrintPageOrientation, effectiveOrientation])
 
   // Metadados padronizados para cabeçalhos e rodapés oficiais de impressão
   const now = new Date()
@@ -480,10 +530,17 @@ export function ReportsPage() {
         ? `${equipDesc}${os.reportedProblem ? ` — ${os.reportedProblem}` : ''}`
         : os.reportedProblem || 'Serviços e Manutenção'
 
+      const rawOrderNum = os.orderNumber ? String(os.orderNumber).trim() : os.id.slice(0, 6)
+      const formattedOrderNum = rawOrderNum.startsWith('#')
+        ? rawOrderNum
+        : rawOrderNum.toUpperCase().startsWith('OS-')
+          ? `#${rawOrderNum}`
+          : `#OS-${rawOrderNum}`
+
       list.push({
         id: os.id,
         kind: 'order',
-        number: os.orderNumber ? `#OS-${os.orderNumber}` : `#OS-${os.id.slice(0, 6)}`,
+        number: formattedOrderNum,
         date: os.createdAt,
         customerName: os.customerName || 'Cliente sem identificação',
         customerPhone: os.customerPhone || null,
@@ -519,10 +576,17 @@ export function ReportsPage() {
         statusBadgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300'
       }
 
+      const rawQuoteNum = q.quoteNumber ? String(q.quoteNumber).trim() : q.id.slice(0, 6)
+      const formattedQuoteNum = rawQuoteNum.startsWith('#')
+        ? rawQuoteNum
+        : rawQuoteNum.toUpperCase().startsWith('ORC-')
+          ? `#${rawQuoteNum}`
+          : `#ORC-${rawQuoteNum}`
+
       list.push({
         id: q.id,
         kind: 'quote',
-        number: q.quoteNumber ? `#ORC-${q.quoteNumber}` : `#ORC-${q.id.slice(0, 6)}`,
+        number: formattedQuoteNum,
         date: q.createdAt,
         customerName: q.customerName || 'Cliente sem identificação',
         customerPhone: q.customerPhone || null,
@@ -1309,10 +1373,13 @@ export function ReportsPage() {
           onBack={() => navigateToView('home')}
           onExportExcel={handleExportQoExcel}
           onExportXml={handleExportQoXml}
-          onPrint={() => window.print()}
+          onPrint={handlePrintReport}
           onRefresh={() => void loadData()}
           isRefreshing={isLoading}
           disableExport={filteredQoRecords.length === 0}
+          printOrientationMode={printOrientationMode}
+          effectiveOrientation={effectiveOrientation}
+          onPrintOrientationChange={setPrintOrientationMode}
         />
 
         {/* BARRA DE FILTROS: POR DIA / POR MÊS / DATA ESPECÍFICA */}
@@ -1786,19 +1853,19 @@ export function ReportsPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
               <div className="w-full">
-                <table className="w-full text-left text-xs print:text-[10px]">
-                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
+                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="py-2.5 px-3">Número</th>
-                      <th className="py-2.5 px-3">Tipo</th>
-                      <th className="py-2.5 px-3">Data</th>
-                      <th className="py-2.5 px-3">Cliente / Contato</th>
-                      <th className="py-2.5 px-3">Equipamento / Descrição</th>
-                      <th className="py-2.5 px-3">Responsável</th>
-                      <th className="py-2.5 px-3 text-center">Status</th>
-                      <th className="py-2.5 px-3 text-right">Valor Total</th>
+                      <th className="py-2 px-2">Número</th>
+                      <th className="py-2 px-2">Tipo</th>
+                      <th className="py-2 px-2">Data</th>
+                      <th className="py-2 px-2">Cliente / Contato</th>
+                      <th className="py-2 px-2">Equipamento / Descrição</th>
+                      <th className="py-2 px-2">Responsável</th>
+                      <th className="py-2 px-2 text-center">Status</th>
+                      <th className="py-2 px-2 text-right">Valor Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -1807,35 +1874,35 @@ export function ReportsPage() {
                         key={`${item.kind}-${item.id}`}
                         className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
                       >
-                        <td className="py-2 px-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        <td className="py-2 px-2 font-mono font-bold text-slate-900 dark:text-white break-words">
                           {item.number}
                         </td>
-                        <td className="py-2 px-3 whitespace-nowrap font-medium text-slate-600 dark:text-slate-300">
+                        <td className="py-2 px-2 font-medium text-slate-600 dark:text-slate-300">
                           {item.kind === 'order' ? 'O.S' : 'Orçamento'}
                         </td>
-                        <td className="py-2 px-3 whitespace-nowrap text-slate-500">
+                        <td className="py-2 px-2 text-slate-500 whitespace-nowrap">
                           {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '—'}
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-2 break-words">
                           <span className="font-semibold text-slate-900 dark:text-white block">{item.customerName}</span>
                           <span className="text-[10px] text-slate-500 block">
                             {[item.customerPhone ? formatPhoneNumber(item.customerPhone) : null, item.customerDocument].filter(Boolean).join(' • ')}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                        <td className="py-2 px-2 text-slate-700 dark:text-slate-300 break-words whitespace-normal">
                           {item.description}
                         </td>
-                        <td className="py-2 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2 px-2 text-slate-600 dark:text-slate-400 break-words">
                           {item.responsiblePerson || '—'}
                         </td>
-                        <td className="py-2 px-3 text-center whitespace-nowrap">
+                        <td className="py-2 px-2 text-center">
                           <span
-                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${item.statusBadgeColor}`}
+                            className={`inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide border ${item.statusBadgeColor}`}
                           >
                             {item.statusLabel}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                        <td className="py-2 px-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                           {formatCurrency(item.total)}
                         </td>
                       </tr>
@@ -1843,10 +1910,10 @@ export function ReportsPage() {
                   </tbody>
                   <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                     <tr>
-                      <td colSpan={7} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                      <td colSpan={7} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
                         Total Geral ({filteredQoRecords.length} registros)
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
                         {formatCurrency(qoMetrics.grandTotal.toFixed(2))}
                       </td>
                     </tr>
@@ -1899,10 +1966,13 @@ export function ReportsPage() {
           onBack={() => navigateToView('home')}
           onExportExcel={handleExportInventoryExcel}
           onExportXml={handleExportInventoryXml}
-          onPrint={() => window.print()}
+          onPrint={handlePrintReport}
           onRefresh={() => void loadData()}
           isRefreshing={isLoading}
           disableExport={filteredInventory.length === 0}
+          printOrientationMode={printOrientationMode}
+          effectiveOrientation={effectiveOrientation}
+          onPrintOrientationChange={setPrintOrientationMode}
         />
 
         {/* PAINEL DE FILTROS AVANÇADOS DO ESTOQUE */}
@@ -2209,18 +2279,18 @@ export function ReportsPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
               <div className="w-full">
-                <table className="w-full text-left text-xs print:text-[10px]">
-                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
+                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="py-2.5 px-3">Produto / Identificação</th>
-                      <th className="py-2.5 px-3">Categoria</th>
-                      <th className="py-2.5 px-3">Fornecedor / Localização</th>
-                      <th className="py-2.5 px-3 text-center">Status</th>
-                      <th className="py-2.5 px-3 text-right">Qtd. / Mín.</th>
-                      <th className="py-2.5 px-3 text-right">Custo Unit.</th>
-                      <th className="py-2.5 px-3 text-right">Total Custo</th>
+                      <th className="py-2 px-2">Produto / Identificação</th>
+                      <th className="py-2 px-2">Categoria</th>
+                      <th className="py-2 px-2">Fornecedor / Localização</th>
+                      <th className="py-2 px-2 text-center">Status</th>
+                      <th className="py-2 px-2 text-right">Qtd. / Mín.</th>
+                      <th className="py-2 px-2 text-right">Custo Unit.</th>
+                      <th className="py-2 px-2 text-right">Total Custo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -2229,7 +2299,7 @@ export function ReportsPage() {
                         key={item.id}
                         className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
                       >
-                        <td className="py-2.5 px-3">
+                        <td className="py-2 px-2 break-words">
                           <span className="font-semibold text-slate-900 dark:text-white block">
                             {item.name}
                           </span>
@@ -2237,10 +2307,10 @@ export function ReportsPage() {
                             SKU: {item.sku || '—'} {item.barcode ? `• Barras: ${item.barcode}` : ''}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2 px-2 text-slate-600 dark:text-slate-400 break-words">
                           {item.category || 'Sem Categoria'}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                        <td className="py-2 px-2 text-slate-600 dark:text-slate-400 break-words">
                           <span className="block font-medium text-slate-800 dark:text-slate-200">
                             {item.supplierName || '—'}
                           </span>
@@ -2250,14 +2320,14 @@ export function ReportsPage() {
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <td className="py-2 px-2 text-center">
                           <span
-                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${item.statusBadgeColor}`}
+                            className={`inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide border ${item.statusBadgeColor}`}
                           >
                             {item.statusLabel}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <td className="py-2 px-2 text-right whitespace-nowrap">
                           <span className="font-bold text-slate-900 dark:text-white block">
                             {item.qty} <span className="text-[10px] text-slate-400 font-normal">{item.unit || 'UN'}</span>
                           </span>
@@ -2265,10 +2335,10 @@ export function ReportsPage() {
                             Mín: {item.minQty}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
+                        <td className="py-2 px-2 text-right whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
                           {formatCurrency(item.cost.toFixed(2))}
                         </td>
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono font-bold text-slate-900 dark:text-white">
+                        <td className="py-2 px-2 text-right whitespace-nowrap font-mono font-bold text-slate-900 dark:text-white">
                           {formatCurrency(item.totalCostValue.toFixed(2))}
                         </td>
                       </tr>
@@ -2276,14 +2346,14 @@ export function ReportsPage() {
                   </tbody>
                   <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                     <tr>
-                      <td colSpan={4} className="py-3 px-3 uppercase text-slate-700 dark:text-slate-300">
+                      <td colSpan={4} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
                         Totais Consolidados ({filteredInventory.length} itens)
                       </td>
-                      <td className="py-3 px-3 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} un.
                       </td>
-                      <td className="py-3 px-3 text-right text-slate-400">—</td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-right text-slate-400">—</td>
+                      <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
                       </td>
                     </tr>
@@ -2337,10 +2407,13 @@ export function ReportsPage() {
         onBack={() => navigateToView('home')}
         onExportExcel={handleExportCadastrosExcel}
         onExportXml={handleExportCadastrosXml}
-        onPrint={() => window.print()}
+        onPrint={handlePrintReport}
         onRefresh={() => void loadData()}
         isRefreshing={isLoading}
         disableExport={activeTabRecordsCount === 0}
+        printOrientationMode={printOrientationMode}
+        effectiveOrientation={effectiveOrientation}
+        onPrintOrientationChange={setPrintOrientationMode}
       />
 
       {/* FILTROS DE PERÍODO */}
@@ -2587,16 +2660,16 @@ export function ReportsPage() {
                 Nenhum usuário encontrado.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="w-full">
+                  <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                       <tr>
-                        <th className="py-3 px-3">Usuário / Exibição</th>
-                        <th className="py-3 px-3">E-mail de Acesso</th>
-                        <th className="py-3 px-3">Papel no Sistema</th>
-                        <th className="py-3 px-3">Nível de Permissão</th>
-                        <th className="py-3 px-3 text-center">Status</th>
+                        <th className="py-2.5 px-2.5">Usuário / Exibição</th>
+                        <th className="py-2.5 px-2.5">E-mail de Acesso</th>
+                        <th className="py-2.5 px-2.5">Papel no Sistema</th>
+                        <th className="py-2.5 px-2.5">Nível de Permissão</th>
+                        <th className="py-2.5 px-2.5 text-center">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -2605,21 +2678,21 @@ export function ReportsPage() {
                           key={u.userId}
                           className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
                         >
-                          <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                          <td className="py-2 px-2.5 font-semibold text-slate-900 dark:text-white break-words">
                             {u.displayName || u.email.split('@')[0]}
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                          <td className="py-2 px-2.5 font-mono text-slate-600 dark:text-slate-300 break-all">
                             {u.email}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                          <td className="py-2 px-2.5 text-slate-700 dark:text-slate-300 break-words">
                             {u.role === 'owner' ? 'Proprietário' : u.role === 'admin' ? 'Administrador' : 'Operador'}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                          <td className="py-2 px-2.5 text-slate-600 dark:text-slate-400 break-words">
                             {u.isOwner ? 'Acesso Total (Owner)' : u.isAdmin ? 'Acesso Administrativo' : 'Acesso Operacional'}
                           </td>
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <td className="py-2 px-2.5 text-center">
                             <span
-                              className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
+                              className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border ${
                                 u.isOwner
                                   ? 'bg-purple-100 text-purple-800 border-purple-200'
                                   : u.isAdmin
@@ -2635,10 +2708,10 @@ export function ReportsPage() {
                     </tbody>
                     <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                       <tr>
-                        <td colSpan={4} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                        <td colSpan={4} className="py-2.5 px-2.5 uppercase text-slate-700 dark:text-slate-300">
                           Total de Usuários Cadastrados
                         </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-900 dark:text-white">
                           {filteredUsers.length}
                         </td>
                       </tr>
@@ -2657,16 +2730,16 @@ export function ReportsPage() {
                 Nenhum funcionário cadastrado.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="w-full">
+                  <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                       <tr>
-                        <th className="py-3 px-3">Nome do Funcionário</th>
-                        <th className="py-3 px-3">Cargo / Função</th>
-                        <th className="py-3 px-3">E-mail Corporativo</th>
-                        <th className="py-3 px-3">Atribuição</th>
-                        <th className="py-3 px-3 text-center">Situação</th>
+                        <th className="py-2.5 px-2.5">Nome do Funcionário</th>
+                        <th className="py-2.5 px-2.5">Cargo / Função</th>
+                        <th className="py-2.5 px-2.5">E-mail Corporativo</th>
+                        <th className="py-2.5 px-2.5">Atribuição</th>
+                        <th className="py-2.5 px-2.5 text-center">Situação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -2675,20 +2748,20 @@ export function ReportsPage() {
                           key={e.userId}
                           className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
                         >
-                          <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                          <td className="py-2 px-2.5 font-semibold text-slate-900 dark:text-white break-words">
                             {e.name}
                           </td>
-                          <td className="py-2.5 px-3 text-indigo-600 dark:text-indigo-400 font-medium">
+                          <td className="py-2 px-2.5 text-indigo-600 dark:text-indigo-400 font-medium break-words">
                             {e.jobTitle}
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                          <td className="py-2 px-2.5 font-mono text-slate-600 dark:text-slate-300 break-all">
                             {e.email}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                          <td className="py-2 px-2.5 text-slate-700 dark:text-slate-300 break-words">
                             {e.role === 'owner' ? 'Gestão Geral' : e.role === 'admin' ? 'Supervisão' : 'Operação'}
                           </td>
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                            <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <td className="py-2 px-2.5 text-center">
+                            <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200">
                               Ativo
                             </span>
                           </td>
@@ -2697,10 +2770,10 @@ export function ReportsPage() {
                     </tbody>
                     <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                       <tr>
-                        <td colSpan={4} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                        <td colSpan={4} className="py-2.5 px-2.5 uppercase text-slate-700 dark:text-slate-300">
                           Total de Funcionários
                         </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-900 dark:text-white">
                           {filteredEmployees.length}
                         </td>
                       </tr>
@@ -2719,17 +2792,17 @@ export function ReportsPage() {
                 Nenhum fornecedor cadastrado.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="w-full">
+                  <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                       <tr>
-                        <th className="py-3 px-3">Razão Social / Nome</th>
-                        <th className="py-3 px-3">CNPJ / CPF</th>
-                        <th className="py-3 px-3">Telefone / WhatsApp</th>
-                        <th className="py-3 px-3">E-mail Comercial</th>
-                        <th className="py-3 px-3">Endereço</th>
-                        <th className="py-3 px-3 text-center">Data Cadastro</th>
+                        <th className="py-2 px-2">Razão Social / Nome</th>
+                        <th className="py-2 px-2">CNPJ / CPF</th>
+                        <th className="py-2 px-2">Telefone / WhatsApp</th>
+                        <th className="py-2 px-2">E-mail Comercial</th>
+                        <th className="py-2 px-2">Endereço</th>
+                        <th className="py-2 px-2 text-center">Data Cadastro</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -2738,22 +2811,22 @@ export function ReportsPage() {
                           key={s.id}
                           className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
                         >
-                          <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                          <td className="py-2 px-2 font-semibold text-slate-900 dark:text-white break-words">
                             {s.name}
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {s.document || '—'}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          <td className="py-2 px-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
                             {s.phone ? formatPhoneNumber(s.phone) : '—'}
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                          <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 break-all">
                             {s.email || '—'}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                          <td className="py-2 px-2 text-slate-700 dark:text-slate-300 break-words whitespace-normal">
                             {s.address || '—'}
                           </td>
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap text-slate-500">
+                          <td className="py-2 px-2 text-center whitespace-nowrap text-slate-500">
                             {s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—'}
                           </td>
                         </tr>
@@ -2761,10 +2834,10 @@ export function ReportsPage() {
                     </tbody>
                     <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                       <tr>
-                        <td colSpan={5} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                        <td colSpan={5} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
                           Total de Fornecedores Homologados
                         </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                        <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900 dark:text-white">
                           {filteredSuppliers.length}
                         </td>
                       </tr>
@@ -2783,19 +2856,19 @@ export function ReportsPage() {
                 Nenhum cliente cadastrado.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
+                <div className="w-full">
+                  <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                       <tr>
-                        <th className="py-3 px-3">Cliente / Razão Social</th>
-                        <th className="py-3 px-3 text-center">Tipo</th>
-                        <th className="py-3 px-3">Documento (CPF/CNPJ)</th>
-                        <th className="py-3 px-3">Telefone / WhatsApp</th>
-                        <th className="py-3 px-3">E-mail</th>
-                        <th className="py-3 px-3 text-right">Total Compras</th>
-                        <th className="py-3 px-3 text-center">Faturamentos</th>
-                        <th className="py-3 px-3 text-center">Data Cadastro</th>
+                        <th className="py-2 px-2">Cliente / Razão Social</th>
+                        <th className="py-2 px-2 text-center">Tipo</th>
+                        <th className="py-2 px-2">Documento (CPF/CNPJ)</th>
+                        <th className="py-2 px-2">Telefone / WhatsApp</th>
+                        <th className="py-2 px-2">E-mail</th>
+                        <th className="py-2 px-2 text-right">Total Compras</th>
+                        <th className="py-2 px-2 text-center">Faturamentos</th>
+                        <th className="py-2 px-2 text-center">Data Cadastro</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -2806,30 +2879,30 @@ export function ReportsPage() {
                             key={c.id}
                             className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
                           >
-                            <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                            <td className="py-2 px-2 font-semibold text-slate-900 dark:text-white break-words">
                               {c.name}
                             </td>
-                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                              <span className="inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            <td className="py-2 px-2 text-center">
+                              <span className="inline-block rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                                 {c.personType === 'company' ? 'PJ' : 'PF'}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                            <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               {c.document || '—'}
                             </td>
-                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            <td className="py-2 px-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
                               {c.phone ? formatPhoneNumber(c.phone) : '—'}
                             </td>
-                            <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                            <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 break-all">
                               {c.email || '—'}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                            <td className="py-2 px-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                               {formatCurrency((metrics?.totalSpent || 0).toFixed(2))}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            <td className="py-2 px-2 text-center font-mono text-slate-700 dark:text-slate-300">
                               {metrics?.salesCount || 0}
                             </td>
-                            <td className="py-2.5 px-3 text-center whitespace-nowrap text-slate-500">
+                            <td className="py-2 px-2 text-center whitespace-nowrap text-slate-500">
                               {c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—'}
                             </td>
                           </tr>
@@ -2838,17 +2911,17 @@ export function ReportsPage() {
                     </tbody>
                     <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                       <tr>
-                        <td colSpan={5} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                        <td colSpan={5} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
                           Total de Clientes ({filteredCustomers.length})
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
+                        <td className="py-2.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
                           {formatCurrency(
                             filteredCustomers
                               .reduce((sum, c) => sum + (customerMetricsMap.get(c.id)?.totalSpent || 0), 0)
                               .toFixed(2),
                           )}
                         </td>
-                        <td colSpan={2} className="py-2.5 px-3 text-center text-slate-400">—</td>
+                        <td colSpan={2} className="py-2.5 px-2 text-center text-slate-400">—</td>
                       </tr>
                     </tfoot>
                   </table>

@@ -20,7 +20,7 @@ export function BrandLogo({
   className,
 }: BrandLogoProps) {
   return (
-    <div className={cn('inline-flex items-center gap-3', className)}>
+    <div className={cn('inline-flex min-w-0 max-w-full items-center', className)}>
       <span
         className={cn(
           'inline-flex shrink-0 items-center justify-center overflow-hidden bg-white p-0.5 shadow-xs ring-1 ring-slate-200/70',
@@ -29,11 +29,16 @@ export function BrandLogo({
       >
         <img src="/controlesoft-mark.png" alt="ControleSoft" className="h-full w-full object-contain" />
       </span>
-      {showName && (
-        <span className={cn('font-semibold', dark ? 'text-white' : 'text-gray-900 dark:text-white')}>
-          ControleSoft
-        </span>
-      )}
+      <span
+        aria-hidden={!showName}
+        className={cn(
+          'min-w-0 truncate font-semibold transition-all duration-300 ease-out',
+          dark ? 'text-white' : 'text-gray-900 dark:text-white',
+          showName ? 'ml-3 max-w-[160px] opacity-100' : 'ml-0 max-w-0 opacity-0',
+        )}
+      >
+        ControleSoft
+      </span>
     </div>
   )
 }

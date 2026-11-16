@@ -15,6 +15,9 @@ interface ReportActionBarProps {
   isRefreshing?: boolean
   disableExport?: boolean
   extraActions?: ReactNode
+  printOrientationMode?: 'auto' | 'portrait' | 'landscape'
+  effectiveOrientation?: 'portrait' | 'landscape'
+  onPrintOrientationChange?: (mode: 'auto' | 'portrait' | 'landscape') => void
 }
 
 export function ReportActionBar({
@@ -30,6 +33,9 @@ export function ReportActionBar({
   isRefreshing = false,
   disableExport = false,
   extraActions,
+  printOrientationMode,
+  effectiveOrientation,
+  onPrintOrientationChange,
 }: ReportActionBarProps) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
@@ -85,6 +91,23 @@ export function ReportActionBar({
           <FileCode className="h-4 w-4 text-amber-600" />
           <span>Gerar XML</span>
         </Button>
+
+        {onPrintOrientationChange && (
+          <select
+            value={printOrientationMode || 'auto'}
+            onChange={(e) =>
+              onPrintOrientationChange(e.target.value as 'auto' | 'portrait' | 'landscape')
+            }
+            className="h-8 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 text-xs font-semibold text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            title="Orientação da folha na impressão"
+          >
+            <option value="auto">
+              Impressão: Auto ({effectiveOrientation === 'landscape' ? 'Paisagem' : 'Retrato'})
+            </option>
+            <option value="portrait">Impressão: Retrato (Vertical)</option>
+            <option value="landscape">Impressão: Paisagem (Horizontal)</option>
+          </select>
+        )}
 
         <Button
           variant="outline"
