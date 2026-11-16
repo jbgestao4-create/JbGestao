@@ -176,7 +176,7 @@ export function PresentationPage() {
   const [pdvSlide, setPdvSlide] = useState<0 | 1>(0)
   // Carrossel de O.S. & Orçamentos: 0 = captura da listagem de O.S., 1 = painel de O.S.
   const [osSlide, setOsSlide] = useState<0 | 1>(0)
-  const [showComparisonTable, setShowComparisonTable] = useState(true)
+  const [showComparisonTable, setShowComparisonTable] = useState(false)
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
 
   // Modal de escolha de plano e cadastro com 1 mês grátis
