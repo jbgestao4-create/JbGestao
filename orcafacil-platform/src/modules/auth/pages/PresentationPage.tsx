@@ -281,6 +281,8 @@ export function PresentationPage() {
   }, [location.pathname, location.hash, searchParams, plans])
 
   const [detailsPlan, setDetailsPlan] = useState<AccessPlan | null>(null)
+  const [hoveredModulesPlanId, setHoveredModulesPlanId] = useState<string | null>(null)
+  const [pinnedModulesPlanId, setPinnedModulesPlanId] = useState<string | null>(null)
 
   const handleChoosePlanWhatsApp = (plan: AccessPlan) => {
     const price = formatCurrency((plan.monthlyPrice ?? 149.9).toFixed(2))
@@ -1099,7 +1101,7 @@ export function PresentationPage() {
 
           {/* Grid de Cards dos Planos Cadastrados - Os 5 um ao lado do outro */}
           <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-4.5 items-stretch">
-            {plans.map((plan) => {
+            {plans.map((plan, index) => {
               const isPopular =
                 plan.isActive &&
                 !plan.isLocked &&
@@ -1111,11 +1113,17 @@ export function PresentationPage() {
               const includedModulesList = ALL_PLATFORM_DASHBOARD_MODULES.filter(
                 (m) => codeSet.has(m.code) || m.subFeatures.some((s) => codeSet.has(s.code)),
               )
+              const isModulesOpen =
+                hoveredModulesPlanId === plan.id || pinnedModulesPlanId === plan.id
 
               return (
                 <div
                   key={plan.id}
+                  onMouseEnter={() => setHoveredModulesPlanId(plan.id)}
+                  onMouseLeave={() => setHoveredModulesPlanId(null)}
                   className={`relative flex flex-col justify-between rounded-3xl p-6 transition-all duration-200 ${
+                    isModulesOpen ? 'z-30' : 'z-10'
+                  } ${
                     isPopular
                       ? 'border-2 border-[#2563EB] bg-white shadow-xl shadow-blue-600/10 ring-4 ring-blue-600/5'
                       : isAvailable
@@ -1162,7 +1170,7 @@ export function PresentationPage() {
                     </p>
 
                     {/* Bloco de Preço: 1º Mês Grátis + Valor do Próximo Mês */}
-                    <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                    <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5">
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-2xl font-black text-emerald-600">R$ 0,00</span>
                         <span className="text-xs font-bold text-emerald-700">no 1º mês</span>
@@ -1178,63 +1186,152 @@ export function PresentationPage() {
                       </div>
                     </div>
 
-                    {/* Destaques de Sub-recursos */}
-                    <div className="mt-5 space-y-2.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                    {/* Módulos Liberados neste Plano - Gatilho e Popover flutuante ao passar o mouse */}
+                    <div className="relative mt-4">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1.5">
                         Módulos Liberados neste Plano:
                       </span>
-                      <ul className="space-y-2 text-xs">
-                        {includedModulesList.map((mod) => {
-                          const hasPdv = codeSet.has('MOD-01_PDV')
-                          const hasInvoices = codeSet.has('MOD-01_INVOICES')
-                          return (
-                            <li key={mod.code} className="flex items-start gap-2 text-slate-700">
-                              <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                              <div>
-                                <span className="font-semibold text-slate-900">{mod.name}</span>
-                                {mod.code === 'MOD-01' && (
-                                  <span className="block text-[11px] text-slate-500">
-                                    {hasPdv
-                                      ? hasInvoices
-                                        ? 'Inclui Venda Rápida, PDV e NF-e/NFC-e'
-                                        : 'Inclui Venda Rápida e Terminal PDV'
-                                      : 'Venda Rápida e Consulta (sem PDV)'}
-                                  </span>
-                                )}
-                              </div>
-                            </li>
-                          )
-                        })}
-
-                        {/* Suporte / Dúvidas garantido em todos os planos */}
-                        <li className="flex items-start gap-2 text-slate-700">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="font-semibold text-slate-900">Suporte / Dúvidas</span>
-                            <span className="block text-[11px] text-emerald-700 font-medium">
-                              Atendimento humanizado via WhatsApp e central de ajuda inclusos
-                            </span>
-                          </div>
-                        </li>
-                      </ul>
                       <button
                         type="button"
-                        onClick={() => setDetailsPlan(plan)}
-                        className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPinnedModulesPlanId(pinnedModulesPlanId === plan.id ? null : plan.id)
+                        }}
+                        className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold transition-all cursor-pointer border text-left ${
+                          isModulesOpen
+                            ? 'bg-blue-100/90 border-blue-400 text-blue-900 shadow-xs ring-2 ring-blue-500/20'
+                            : 'bg-blue-50/70 hover:bg-blue-100/70 border-blue-200/80 hover:border-blue-300 text-blue-900'
+                        }`}
                       >
-                        <span>Saber mais sobre as funções deste plano</span>
-                        <ChevronRight className="h-3.5 w-3.5" />
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
+                          <span>{includedModulesList.length} Módulos Inclusos</span>
+                        </div>
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-blue-600 bg-white/95 px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs">
+                          {isModulesOpen ? 'Ocultar' : 'Ver lista'}
+                          <ChevronDown
+                            className={`h-3 w-3 transition-transform duration-200 ${
+                              isModulesOpen ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </span>
                       </button>
+
+                      {/* Popover Flutuante com a Lista Completa de Módulos */}
+                      <div
+                        className={`absolute top-full mt-2 z-50 w-72 sm:w-80 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xl transition-all duration-200 ${
+                          index === 0
+                            ? 'left-0'
+                            : index === plans.length - 1
+                              ? 'right-0'
+                              : 'left-1/2 -translate-x-1/2'
+                        } ${
+                          isModulesOpen
+                            ? 'opacity-100 visible scale-100 pointer-events-auto'
+                            : 'opacity-0 invisible scale-95 pointer-events-none'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 block">
+                              Módulos Liberados
+                            </span>
+                            <h4 className="text-sm font-extrabold text-slate-900 leading-tight">
+                              {plan.name}
+                            </h4>
+                          </div>
+                          <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                            {includedModulesList.length} de {ALL_PLATFORM_DASHBOARD_MODULES.length}
+                          </span>
+                        </div>
+
+                        <div className="my-2.5 max-h-60 overflow-y-auto pr-1">
+                          <ul className="space-y-2 text-xs">
+                            {includedModulesList.map((mod) => {
+                              const hasPdv = codeSet.has('MOD-01_PDV')
+                              const hasInvoices = codeSet.has('MOD-01_INVOICES')
+                              return (
+                                <li key={mod.code} className="flex items-start gap-2 text-slate-700">
+                                  <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="font-semibold text-slate-900">{mod.name}</span>
+                                    {mod.code === 'MOD-01' && (
+                                      <span className="block text-[11px] text-slate-500">
+                                        {hasPdv
+                                          ? hasInvoices
+                                            ? 'Inclui Venda Rápida, PDV e NF-e/NFC-e'
+                                            : 'Inclui Venda Rápida e Terminal PDV'
+                                          : 'Venda Rápida e Consulta (sem PDV)'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </li>
+                              )
+                            })}
+
+                            {/* Suporte / Dúvidas garantido em todos os planos */}
+                            <li className="flex items-start gap-2 text-slate-700">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-semibold text-slate-900">Suporte / Dúvidas</span>
+                                <span className="block text-[11px] text-emerald-700 font-medium">
+                                  Atendimento humanizado via WhatsApp e central de ajuda inclusos
+                                </span>
+                              </div>
+                            </li>
+                          </ul>
+                        </div>
+
+                        <div className="pt-2.5 border-t border-slate-100 flex flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setDetailsPlan(plan)}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                          >
+                            <span>Saber mais sobre as funções deste plano</span>
+                            <ChevronRight className="h-3 w-3" />
+                          </button>
+                          {isAvailable ? (
+                            <button
+                              type="button"
+                              onClick={() => handleChoosePlanWhatsApp(plan)}
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 px-3 py-2 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"
+                            >
+                              <span>Escolher Plano</span>
+                              <MessageCircle className="h-3.5 w-3.5" />
+                            </button>
+                          ) : (
+                            <a
+                              href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20Gostaria%20de%20saber%20sobre%20a%20disponibilidade%20do%20Plano%20Completo%20com%20NF-e."
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              <span>Consultar Previsão</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Botão de Escolha do Plano */}
-                  <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
+                  {/* Botão de Escolha do Plano e Link de Saber Mais (Espaçamento reduzido) */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDetailsPlan(plan)}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                    >
+                      <span>Saber mais sobre as funções deste plano</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+
                     {isAvailable ? (
                       <button
                         type="button"
                         onClick={() => handleChoosePlanWhatsApp(plan)}
-                        className={`w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-bold transition-all cursor-pointer ${
+                        className={`w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all cursor-pointer ${
                           isPopular
                             ? 'bg-[#2563EB] text-white shadow-md shadow-blue-600/25 hover:bg-blue-700'
                             : 'bg-slate-900 text-white hover:bg-[#2563EB]'
@@ -1248,7 +1345,7 @@ export function PresentationPage() {
                         href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20Gostaria%20de%20saber%20sobre%20a%20disponibilidade%20do%20Plano%20Completo%20com%20NF-e."
                         target="_blank"
                         rel="noreferrer"
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors"
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors"
                       >
                         <MessageCircle className="h-3.5 w-3.5" />
                         <span>Consultar Previsão no WhatsApp</span>

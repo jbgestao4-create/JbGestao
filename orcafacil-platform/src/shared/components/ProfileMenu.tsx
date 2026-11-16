@@ -4,7 +4,9 @@ import { ChevronDown, LogOut, UserCog } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@app/config/supabase'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
+import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { isSystemOwner } from '@shared/utils/system-owner'
 import { SYSTEM_ACCESS_PLAN_NAMES } from '@modules/organizations/services/organization.service'
 import {
   isOrganizationInTrial,
@@ -46,36 +48,14 @@ export function ProfileMenu({
 }: ProfileMenuProps) {
   const [isSignOutDialogOpen, setIsSignOutDialogOpen] = useState(false)
   const [billingInfo, setBillingInfo] = useState<OrganizationBillingInfo | null>(null)
-  const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null>(null)
   const [fetchedOrgMeta, setFetchedOrgMeta] = useState<{
-    pdvBackgroundUrl?: string | null
     accessPlanId?: string | null
     trialEndsAt?: string | null
   } | null>(null)
-  const { currentOrganization } = useOrganization()
+  const { currentOrganization, userRole } = useOrganization()
+  const { user } = useAuth()
+  const isAdmin = userRole === 'owner' || userRole === 'admin' || isSystemOwner(user)
   const navigate = useNavigate()
-
-  useEffect(() => {
-    const syncLocalPhoto = () => {
-      if (typeof window === 'undefined') return
-      try {
-        const stored =
-          (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
-          localStorage.getItem('pdv_bg_last') ||
-          localStorage.getItem('pdv_background_url') ||
-          null
-        setLocalPhotoUrl(stored)
-      } catch {
-        setLocalPhotoUrl(null)
-      }
-    }
-
-    syncLocalPhoto()
-    window.addEventListener('storage', syncLocalPhoto)
-    return () => {
-      window.removeEventListener('storage', syncLocalPhoto)
-    }
-  }, [currentOrganization?.id])
 
   useEffect(() => {
     if (!currentOrganization?.id) {
@@ -85,25 +65,24 @@ export function ProfileMenu({
     }
     let isCurrent = true
 
-    void Promise.resolve(
-      supabase
-        .from('organizations')
-        .select('pdv_background_url, access_plan_id, trial_ends_at')
-        .eq('id', currentOrganization.id)
-        .maybeSingle(),
-    )
-      .then(({ data }) => {
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('organizations')
+          .select('access_plan_id, trial_ends_at')
+          .eq('id', currentOrganization.id)
+          .maybeSingle()
+
         if (isCurrent && data) {
           setFetchedOrgMeta({
-            pdvBackgroundUrl: (data as any).pdv_background_url ?? null,
             accessPlanId: (data as any).access_plan_id ?? null,
             trialEndsAt: (data as any).trial_ends_at ?? null,
           })
         }
-      })
-      .catch(() => {
+      } catch {
         // non-blocking
-      })
+      }
+    })()
 
     void organizationBillingService
       .getBillingInfo({
@@ -133,16 +112,6 @@ export function ProfileMenu({
       .map((part) => part[0])
       .join('')
       .toUpperCase() || 'U'
-
-  const storeName = currentOrganization?.name || displayName || 'Minha Loja'
-
-  const companyPhotoUrl =
-    currentOrganization?.logoUrl ||
-    currentOrganization?.pdvBackgroundUrl ||
-    fetchedOrgMeta?.pdvBackgroundUrl ||
-    localPhotoUrl ||
-    avatarUrl ||
-    '/controlesoft-mark.png'
 
   const effectiveAccessPlanId =
     currentOrganization?.accessPlanId || fetchedOrgMeta?.accessPlanId || null
@@ -280,61 +249,69 @@ export function ProfileMenu({
           sideOffset={8}
           className="z-50 w-76 sm:w-80 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-0 shadow-xl shadow-slate-900/15 dark:shadow-black/60"
         >
-          {/* TOPO CENTRALIZADO: FOTO DA EMPRESA, NOME, EMAIL, PLANO E DATA */}
+          {/* TOPO CENTRALIZADO: FOTO DO USUÁRIO, NOME, EMAIL, PLANO E DATA */}
           <div className="flex flex-col items-center px-6 pt-6 pb-5 text-center">
-            <div className="mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 shadow-2xs">
-              <img
-                src={companyPhotoUrl}
-                alt={`Foto da empresa ${storeName}`}
-                className="h-full w-full rounded-lg object-contain"
-              />
+            <div className="mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-blue-100 dark:bg-blue-950 text-xl font-bold text-blue-800 dark:text-blue-300 ring-2 ring-slate-200 dark:ring-slate-700 shadow-2xs">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={`Foto de ${displayName}`}
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                initials
+              )}
             </div>
 
             <DropdownMenu.Item asChild>
               <Link
-                to="/settings/organization"
-                className="block max-w-full text-base sm:text-lg font-bold leading-snug text-slate-900 dark:text-white underline underline-offset-4 decoration-slate-900 dark:decoration-white hover:text-blue-600 dark:hover:text-blue-400 hover:decoration-blue-600 outline-none cursor-pointer"
+                to="/profile"
+                className="block max-w-full text-base sm:text-lg font-bold leading-snug text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 outline-none cursor-pointer"
               >
-                {storeName}
+                {displayName}
               </Link>
             </DropdownMenu.Item>
 
             {email && (
-              <span className="mt-1 block max-w-full truncate text-xs font-medium text-slate-700 dark:text-slate-300">
+              <span className="mt-0.5 block max-w-full truncate text-xs font-medium text-slate-500 dark:text-slate-400">
                 {email}
               </span>
             )}
 
-            {/* PLANO E DATA DE ENCERRAMENTO */}
-            <div className="mt-5 grid w-full grid-cols-2 items-center">
-              <div className="pr-3 text-center">
-                <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                  Plano
-                </span>
-                <span className="mt-0.5 block truncate text-sm font-bold text-slate-900 dark:text-white">
-                  {planName}
-                </span>
-              </div>
-              <div className="border-l border-slate-200 dark:border-slate-700 pl-3 text-center">
-                <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                  {expirationLabel}
-                </span>
-                <span className="mt-0.5 block text-sm font-bold text-slate-900 dark:text-white">
-                  {expirationDate}
-                </span>
-              </div>
-            </div>
+            {/* PLANO E DATA DE ENCERRAMENTO (APENAS PARA ADMINISTRADOR / DONO) */}
+            {isAdmin && (
+              <>
+                <div className="mt-5 grid w-full grid-cols-2 items-center">
+                  <div className="pr-3 text-center">
+                    <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                      Plano
+                    </span>
+                    <span className="mt-0.5 block truncate text-sm font-bold text-slate-900 dark:text-white">
+                      {planName}
+                    </span>
+                  </div>
+                  <div className="border-l border-slate-200 dark:border-slate-700 pl-3 text-center">
+                    <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                      {expirationLabel}
+                    </span>
+                    <span className="mt-0.5 block text-sm font-bold text-slate-900 dark:text-white">
+                      {expirationDate}
+                    </span>
+                  </div>
+                </div>
 
-            {/* BOTÃO ASSINE AGORA (SOMENTE EM PERÍODO DE TESTE E SEM PLANO ATIVO) */}
-            {shouldShowSubscribeButton && (
-              <DropdownMenu.Item
-                onSelect={() => {
-                  void navigate('/settings/organization?tab=system-invoices')
-                }}
-                className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-full bg-[#0088ff] hover:bg-[#0077e6] active:bg-[#0066cc] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors outline-none"
-              >
-                Assine Agora
-              </DropdownMenu.Item>
+                {/* BOTÃO ASSINE AGORA (SOMENTE EM PERÍODO DE TESTE E SEM PLANO ATIVO) */}
+                {shouldShowSubscribeButton && (
+                  <DropdownMenu.Item
+                    onSelect={() => {
+                      void navigate('/settings/organization?tab=system-invoices')
+                    }}
+                    className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-full bg-[#0088ff] hover:bg-[#0077e6] active:bg-[#0066cc] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors outline-none"
+                  >
+                    Assine Agora
+                  </DropdownMenu.Item>
+                )}
+              </>
             )}
           </div>
 

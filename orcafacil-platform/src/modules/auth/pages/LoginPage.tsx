@@ -30,9 +30,6 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [acceptedTerms, setAcceptedTerms] = useState<boolean>(() =>
-    Boolean(termsAcceptanceService.getLocalAcceptance()),
-  )
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
@@ -58,11 +55,6 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-
-    if (!acceptedTerms) {
-      setError('Você precisa ler e concordar com os Termos de Uso e a Política de Privacidade para continuar.')
-      return
-    }
 
     setIsLoading(true)
 
@@ -370,33 +362,6 @@ export function LoginPage() {
                     Esqueceu a senha?
                   </Link>
                 </div>
-
-                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={acceptedTerms}
-                    onChange={(e) => setAcceptedTerms(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 accent-[#2563EB]"
-                    required
-                  />
-                  <span className="leading-relaxed">
-                    Li e concordo com os{' '}
-                    <Link
-                      to="/politica-de-privacidade?tab=terms"
-                      className="font-semibold text-[#2563EB] hover:underline"
-                    >
-                      Termos de Uso
-                    </Link>{' '}
-                    e a{' '}
-                    <Link
-                      to="/politica-de-privacidade"
-                      className="font-semibold text-[#2563EB] hover:underline"
-                    >
-                      Política de Privacidade
-                    </Link>{' '}
-                    (registro de aceite com data, hora e IP).
-                  </span>
-                </label>
 
                 <Button
                   type="submit"

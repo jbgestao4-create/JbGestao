@@ -313,20 +313,80 @@ html.dark [role='option']:hover {
   background-color: #1f2937 !important;
 }
 
-/* Scrollbars escuros */
-html.dark ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* ==========================================================================
+   BARRA DE ROLAGEM GLOBAL MODERNA E ARREDONDADA (MODAIS E PÁGINAS)
+   Remove as setas quadradas (superior/inferior) e arredonda os cantos
+   ========================================================================== */
+
+/* 1. Remove completamente as setas (botões superior e inferior) */
+*::-webkit-scrollbar-button,
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
+
+/* 2. Dimensão simétrica e discreta */
+*::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* 3. Trilho transparente com margem para não encostar nas quinas arredondadas dos modais */
+*::-webkit-scrollbar-track,
+::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 8px;
+  border-radius: 9999px;
+}
+
+/* 4. Barra (thumb) 100% arredondada e suave (Modo Claro) */
+*::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+/* 5. Canto de junção */
+*::-webkit-scrollbar-corner,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 6. Modo Escuro */
+html.dark *::-webkit-scrollbar-track,
 html.dark ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: transparent;
 }
+
+html.dark *::-webkit-scrollbar-thumb,
 html.dark ::-webkit-scrollbar-thumb {
-  background: #374151;
-  border-radius: 4px;
+  background-color: #334155;
+  border-radius: 9999px;
 }
+
+html.dark *::-webkit-scrollbar-thumb:hover,
 html.dark ::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
+  background-color: #475569;
+}
+
+/* Suporte padrão W3C (Firefox e navegadores modernos) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+html.dark * {
+  scrollbar-color: #334155 transparent;
 }
 
 @media (max-width: 767px) {

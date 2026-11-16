@@ -8,6 +8,8 @@ import { serviceOrderService, type ServiceOrderListItem } from '@modules/service
 import { customerService, type Customer } from '@modules/customers/services/customer.service'
 import { supplierService, type Supplier } from '@modules/suppliers/services/supplier.service'
 import { organizationService } from '@modules/organizations/services/organization.service'
+import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
+import { supabase } from '@app/config/supabase'
 import type { CashSession } from '@modules/cash/domain/cash-session'
 import type { CashEntry } from '@modules/cash/domain/cash-management'
 import type { InventoryItem, OrganizationMemberDetail, UUID } from '@shared/types/common'
@@ -88,6 +90,19 @@ export interface CustomerRankingItem {
   lastPurchaseAt: string | null
 }
 
+export interface RawQuoteItem {
+  id: string
+  quote_id: string
+  inventory_item_id?: string | null
+  service_id?: string | null
+  item_type?: 'product' | 'service' | string | null
+  description: string
+  quantity: string | number
+  unit_price: string | number
+  total: string | number
+  unit?: string | null
+}
+
 export interface ReportsDataset {
   sales: SaleListItem[]
   inventory: InventoryItem[]
@@ -99,6 +114,8 @@ export interface ReportsDataset {
   customers: Customer[]
   suppliers: Supplier[]
   members: OrganizationMemberDetail[]
+  services: ServiceListItem[]
+  quoteItems: RawQuoteItem[]
 }
 
 export function getPresetDateRange(preset: ReportPeriodPreset): { startDate: string; endDate: string } {
@@ -260,6 +277,8 @@ export const reportsService = {
       customersRes,
       suppliersRes,
       membersRes,
+      servicesRes,
+      quoteItemsRes,
     ] = await Promise.all([
       salesService.listSales(organizationId),
       inventoryService.list(organizationId),
@@ -271,6 +290,18 @@ export const reportsService = {
       customerService.list(organizationId),
       supplierService.list(organizationId),
       organizationService.getMembersWithDetails(organizationId),
+      serviceService.listServices(organizationId, { pageSize: 1000 }).catch(() => ({ success: false, data: null })),
+      (async () => {
+        try {
+          const res = await supabase
+            .from('quote_items')
+            .select('id, quote_id, inventory_item_id, service_id, item_type, description, quantity, unit_price, total, unit')
+            .eq('organization_id', organizationId)
+          return res
+        } catch {
+          return { data: [] }
+        }
+      })(),
     ])
 
     return {
@@ -284,6 +315,14 @@ export const reportsService = {
       customers: customersRes.success ? customersRes.data : [],
       suppliers: suppliersRes.success ? suppliersRes.data : [],
       members: membersRes.success ? membersRes.data : [],
+      services:
+        servicesRes && 'success' in servicesRes && servicesRes.success && servicesRes.data?.items
+          ? servicesRes.data.items
+          : [],
+      quoteItems:
+        quoteItemsRes && 'data' in quoteItemsRes && Array.isArray(quoteItemsRes.data)
+          ? (quoteItemsRes.data as RawQuoteItem[])
+          : [],
     }
   },
 

@@ -392,7 +392,7 @@ export function SystemCustomizationSection() {
   }
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8 max-w-5xl mx-auto">
       {/* ==================================================================== */}
       {/* 1. MODO NOTURNO / CLARO DO SISTEMA                                  */}
       {/* ==================================================================== */}

@@ -505,8 +505,17 @@ export const organizationService = {
         display_name: cleanName,
       } as any)
       if (profileUpsertError) {
-        logger.error('Erro ao salvar perfil no Supabase', profileUpsertError)
-        return { success: false, error: 'Não foi possível salvar o perfil do usuário.' }
+        logger.warn('Aviso ao salvar perfil no Supabase (prosseguindo com vinculação do membro)', {
+          message: profileUpsertError.message,
+        })
+        try {
+          await supabase
+            .from('profiles')
+            .update({ display_name: cleanName, phone: cleanPhone || null })
+            .eq('id', targetUserId)
+        } catch {
+          // ignore
+        }
       }
 
       const { error: membershipError } = await supabase.from('organization_members').upsert({

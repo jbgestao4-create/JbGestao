@@ -312,7 +312,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Meu Perfil</h1>
         <p className="text-sm text-gray-500">Gerencie suas informações de acesso e credenciais</p>

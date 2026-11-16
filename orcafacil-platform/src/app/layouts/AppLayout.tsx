@@ -1,5 +1,5 @@
 import { UpcomingBillsAlertModal } from '@modules/cash/components/UpcomingBillsAlertModal'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@app/config/supabase'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -43,7 +43,7 @@ import {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, profile, signOut } = useAuth()
-  const { currentOrganization, organizations } = useOrganization()
+  const { currentOrganization } = useOrganization()
   const { canAccess, canAccessDashboardModule } = useModuleAccess()
   const location = useLocation()
   const navigate = useNavigate()
@@ -137,6 +137,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const cashBadgeRef = useRef<HTMLDivElement | null>(null)
   const homeButtonRef = useRef<HTMLAnchorElement | null>(null)
   const profileMenuRef = useRef<HTMLDivElement | null>(null)
+  const contentContainerRef = useRef<HTMLDivElement | null>(null)
   const prevIsDashboardRef = useRef<boolean>(isDashboard)
   const prevRectsRef = useRef<{
     brand?: DOMRect
@@ -149,6 +150,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     setSidebarCollapsed(true)
   }, [location.pathname])
+
+  useLayoutEffect(() => {
+    if (contentContainerRef.current) {
+      contentContainerRef.current.scrollTop = 0
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [location.pathname, location.search])
 
   useEffect(() => {
     const captureRects = () => {
@@ -398,45 +408,181 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const canAccessMigration = canAccessDashboardModule('MOD-11')
   const canAccessAgenda = canAccessDashboardModule('MOD-12')
 
-  const navItem = (to: string, label: string, icon: ReactNode, badge?: ReactNode) => {
-    const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
+  interface ModularNavItemDef {
+    id: string
+    to: string
+    label: string
+    icon: ReactNode
+    badge?: ReactNode
+    visible: boolean
+  }
+
+  const homeNavItem: ModularNavItemDef = {
+    id: 'dashboard',
+    to: '/dashboard',
+    label: 'Página Inicial',
+    icon: <LayoutDashboard className="w-4 h-4" />,
+    visible: true,
+  }
+
+  const rawModuleNavItems: ModularNavItemDef[] = [
+    {
+      id: 'cash',
+      to: '/cash',
+      label: 'Gerenciamento de Caixa',
+      icon: <DollarSign className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessCash,
+    },
+    {
+      id: 'sales',
+      to: '/orcafacil/sales',
+      label: 'Vendas',
+      icon: <ShoppingCart className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessSales,
+    },
+    {
+      id: 'agenda',
+      to: '/agenda',
+      label: 'Agenda',
+      icon: <Calendar className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessAgenda,
+    },
+    {
+      id: 'service-orders',
+      to: '/service-orders',
+      label: 'Ordens de Serviço',
+      icon: <ClipboardList className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessServiceOrders,
+    },
+    {
+      id: 'quotes',
+      to: '/orcafacil/quotes',
+      label: 'Orçamentos',
+      icon: <FileSpreadsheet className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessQuotes,
+    },
+    {
+      id: 'customers',
+      to: '/orcafacil/customers',
+      label: 'Clientes',
+      icon: <Users className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessCustomers,
+    },
+    {
+      id: 'suppliers',
+      to: '/orcafacil/suppliers',
+      label: 'Fornecedores',
+      icon: <Truck className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessSuppliers,
+    },
+    {
+      id: 'inventory',
+      to: '/orcafacil/inventory',
+      label: 'Estoque',
+      icon: <Package className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessInventory,
+    },
+    {
+      id: 'reports',
+      to: '/orcafacil/reports',
+      label: 'Relatórios',
+      icon: <FileBarChart className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessReports,
+    },
+    {
+      id: 'services',
+      to: '/services',
+      label: 'Serviços',
+      icon: <Wrench className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessServices,
+    },
+    {
+      id: 'migration',
+      to: '/migration',
+      label: 'Migração',
+      icon: <Database className="w-4 h-4" />,
+      visible: hasOrcafacil && canAccessMigration,
+    },
+    {
+      id: 'organization',
+      to: '/settings/organization',
+      label: 'Organização',
+      icon: <Settings className="w-4 h-4" />,
+      visible: canAccessOrganization,
+    },
+    {
+      id: 'developer',
+      to: '/admin/developer-settings',
+      label: 'Configurações de Desenvolvedor',
+      icon: <ShieldCheck className="w-4 h-4" />,
+      badge:
+        unreadSuggestionsCount > 0
+          ? formatUnreadSuggestionCount(unreadSuggestionsCount)
+          : undefined,
+      visible: isSystemOwner(user),
+    },
+  ]
+
+  // Módulos estritamente ordenados de forma alfabética
+  const sortedVisibleModuleItems = useMemo(() => {
+    return rawModuleNavItems
+      .filter((item) => item.visible)
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }))
+  }, [
+    rawModuleNavItems,
+  ])
+
+  const renderNavItem = (item: ModularNavItemDef) => {
+    const isActive =
+      location.pathname === item.to ||
+      (item.to !== '/' && item.to !== '/dashboard' && location.pathname.startsWith(item.to)) ||
+      (item.to === '/dashboard' && (location.pathname === '/' || location.pathname === '/dashboard'))
+
     return (
       <Link
-        to={to}
-        title={sidebarCollapsed ? label : undefined}
+        key={item.id}
+        to={item.to}
         onClick={() => {
           setMobileMenuPath(null)
         }}
-        className={`flex min-h-11 items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        title={sidebarCollapsed ? item.label : undefined}
+        className={`group relative flex h-10 w-full items-center rounded-lg text-sm font-medium transition-colors ${
           isActive
             ? 'bg-white text-[var(--theme-primary,#1d4ed8)] font-semibold shadow-xs dark:bg-[var(--theme-primary-dark-bg,rgba(30,58,138,0.4))] dark:text-[var(--theme-primary-dark-text,#93c5fd)]'
             : 'text-slate-700 hover:bg-white/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white'
-        } ${sidebarCollapsed ? 'justify-center' : ''}`}
+        }`}
       >
-        <span
-          className={`relative shrink-0 ${
+        {/* Container do ícone estático e ancorado - sem salto nem descolamento */}
+        <div
+          className={`w-9 h-9 flex items-center justify-center shrink-0 ml-1.5 relative transition-colors ${
             isActive
               ? 'text-[var(--theme-primary,#2563eb)] dark:text-[var(--theme-primary-dark-text,#60a5fa)]'
-              : 'text-slate-500 dark:text-slate-400'
+              : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
           }`}
         >
-          {icon}
-          {sidebarCollapsed && badge && (
-            <span className="absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white shadow-xs">
-              {badge}
+          {item.icon}
+          {sidebarCollapsed && item.badge && (
+            <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white shadow-xs">
+              {item.badge}
             </span>
           )}
-        </span>
-        {!sidebarCollapsed && (
-          <span className="flex flex-1 items-center justify-between gap-2 min-w-0">
-            <span className="truncate">{label}</span>
-            {badge && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white shadow-xs">
-                {badge}
-              </span>
-            )}
-          </span>
-        )}
+        </div>
+
+        {/* Rótulo de texto com transição suave e síncrona sem desalinhar o ícone */}
+        <div
+          className={`flex flex-1 items-center justify-between min-w-0 pr-3 transition-all duration-200 ease-in-out overflow-hidden ${
+            sidebarCollapsed
+              ? 'opacity-0 max-w-0 pointer-events-none -translate-x-2'
+              : 'opacity-100 max-w-[190px] translate-x-0'
+          }`}
+        >
+          <span className="truncate whitespace-nowrap ml-2.5 text-sm">{item.label}</span>
+          {item.badge && (
+            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white shadow-xs">
+              {item.badge}
+            </span>
+          )}
+        </div>
       </Link>
     )
   }
@@ -488,16 +634,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
           }}
           className={`relative shrink-0 flex-col md:sticky md:top-0 md:h-screen ${
             isBrandDraggingToSidebar ? 'overflow-visible z-30' : 'overflow-hidden'
-          } border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-all duration-300 print:hidden ${
+          } border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-[width] duration-200 ease-in-out print:hidden ${
             isMobileMenuOpen
-              ? 'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shadow-xl md:static md:z-auto md:max-w-none md:shadow-none'
+              ? 'fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shadow-xl md:static md:z-auto md:max-w-none md:shadow-none'
               : 'hidden md:flex'
           } ${sidebarCollapsed ? 'md:w-[68px]' : 'md:w-64'}`}
         >
           {/* LOGO */}
-          <div className={`py-4 border-b border-sky-200/60 dark:border-slate-800 ${sidebarCollapsed ? 'px-2' : 'px-4'}`}>
-            <div className={`flex min-w-0 items-center ${sidebarCollapsed ? 'md:justify-center' : 'justify-between'}`}>
-              <div ref={sidebarBrandRef} className="inline-flex min-w-0 max-w-full items-center">
+          <div className="py-3.5 px-3 border-b border-sky-200/60 dark:border-slate-800">
+            <div className="flex min-w-0 items-center justify-between">
+              <div ref={sidebarBrandRef} className="flex min-w-0 items-center pl-1">
                 <BrandLogo size="sm" showName={!sidebarCollapsed || isBrandDraggingToSidebar} />
               </div>
               <button
@@ -506,144 +652,40 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 onClick={() => {
                   setMobileMenuPath(null)
                 }}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 md:hidden"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 md:hidden"
               >
                 <X aria-hidden="true" className="h-5 w-5" />
               </button>
             </div>
           </div>
 
-          {/* NAVEGAÇÃO MODULAR */}
+          {/* NAVEGAÇÃO */}
           <nav
             aria-label="Navegação principal"
-            className={`flex-1 p-3 space-y-6 overflow-y-auto overflow-x-hidden ${sidebarCollapsed ? 'px-2' : ''}`}
+            className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden"
           >
-            <div>
-              {!sidebarCollapsed && organizations.length > 0 && (
-                <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
-                  Geral
-                </span>
-              )}
-              <div className="mt-1 space-y-0.5">
-                {navItem('/dashboard', 'Página Inicial', <LayoutDashboard className="w-4 h-4" />)}
-              </div>
+            {/* PÁGINA INICIAL FIXA NO TOPO */}
+            <div className="pb-1.5 mb-1.5 border-b border-sky-200/50 dark:border-slate-800">
+              {renderNavItem(homeNavItem)}
             </div>
 
-            {/* Módulos de gestão */}
-            {hasOrcafacil &&
-              (canAccessSales ||
-                canAccessCustomers ||
-                canAccessInventory ||
-                canAccessQuotes ||
-                canAccessCash ||
-                canAccessSuppliers ||
-                canAccessServices ||
-                canAccessServiceOrders) && (
-                <div>
-                  {!sidebarCollapsed && organizations.length > 0 && (
-                    <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
-                      ControleSoft
-                    </span>
-                  )}
-                  <div className="mt-1 space-y-0.5">
-                    {canAccessCash &&
-                      navItem(
-                        '/cash',
-                        'Gerenciamento de Caixa',
-                        <DollarSign className="w-4 h-4" />,
-                      )}
-                    {canAccessSales &&
-                      navItem(
-                        '/orcafacil/sales',
-                        'Vendas',
-                        <ShoppingCart className="w-4 h-4" />,
-                      )}
-                    {canAccessAgenda &&
-                      navItem(
-                        '/agenda',
-                        'Agenda',
-                        <Calendar className="w-4 h-4" />,
-                      )}
-                    {canAccessServiceOrders &&
-                      navItem(
-                        '/service-orders',
-                        'Ordens de Serviço',
-                        <ClipboardList className="w-4 h-4" />,
-                      )}
-                    {canAccessQuotes &&
-                      navItem(
-                        '/orcafacil/quotes',
-                        'Orçamentos',
-                        <FileSpreadsheet className="w-4 h-4" />,
-                      )}
-                    {canAccessCustomers &&
-                      navItem('/orcafacil/customers', 'Clientes', <Users className="w-4 h-4" />)}
-                    {canAccessSuppliers &&
-                      navItem(
-                        '/orcafacil/suppliers',
-                        'Fornecedores',
-                        <Truck className="w-4 h-4" />,
-                      )}
-                    {canAccessInventory &&
-                      navItem('/orcafacil/inventory', 'Estoque', <Package className="w-4 h-4" />)}
-                    {canAccessReports &&
-                      navItem(
-                        '/orcafacil/reports',
-                        'Relatórios',
-                        <FileBarChart className="w-4 h-4" />,
-                      )}
-                    {canAccessServices &&
-                      navItem(
-                        '/services',
-                        'Serviços',
-                        <Wrench className="w-4 h-4" />,
-                      )}
-                    {canAccessMigration &&
-                      navItem(
-                        '/migration',
-                        'Migração',
-                        <Database className="w-4 h-4" />,
-                      )}
-                  </div>
-                </div>
-              )}
+            {/* TÍTULO DA SEÇÃO DE MÓDULOS */}
+            <div
+              className={`px-3 pt-1 pb-1 transition-all duration-200 overflow-hidden whitespace-nowrap ${
+                sidebarCollapsed
+                  ? 'opacity-0 max-h-0 pointer-events-none'
+                  : 'opacity-100 max-h-6'
+              }`}
+            >
+              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Módulos
+              </span>
+            </div>
 
-            {canAccessOrganization && (
-              <div>
-                {!sidebarCollapsed && organizations.length > 0 && (
-                  <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
-                    Administração
-                  </span>
-                )}
-                <div className="mt-1 space-y-0.5">
-                  {navItem(
-                    '/settings/organization',
-                    'Organização',
-                    <Settings className="w-4 h-4" />,
-                  )}
-                </div>
-              </div>
-            )}
-
-            {isSystemOwner(user) && (
-              <div>
-                {!sidebarCollapsed && organizations.length > 0 && (
-                  <span className="block truncate px-3 text-[11px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
-                    Desenvolvedor
-                  </span>
-                )}
-                <div className="mt-1 space-y-0.5">
-                  {navItem(
-                    '/admin/developer-settings',
-                    'Configurações de Desenvolvedor',
-                    <ShieldCheck className="w-4 h-4" />,
-                    unreadSuggestionsCount > 0
-                      ? formatUnreadSuggestionCount(unreadSuggestionsCount)
-                      : undefined,
-                  )}
-                </div>
-              </div>
-            )}
+            {/* MÓDULOS EM ORDEM ALFABÉTICA FIXA */}
+            <div className="space-y-0.5">
+              {sortedVisibleModuleItems.map(renderNavItem)}
+            </div>
           </nav>
         </aside>
         </>
@@ -765,6 +807,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </header>
 
         <div
+          ref={contentContainerRef}
           className={
             isDashboard
               ? 'w-full print:p-0 print:m-0 print:w-full print:max-w-none'

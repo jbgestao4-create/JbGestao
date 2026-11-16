@@ -1,4 +1,5 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { useLayoutEffect } from 'react'
+import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RequireModule } from './RequireModule'
@@ -53,8 +54,21 @@ import {
   SiteAccessAnalyticsPage,
 } from './lazy-pages'
 
+function RootRoute() {
+  const location = useLocation()
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [location.pathname, location.search])
+
+  return <Outlet />
+}
+
 export const router = createBrowserRouter([
   {
+    element: <RootRoute />,
     errorElement: <RouteErrorBoundary />,
     children: [
       // Tela principal pública de apresentação e landing page oficial

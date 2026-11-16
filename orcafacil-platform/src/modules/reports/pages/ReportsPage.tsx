@@ -16,23 +16,20 @@ import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import {
-  AlertTriangle,
-  Ban,
   Boxes,
   Briefcase,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   ClipboardList,
+  CreditCard,
   FileBarChart,
-  FileEdit,
-  FileText,
   Package,
   RefreshCw,
-  RotateCcw,
   Search,
-  Send,
   ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  TrendingUp,
   Truck,
   UserCheck,
   Users,
@@ -42,11 +39,17 @@ import { ReportPrintHeader } from '../components/ReportPrintHeader'
 import { ReportPrintFooter } from '../components/ReportPrintFooter'
 import { ReportActionBar } from '../components/ReportActionBar'
 
-type ReportView = 'home' | 'registrations' | 'quotes_orders' | 'inventory'
-type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
+// Tipos principais de relatórios conforme solicitado pelo usuário
+export type ReportView = 'home' | 'registrations' | 'financial' | 'inventory_services'
 
-type QuotesOrdersPeriodMode = 'day' | 'month' | 'custom'
-type QuotesOrdersTab = 'orders' | 'quotes'
+// Abas de cada tipo de relatório
+export type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
+export type FinancialTab = 'orders' | 'quotes' | 'sales'
+export type InventoryServicesTab = 'movements' | 'inventory' | 'services'
+
+// Filtros específicos para Estoque e Serviço
+export type ItemTypeFilter = 'all' | 'material' | 'service'
+export type DateTypeFilter = 'movement' | 'registration'
 
 const PERIOD_LABELS: Record<ReportPeriodPreset, string> = {
   today: 'Hoje',
@@ -62,28 +65,39 @@ export function ReportsPage() {
   const { currentOrganization } = useOrganization()
   const [searchParams, setSearchParams] = useSearchParams()
 
+  // Sincronização da View atual
   const rawView = searchParams.get('view')
   const currentView: ReportView =
-    rawView === 'registrations' || rawView === 'cadastros'
+    rawView === 'registrations' || rawView === 'cadastros' || rawView === 'cadastrais'
       ? 'registrations'
-      : rawView === 'quotes_orders' || rawView === 'os_orcamentos' || rawView === 'os'
-        ? 'quotes_orders'
-        : rawView === 'inventory' || rawView === 'estoque'
-          ? 'inventory'
+      : rawView === 'financial' ||
+          rawView === 'financeiros' ||
+          rawView === 'quotes_orders' ||
+          rawView === 'os_orcamentos' ||
+          rawView === 'os' ||
+          rawView === 'vendas' ||
+          rawView === 'orcamentos'
+        ? 'financial'
+        : rawView === 'inventory_services' ||
+            rawView === 'estoque_servicos' ||
+            rawView === 'inventory' ||
+            rawView === 'estoque' ||
+            rawView === 'servicos'
+          ? 'inventory_services'
           : 'home'
 
-  // Abas do Módulo de Cadastros
-  const rawTab = searchParams.get('tab')
-  const initialTab: RegistrationsTab =
-    rawTab === 'employees' || rawTab === 'suppliers' || rawTab === 'customers'
-      ? rawTab
+  // ============================================================================
+  // 1. RELATÓRIOS CADASTRAIS (Usuários, Funcionários, Fornecedores, Clientes)
+  // ============================================================================
+  const rawRegTab = searchParams.get('tab')
+  const initialRegTab: RegistrationsTab =
+    rawRegTab === 'employees' || rawRegTab === 'suppliers' || rawRegTab === 'customers'
+      ? rawRegTab
       : 'users'
 
-  const [registrationsTab, setRegistrationsTab] = useState<RegistrationsTab>(initialTab)
-  const [searchQuery, setSearchQuery] = useState('')
-
-  // Filtro de período para o módulo de Cadastros
-  const [dateFilter, setDateFilter] = useState<DateRangeFilter>(() => {
+  const [registrationsTab, setRegistrationsTab] = useState<RegistrationsTab>(initialRegTab)
+  const [regSearchQuery, setRegSearchQuery] = useState('')
+  const [regDateFilter, setRegDateFilter] = useState<DateRangeFilter>(() => {
     const initial = getPresetDateRange('month')
     return {
       preset: 'month',
@@ -93,38 +107,59 @@ export function ReportsPage() {
   })
 
   // ============================================================================
-  // ESTADO DO MÓDULO: O.S & ORÇAMENTOS
+  // 2. RELATÓRIOS FINANCEIROS (O.S, Orçamentos, Vendas)
   // ============================================================================
+  const rawFinTab = searchParams.get('tab')
+  const initialFinTab: FinancialTab =
+    rawFinTab === 'quotes' || rawFinTab === 'orcamentos'
+      ? 'quotes'
+      : rawFinTab === 'sales' || rawFinTab === 'vendas'
+        ? 'sales'
+        : 'orders'
+
+  const [financialTab, setFinancialTab] = useState<FinancialTab>(initialFinTab)
+  const [finSearchQuery, setFinSearchQuery] = useState('')
+  const [finStatusFilter, setFinStatusFilter] = useState('all')
+  const [finPeriodMode, setFinPeriodMode] = useState<'presets' | 'day' | 'month' | 'custom'>('presets')
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const currentMonthIso = useMemo(() => new Date().toISOString().slice(0, 7), [])
-
-  const [qoPeriodMode, setQoPeriodMode] = useState<QuotesOrdersPeriodMode>('day')
-  const [qoSelectedDay, setQoSelectedDay] = useState<string>(todayIso)
-  const [qoSelectedMonth, setQoSelectedMonth] = useState<string>(currentMonthIso)
-  const [qoCustomStartDate, setQoCustomStartDate] = useState<string>(() => {
-    return getPresetDateRange('month').startDate
+  const [finSelectedDay, setFinSelectedDay] = useState(todayIso)
+  const [finSelectedMonth, setFinSelectedMonth] = useState(currentMonthIso)
+  const [finDateFilter, setFinDateFilter] = useState<DateRangeFilter>(() => {
+    const initial = getPresetDateRange('month')
+    return {
+      preset: 'month',
+      startDate: initial.startDate,
+      endDate: initial.endDate,
+    }
   })
-  const [qoCustomEndDate, setQoCustomEndDate] = useState<string>(() => {
-    return getPresetDateRange('month').endDate
-  })
-  const [qoTab, setQoTab] = useState<QuotesOrdersTab>('orders')
-  const [qoStatus, setQoStatus] = useState<string>('all')
-  const [qoSearch, setQoSearch] = useState<string>('')
 
   // ============================================================================
-  // ESTADO DO MÓDULO: RELATÓRIO DE ESTOQUE
+  // 3. RELATÓRIO DE ESTOQUE E SERVIÇO (Movimentações, Estoque Atual, Serviços)
   // ============================================================================
-  const [invSearch, setInvSearch] = useState('')
-  const [invStatus, setInvStatus] = useState<'all' | 'normal' | 'low' | 'out' | 'excess'>('all')
-  const [invCategory, setInvCategory] = useState<string>('all')
-  const [invSupplier, setInvSupplier] = useState<string>('all')
-  const [invAbcClass, setInvAbcClass] = useState<'all' | 'A' | 'B' | 'C'>('all')
-  const [invActiveFilter, setInvActiveFilter] = useState<'all' | 'active' | 'inactive' | 'can_sell'>('all')
-  const [invSortBy, setInvSortBy] = useState<
-    'value_desc' | 'cost_desc' | 'qty_asc' | 'qty_desc' | 'name_asc' | 'margin_desc'
-  >('value_desc')
+  const rawInvTab = searchParams.get('tab')
+  const initialInvTab: InventoryServicesTab =
+    rawInvTab === 'inventory' || rawInvTab === 'estoque'
+      ? 'inventory'
+      : rawInvTab === 'services' || rawInvTab === 'servicos'
+        ? 'services'
+        : 'movements'
 
-  // Dataset Geral
+  const [invServicesTab, setInvServicesTab] = useState<InventoryServicesTab>(initialInvTab)
+  const [invItemType, setInvItemType] = useState<ItemTypeFilter>('all') // Material ou Serviço
+  const [invDateField, setInvDateField] = useState<DateTypeFilter>('movement') // Data Saída ou Cadastro
+  const [invSearchQuery, setInvSearchQuery] = useState('')
+  const [invStockStatus, setInvStockStatus] = useState<'all' | 'normal' | 'low' | 'out'>('all')
+  const [invDateFilter, setInvDateFilter] = useState<DateRangeFilter>(() => {
+    const initial = getPresetDateRange('month')
+    return {
+      preset: 'month',
+      startDate: initial.startDate,
+      endDate: initial.endDate,
+    }
+  })
+
+  // Dataset e Controle de Carregamento
   const [dataset, setDataset] = useState<ReportsDataset>({
     sales: [],
     inventory: [],
@@ -136,16 +171,18 @@ export function ReportsPage() {
     customers: [],
     suppliers: [],
     members: [],
+    services: [],
+    quoteItems: [],
   })
   const [isLoading, setIsLoading] = useState(true)
   const [printOrientationMode, setPrintOrientationMode] = useState<'auto' | 'portrait' | 'landscape'>('auto')
 
-  // Detecta automaticamente se o relatório atual possui muitas colunas (precisando de mais espaço)
+  // Auto-ajuste de orientação do papel
   const isWideReport = useMemo(() => {
-    if (currentView === 'quotes_orders') return true // 8 colunas
-    if (currentView === 'inventory') return true // 7 colunas
+    if (currentView === 'financial') return true
+    if (currentView === 'inventory_services') return true
     if (currentView === 'registrations') {
-      return registrationsTab === 'customers' || registrationsTab === 'suppliers' // 8 e 6 colunas
+      return registrationsTab === 'customers' || registrationsTab === 'suppliers'
     }
     return false
   }, [currentView, registrationsTab])
@@ -157,45 +194,21 @@ export function ReportsPage() {
     return printOrientationMode
   }, [printOrientationMode, isWideReport])
 
-  const applyPrintPageOrientation = useCallback((orientation: 'portrait' | 'landscape') => {
-    let styleEl = document.getElementById('report-print-page-orientation') as HTMLStyleElement | null
-    if (!styleEl) {
-      styleEl = document.createElement('style')
-      styleEl.id = 'report-print-page-orientation'
-      document.head.appendChild(styleEl)
-    }
-    styleEl.textContent = `
-      @media print {
-        @page {
-          size: A4 ${orientation};
-          margin: 0mm;
-        }
-      }
-    `
-  }, [])
-
+  // Aplica classe de orientação CSS para impressão A4
   useEffect(() => {
-    applyPrintPageOrientation(effectiveOrientation)
-    return () => {
-      const styleEl = document.getElementById('report-print-page-orientation')
-      if (styleEl) {
-        styleEl.remove()
-      }
+    const root = document.documentElement
+    root.classList.remove('print-landscape', 'print-portrait')
+    if (effectiveOrientation === 'landscape') {
+      root.classList.add('print-landscape')
+    } else {
+      root.classList.add('print-portrait')
     }
-  }, [effectiveOrientation, applyPrintPageOrientation])
+    return () => {
+      root.classList.remove('print-landscape', 'print-portrait')
+    }
+  }, [effectiveOrientation])
 
-  const handlePrintReport = useCallback(() => {
-    applyPrintPageOrientation(effectiveOrientation)
-    window.print()
-  }, [applyPrintPageOrientation, effectiveOrientation])
-
-  // Metadados padronizados para cabeçalhos e rodapés oficiais de impressão
-  const now = new Date()
-  const rawWeekday = now.toLocaleDateString('pt-BR', { weekday: 'long' })
-  const emissionWeekday = rawWeekday.charAt(0).toUpperCase() + rawWeekday.slice(1)
-  const emissionDate = now.toLocaleDateString('pt-BR')
-  const emissionTime = now.toLocaleTimeString('pt-BR')
-
+  // Carregamento de dados completos
   const loadData = useCallback(async () => {
     if (!currentOrganization) return
     setIsLoading(true)
@@ -211,971 +224,844 @@ export function ReportsPage() {
     void loadData()
   }, [loadData])
 
-  const navigateToView = (view: ReportView, tab?: RegistrationsTab) => {
+  // Navegação entre Views e Abas
+  const navigateToView = (view: ReportView, tab?: string) => {
     const next: Record<string, string> = { view }
     if (tab) next.tab = tab
     setSearchParams(next)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleTabChange = (tab: RegistrationsTab) => {
-    setRegistrationsTab(tab)
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set('tab', tab)
-      return next
-    })
+  const handlePrintReport = () => {
+    window.print()
   }
 
   // ============================================================================
-  // CÁLCULOS: MÓDULO DE CADASTROS
+  // CÁLCULOS E FILTRAGEM: RELATÓRIOS CADASTRAIS
   // ============================================================================
-  const registrationsAnalytics = useMemo(() => {
-    return reportsService.computeRegistrationsAnalytics(dataset)
-  }, [dataset])
-
   const customerMetricsMap = useMemo(() => {
-    const map = new Map<string, { totalSpent: number; salesCount: number }>()
+    const map = new Map<string, { totalSpent: number; salesCount: number; quotesCount: number }>()
     for (const s of dataset.sales) {
-      if (s.customerId && s.status !== 'rejected' && s.status !== 'expired') {
-        const cur = map.get(s.customerId) || { totalSpent: 0, salesCount: 0 }
-        cur.totalSpent += parseFloat(s.total) || 0
-        cur.salesCount += 1
-        map.set(s.customerId, cur)
+      if (s.status !== 'rejected') {
+        const val = parseFloat(s.total) || 0
+        const prev = map.get(s.customerId) || { totalSpent: 0, salesCount: 0, quotesCount: 0 }
+        map.set(s.customerId, { ...prev, totalSpent: prev.totalSpent + val, salesCount: prev.salesCount + 1 })
       }
     }
+    for (const q of dataset.quotes) {
+      const prev = map.get(q.customerId) || { totalSpent: 0, salesCount: 0, quotesCount: 0 }
+      map.set(q.customerId, { ...prev, quotesCount: prev.quotesCount + 1 })
+    }
     return map
-  }, [dataset.sales])
-
-  const filteredMembers = useMemo(() => {
-    return dataset.members.filter((m) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase()
-        const matchName = m.displayName?.toLowerCase().includes(q)
-        const matchEmail = m.email.toLowerCase().includes(q)
-        const matchJob = m.jobTitle?.toLowerCase().includes(q)
-        if (!matchName && !matchEmail && !matchJob) return false
-      }
-      return true
-    })
-  }, [dataset.members, searchQuery])
+  }, [dataset.sales, dataset.quotes])
 
   const filteredUsers = useMemo(() => {
-    return filteredMembers.map((m) => ({
-      userId: m.userId,
-      email: m.email,
-      displayName: m.displayName,
-      role: m.role,
-      isOwner: m.role === 'owner',
-      isAdmin: m.role === 'admin' || m.role === 'owner',
-    }))
-  }, [filteredMembers])
+    return dataset.members.filter((u) => {
+      if (!isDateInRange(u.createdAt, regDateFilter)) return false
+      if (!regSearchQuery) return true
+      const q = regSearchQuery.toLowerCase()
+      return (
+        u.email.toLowerCase().includes(q) ||
+        (u.displayName && u.displayName.toLowerCase().includes(q)) ||
+        u.role.toLowerCase().includes(q)
+      )
+    })
+  }, [dataset.members, regDateFilter, regSearchQuery])
 
   const filteredEmployees = useMemo(() => {
-    return filteredMembers
-      .filter((m) => Boolean(m.jobTitle?.trim()) || m.role !== 'owner')
-      .map((m) => ({
-        userId: m.userId,
-        name: m.displayName || m.email.split('@')[0],
-        email: m.email,
-        jobTitle: m.jobTitle || 'Colaborador',
-        role: m.role,
-      }))
-  }, [filteredMembers])
+    return dataset.members
+      .filter((m) => m.role !== 'owner')
+      .filter((e) => {
+        if (!isDateInRange(e.createdAt, regDateFilter)) return false
+        if (!regSearchQuery) return true
+        const q = regSearchQuery.toLowerCase()
+        return (
+          e.email.toLowerCase().includes(q) ||
+          (e.displayName && e.displayName.toLowerCase().includes(q)) ||
+          e.role.toLowerCase().includes(q)
+        )
+      })
+  }, [dataset.members, regDateFilter, regSearchQuery])
 
   const filteredSuppliers = useMemo(() => {
     return dataset.suppliers.filter((s) => {
-      if (!isDateInRange(s.createdAt, dateFilter)) return false
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase()
-        const matchName = s.name.toLowerCase().includes(q)
-        const matchDoc = s.document?.toLowerCase().includes(q)
-        const matchPhone = s.phone?.includes(q)
-        const matchEmail = s.email?.toLowerCase().includes(q)
-        if (!matchName && !matchDoc && !matchPhone && !matchEmail) return false
-      }
-      return true
+      if (!isDateInRange(s.createdAt, regDateFilter)) return false
+      if (!regSearchQuery) return true
+      const q = regSearchQuery.toLowerCase()
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.document && s.document.toLowerCase().includes(q)) ||
+        (s.email && s.email.toLowerCase().includes(q)) ||
+        (s.phone && s.phone.toLowerCase().includes(q))
+      )
     })
-  }, [dataset.suppliers, dateFilter, searchQuery])
+  }, [dataset.suppliers, regDateFilter, regSearchQuery])
 
   const filteredCustomers = useMemo(() => {
     return dataset.customers.filter((c) => {
-      if (!isDateInRange(c.createdAt, dateFilter)) return false
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase()
-        const matchName = c.name.toLowerCase().includes(q)
-        const matchDoc = c.document?.toLowerCase().includes(q)
-        const matchPhone = c.phone?.includes(q)
-        const matchEmail = c.email?.toLowerCase().includes(q)
-        if (!matchName && !matchDoc && !matchPhone && !matchEmail) return false
-      }
-      return true
+      if (!isDateInRange(c.createdAt, regDateFilter)) return false
+      if (!regSearchQuery) return true
+      const q = regSearchQuery.toLowerCase()
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.document && c.document.toLowerCase().includes(q)) ||
+        (c.email && c.email.toLowerCase().includes(q)) ||
+        (c.phone && c.phone.toLowerCase().includes(q))
+      )
     })
-  }, [dataset.customers, dateFilter, searchQuery])
+  }, [dataset.customers, regDateFilter, regSearchQuery])
 
-  const activeTabRecordsCount = useMemo(() => {
-    switch (registrationsTab) {
-      case 'users':
-        return filteredUsers.length
-      case 'employees':
-        return filteredEmployees.length
-      case 'suppliers':
-        return filteredSuppliers.length
-      case 'customers':
-        return filteredCustomers.length
+  const regAnalytics = useMemo(() => {
+    const totalSpentCustomers = filteredCustomers.reduce(
+      (sum, c) => sum + (customerMetricsMap.get(c.id)?.totalSpent || 0),
+      0,
+    )
+    return {
+      usersCount: filteredUsers.length,
+      employeesCount: filteredEmployees.length,
+      suppliersCount: filteredSuppliers.length,
+      customersCount: filteredCustomers.length,
+      totalSpentCustomers,
     }
-  }, [registrationsTab, filteredUsers, filteredEmployees, filteredSuppliers, filteredCustomers])
+  }, [filteredUsers, filteredEmployees, filteredSuppliers, filteredCustomers, customerMetricsMap])
 
-  const activeTabTitle = useMemo(() => {
-    switch (registrationsTab) {
-      case 'users':
-        return 'Usuários do Sistema'
-      case 'employees':
-        return 'Quadro de Funcionários'
-      case 'suppliers':
-        return 'Fornecedores Homologados'
-      case 'customers':
-        return 'Carteira de Clientes'
-    }
-  }, [registrationsTab])
-
-  // Exportações do Módulo de Cadastros
+  // Exportações Cadastrais
   const handleExportCadastrosExcel = () => {
-    const timestamp = new Date().toISOString().split('T')[0]
+    const timestamp = todayIso
     if (registrationsTab === 'users') {
-      const headers = ['E-mail', 'Nome de Exibição', 'Nível de Permissão', 'Proprietário']
-      const rows = filteredUsers.map((u) => [
-        u.email,
-        u.displayName || '—',
-        u.role === 'owner' ? 'Proprietário' : u.role === 'admin' ? 'Administrador' : 'Usuário Padrão',
-        u.isOwner ? 'Sim' : 'Não',
-      ])
-      exportRowsToExcel(`relatorio-cadastros-usuarios-${timestamp}.xlsx`, headers, rows)
+      exportRowsToExcel(
+        `relatorio_usuarios_${timestamp}`,
+        ['Nome / Exibição', 'E-mail', 'Papel', 'Status', 'Data Cadastro'],
+        filteredUsers.map((u) => [
+          u.displayName || u.email.split('@')[0],
+          u.email,
+          u.role,
+          'Ativo',
+          u.createdAt.split('T')[0],
+        ]),
+      )
     } else if (registrationsTab === 'employees') {
-      const headers = ['Nome do Funcionário', 'Cargo / Função', 'E-mail Corporativo', 'Nível de Acesso']
-      const rows = filteredEmployees.map((e) => [
-        e.name,
-        e.jobTitle,
-        e.email,
-        e.role === 'owner' ? 'Proprietário' : e.role === 'admin' ? 'Administrador' : 'Operador',
-      ])
-      exportRowsToExcel(`relatorio-cadastros-funcionarios-${timestamp}.xlsx`, headers, rows)
+      exportRowsToExcel(
+        `relatorio_funcionarios_${timestamp}`,
+        ['Nome', 'E-mail', 'Cargo', 'Data Cadastro'],
+        filteredEmployees.map((e) => [
+          e.displayName || e.email.split('@')[0],
+          e.email,
+          e.role,
+          e.createdAt.split('T')[0],
+        ]),
+      )
     } else if (registrationsTab === 'suppliers') {
-      const headers = ['Razão Social / Nome', 'CNPJ / CPF', 'Telefone / WhatsApp', 'E-mail', 'Endereço', 'Data de Cadastro']
-      const rows = filteredSuppliers.map((s) => [
-        s.name,
-        s.document || '—',
-        s.phone ? formatPhoneNumber(s.phone) : '—',
-        s.email || '—',
-        s.address || '—',
-        s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—',
-      ])
-      exportRowsToExcel(`relatorio-cadastros-fornecedores-${timestamp}.xlsx`, headers, rows)
+      exportRowsToExcel(
+        `relatorio_fornecedores_${timestamp}`,
+        ['Razão Social', 'CPF/CNPJ', 'Telefone', 'E-mail', 'Endereço', 'Data Cadastro'],
+        filteredSuppliers.map((s) => [
+          s.name,
+          s.document || '-',
+          s.phone || '-',
+          s.email || '-',
+          s.address || '-',
+          s.createdAt.split('T')[0],
+        ]),
+      )
     } else {
-      const headers = ['Nome / Razão Social', 'Tipo de Pessoa', 'CPF / CNPJ', 'Telefone', 'E-mail', 'Total em Compras (R$)', 'Faturamentos', 'Data de Cadastro']
-      const rows = filteredCustomers.map((c) => {
-        const metrics = customerMetricsMap.get(c.id)
-        return [
+      exportRowsToExcel(
+        `relatorio_clientes_${timestamp}`,
+        ['Cliente', 'CPF/CNPJ', 'Telefone', 'E-mail', 'Total Compras', 'Data Cadastro'],
+        filteredCustomers.map((c) => [
           c.name,
-          c.personType === 'company' ? 'Pessoa Jurídica' : 'Pessoa Física',
-          c.document || '—',
-          c.phone ? formatPhoneNumber(c.phone) : '—',
-          c.email || '—',
-          formatCurrency((metrics?.totalSpent || 0).toFixed(2)),
-          metrics?.salesCount || 0,
-          c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—',
-        ]
-      })
-      exportRowsToExcel(`relatorio-cadastros-clientes-${timestamp}.xlsx`, headers, rows)
+          c.document || '-',
+          c.phone || '-',
+          c.email || '-',
+          formatCurrency(customerMetricsMap.get(c.id)?.totalSpent || 0),
+          c.createdAt.split('T')[0],
+        ]),
+      )
     }
   }
 
   const handleExportCadastrosXml = () => {
-    const timestamp = new Date().toISOString().split('T')[0]
-    const metadata = {
-      empresa: currentOrganization?.name || 'ControleSoft',
-      data_emissao: emissionDate,
-      hora_emissao: emissionTime,
-      modulo: activeTabTitle,
-      total_registros: activeTabRecordsCount,
-    }
+    const timestamp = todayIso
     if (registrationsTab === 'users') {
-      const headers = ['email', 'nome', 'permissao', 'proprietario']
-      const rows = filteredUsers.map((u) => [
-        u.email,
-        u.displayName || '',
-        u.role,
-        u.isOwner ? 'sim' : 'nao',
-      ])
-      exportRowsToXml(`relatorio-cadastros-usuarios-${timestamp}.xml`, 'relatorio_cadastros_usuarios', 'usuario', headers, rows, metadata)
+      exportRowsToXml(
+        `relatorio_usuarios_${timestamp}`,
+        'Usuarios',
+        'Usuario',
+        ['Nome / Exibição', 'E-mail', 'Papel', 'Data Cadastro'],
+        filteredUsers.map((u) => [
+          u.displayName || u.email.split('@')[0],
+          u.email,
+          u.role,
+          u.createdAt.split('T')[0],
+        ]),
+      )
     } else if (registrationsTab === 'employees') {
-      const headers = ['nome', 'cargo', 'email', 'permissao']
-      const rows = filteredEmployees.map((e) => [
-        e.name,
-        e.jobTitle,
-        e.email,
-        e.role,
-      ])
-      exportRowsToXml(`relatorio-cadastros-funcionarios-${timestamp}.xml`, 'relatorio_cadastros_funcionarios', 'funcionario', headers, rows, metadata)
+      exportRowsToXml(
+        `relatorio_funcionarios_${timestamp}`,
+        'Funcionarios',
+        'Funcionario',
+        ['Nome', 'E-mail', 'Cargo', 'Data Cadastro'],
+        filteredEmployees.map((e) => [
+          e.displayName || e.email.split('@')[0],
+          e.email,
+          e.role,
+          e.createdAt.split('T')[0],
+        ]),
+      )
     } else if (registrationsTab === 'suppliers') {
-      const headers = ['nome', 'documento', 'telefone', 'email', 'endereco', 'data_cadastro']
-      const rows = filteredSuppliers.map((s) => [
-        s.name,
-        s.document || '',
-        s.phone || '',
-        s.email || '',
-        s.address || '',
-        s.createdAt || '',
-      ])
-      exportRowsToXml(`relatorio-cadastros-fornecedores-${timestamp}.xml`, 'relatorio_cadastros_fornecedores', 'fornecedor', headers, rows, metadata)
+      exportRowsToXml(
+        `relatorio_fornecedores_${timestamp}`,
+        'Fornecedores',
+        'Fornecedor',
+        ['Razao', 'Documento', 'Telefone', 'Email', 'DataCadastro'],
+        filteredSuppliers.map((s) => [
+          s.name,
+          s.document || '',
+          s.phone || '',
+          s.email || '',
+          s.createdAt.split('T')[0],
+        ]),
+      )
     } else {
-      const headers = ['nome', 'tipo_pessoa', 'documento', 'telefone', 'email', 'total_gasto', 'compras_count', 'data_cadastro']
-      const rows = filteredCustomers.map((c) => {
-        const metrics = customerMetricsMap.get(c.id)
-        return [
+      exportRowsToXml(
+        `relatorio_clientes_${timestamp}`,
+        'Clientes',
+        'Cliente',
+        ['Nome', 'Documento', 'Telefone', 'Email', 'TotalCompras', 'DataCadastro'],
+        filteredCustomers.map((c) => [
           c.name,
-          c.personType || 'individual',
           c.document || '',
           c.phone || '',
           c.email || '',
-          (metrics?.totalSpent || 0).toFixed(2),
-          metrics?.salesCount || 0,
-          c.createdAt || '',
-        ]
-      })
-      exportRowsToXml(`relatorio-cadastros-clientes-${timestamp}.xml`, 'relatorio_cadastros_clientes', 'cliente', headers, rows, metadata)
+          (customerMetricsMap.get(c.id)?.totalSpent || 0).toFixed(2),
+          c.createdAt.split('T')[0],
+        ]),
+      )
     }
   }
 
   // ============================================================================
-  // CÁLCULOS: MÓDULO DE O.S & ORÇAMENTOS
+  // CÁLCULOS E FILTRAGEM: RELATÓRIOS FINANCEIROS (O.S, Orçamentos, Vendas)
   // ============================================================================
-  const qoPeriodInfo = useMemo(() => {
-    if (qoPeriodMode === 'day') {
-      const d = new Date(qoSelectedDay + 'T12:00:00')
-      const wDay = d.toLocaleDateString('pt-BR', { weekday: 'long' })
-      const capWDay = wDay.charAt(0).toUpperCase() + wDay.slice(1)
-      const dateFmt = d.toLocaleDateString('pt-BR')
-      return {
-        label: `Diário (${capWDay})`,
-        rangeText: dateFmt,
-      }
+  const finEffectiveRange = useMemo<DateRangeFilter & { label: string }>(() => {
+    if (finPeriodMode === 'day') {
+      return { preset: 'custom', startDate: finSelectedDay, endDate: finSelectedDay, label: `Dia ${finSelectedDay.split('-').reverse().join('/')}` }
     }
-    if (qoPeriodMode === 'month') {
-      const [y, m] = qoSelectedMonth.split('-').map(Number)
-      const d = new Date(y, m - 1, 1)
-      const mStr = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-      const capMStr = mStr.charAt(0).toUpperCase() + mStr.slice(1)
-      return {
-        label: 'Mensal',
-        rangeText: capMStr,
-      }
+    if (finPeriodMode === 'month') {
+      const [year, month] = finSelectedMonth.split('-')
+      const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate()
+      const startDate = `${finSelectedMonth}-01`
+      const endDate = `${finSelectedMonth}-${String(lastDay).padStart(2, '0')}`
+      return { preset: 'custom', startDate, endDate, label: `Mês ${month}/${year}` }
     }
-    const startFmt = qoCustomStartDate.split('-').reverse().join('/')
-    const endFmt = qoCustomEndDate.split('-').reverse().join('/')
     return {
-      label: 'Período Específico',
-      rangeText: `${startFmt} a ${endFmt}`,
+      preset: finDateFilter.preset,
+      startDate: finDateFilter.startDate,
+      endDate: finDateFilter.endDate,
+      label: `${finDateFilter.startDate.split('-').reverse().join('/')} a ${finDateFilter.endDate.split('-').reverse().join('/')}`,
     }
-  }, [qoPeriodMode, qoSelectedDay, qoSelectedMonth, qoCustomStartDate, qoCustomEndDate])
+  }, [finPeriodMode, finSelectedDay, finSelectedMonth, finDateFilter])
 
-  // Unificação dos Registros de O.S e Orçamentos
-  interface UnifiedRecord {
+  interface UnifiedFinancialRecord {
     id: string
-    kind: 'order' | 'quote'
+    kind: 'order' | 'quote' | 'sale'
     number: string
     date: string
     customerName: string
-    customerPhone: string | null
     customerDocument: string | null
     status: string
     statusLabel: string
-    statusBadgeColor: string
+    statusBadgeClass: string
     responsiblePerson: string | null
     description: string
-    subtotal: string
-    discount: string
-    total: string
-    closedAt?: string | null
-    validUntil?: string | null
-    estimatedDelivery?: string | null
+    subtotal: number
+    discount: number
+    total: number
+    paymentMethod?: string
+    itemsCount?: number
+    isPdv?: boolean
   }
 
-  const allUnifiedRecords = useMemo<UnifiedRecord[]>(() => {
-    const list: UnifiedRecord[] = []
+  const allFinancialRecords = useMemo<UnifiedFinancialRecord[]>(() => {
+    const list: UnifiedFinancialRecord[] = []
 
-    // 1. Mapeamento de Ordens de Serviço (O.S.)
+    // 1. Ordens de Serviço (O.S)
     for (const os of dataset.serviceOrders) {
-      let statusLabel = 'Manutenção Pendente'
-      let statusBadgeColor = 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300'
+      let statusLabel = 'Pendente'
+      let statusBadgeClass = 'bg-amber-50 text-amber-700 border-amber-200'
       if (os.status === 'queue') {
         statusLabel = 'Fila de Atendimento'
-        statusBadgeColor = 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300'
+        statusBadgeClass = 'bg-blue-50 text-blue-700 border-blue-200'
       } else if (os.status === 'in_maintenance') {
         statusLabel = 'Em Manutenção'
-        statusBadgeColor = 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300'
-      } else if (os.status === 'pending') {
-        statusLabel = 'Manutenção Pendente'
-        statusBadgeColor = 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300'
+        statusBadgeClass = 'bg-blue-50 text-blue-700 border-blue-200'
       } else if (os.status === 'ready') {
-        statusLabel = 'Pronto'
-        statusBadgeColor = 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300'
+        statusLabel = 'Pronto / Finalizado'
+        statusBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'
       } else if (os.status === 'closed') {
-        statusLabel = 'O.S. Encerrada'
-        statusBadgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300'
+        statusLabel = 'Encerrada'
+        statusBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200'
       }
 
-      const equipDesc = [os.equipmentName, os.equipmentBrand, os.equipmentModel].filter(Boolean).join(' ')
-      const desc = equipDesc
-        ? `${equipDesc}${os.reportedProblem ? ` — ${os.reportedProblem}` : ''}`
-        : os.reportedProblem || 'Serviços e Manutenção'
-
-      const rawOrderNum = os.orderNumber ? String(os.orderNumber).trim() : os.id.slice(0, 6)
-      const formattedOrderNum = rawOrderNum.startsWith('#')
-        ? rawOrderNum
-        : rawOrderNum.toUpperCase().startsWith('OS-')
-          ? `#${rawOrderNum}`
-          : `#OS-${rawOrderNum}`
-
+      const desc = [os.equipmentName, os.equipmentModel, os.reportedProblem].filter(Boolean).join(' - ') || 'Serviços & Manutenção'
       list.push({
         id: os.id,
         kind: 'order',
-        number: formattedOrderNum,
+        number: os.orderNumber ? `#OS-${os.orderNumber}` : `#OS-${os.id.slice(0, 6)}`,
         date: os.createdAt,
         customerName: os.customerName || 'Cliente sem identificação',
-        customerPhone: os.customerPhone || null,
         customerDocument: os.customerDocument || null,
         status: os.status,
         statusLabel,
-        statusBadgeColor,
+        statusBadgeClass,
         responsiblePerson: os.technicianName || os.creatorName || null,
         description: desc,
-        subtotal: String(os.subtotal || os.total || '0'),
-        discount: String(os.discount || '0'),
-        total: String(os.total || '0'),
-        closedAt: os.closedAt,
-        estimatedDelivery: os.estimatedDeliveryDate,
+        subtotal: parseFloat(String(os.subtotal || os.total || '0')) || 0,
+        discount: parseFloat(String(os.discount || '0')) || 0,
+        total: parseFloat(String(os.total || '0')) || 0,
       })
     }
 
-    // 2. Mapeamento de Orçamentos
+    // 2. Orçamentos
     for (const q of dataset.quotes) {
       let statusLabel = 'Em Aberto'
-      let statusBadgeColor = 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300'
+      let statusBadgeClass = 'bg-blue-50 text-blue-700 border-blue-200'
       if (q.status === 'approved') {
         statusLabel = 'Aprovado'
-        statusBadgeColor = 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300'
+        statusBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'
       } else if (q.status === 'rejected') {
         statusLabel = 'Rejeitado'
-        statusBadgeColor = 'bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300'
+        statusBadgeClass = 'bg-rose-50 text-rose-700 border-rose-200'
       } else if (q.status === 'expired') {
         statusLabel = 'Expirado'
-        statusBadgeColor = 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-300'
-      } else if (q.status === 'draft') {
-        statusLabel = 'Rascunho'
-        statusBadgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300'
+        statusBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200'
       }
-
-      const rawQuoteNum = q.quoteNumber ? String(q.quoteNumber).trim() : q.id.slice(0, 6)
-      const formattedQuoteNum = rawQuoteNum.startsWith('#')
-        ? rawQuoteNum
-        : rawQuoteNum.toUpperCase().startsWith('ORC-')
-          ? `#${rawQuoteNum}`
-          : `#ORC-${rawQuoteNum}`
 
       list.push({
         id: q.id,
         kind: 'quote',
-        number: formattedQuoteNum,
+        number: q.quoteNumber ? `#${q.quoteNumber}` : `#ORC-${q.id.slice(0, 6)}`,
         date: q.createdAt,
         customerName: q.customerName || 'Cliente sem identificação',
-        customerPhone: q.customerPhone || null,
         customerDocument: null,
         status: q.status,
         statusLabel,
-        statusBadgeColor,
-        responsiblePerson: q.sellerName || q.creatorName || null,
-        description: 'Proposta Comercial / Orçamento',
-        subtotal: String(q.subtotal || q.total || '0'),
-        discount: String(q.discount || '0'),
-        total: String(q.total || '0'),
-        validUntil: q.validUntil,
+        statusBadgeClass,
+        responsiblePerson: q.creatorName || null,
+        description: 'Orçamento Comercial / Proposta',
+        subtotal: parseFloat(String(q.subtotal || q.total || '0')) || 0,
+        discount: parseFloat(String(q.discount || '0')) || 0,
+        total: parseFloat(String(q.total || '0')) || 0,
+      })
+    }
+
+    // 3. Vendas Realizadas
+    for (const s of dataset.sales) {
+      let statusLabel = 'Concluída'
+      let statusBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      if (s.status === 'rejected') {
+        statusLabel = 'Cancelada'
+        statusBadgeClass = 'bg-rose-50 text-rose-700 border-rose-200'
+      } else if (s.status === 'expired') {
+        statusLabel = 'Expirada'
+        statusBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200'
+      }
+
+      list.push({
+        id: s.id,
+        kind: 'sale',
+        number: s.saleNumber || `#VEN-${s.id.slice(0, 6)}`,
+        date: s.createdAt,
+        customerName: s.customerName || 'Consumidor Final',
+        customerDocument: s.customerDocument || null,
+        status: s.status,
+        statusLabel,
+        statusBadgeClass,
+        responsiblePerson: s.sellerName || s.creatorName || null,
+        description: s.isPdv ? 'Venda Terminal PDV' : 'Venda Balcão / Faturamento',
+        subtotal: parseFloat(String(s.subtotal || s.total || '0')) || 0,
+        discount: parseFloat(String(s.discount || '0')) || 0,
+        total: parseFloat(String(s.total || '0')) || 0,
+        paymentMethod: s.paymentMethod,
+        itemsCount: s.itemsCount,
+        isPdv: s.isPdv,
       })
     }
 
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [dataset.serviceOrders, dataset.quotes])
+  }, [dataset.serviceOrders, dataset.quotes, dataset.sales])
 
-  // Filtragem dos Registros conforme o modo de período (Dia, Mês, Específico) e busca
-  const filteredQoRecords = useMemo(() => {
-    return allUnifiedRecords.filter((rec) => {
-      // 1. Filtro de Sub-aba (Todos / Ordens / Orçamentos)
-      if (qoTab === 'orders' && rec.kind !== 'order') return false
-      if (qoTab === 'quotes' && rec.kind !== 'quote') return false
+  const filteredFinancialRecords = useMemo(() => {
+    return allFinancialRecords.filter((rec) => {
+      // 1. Filtro da Aba Selecionada (O.S / Orçamentos / Vendas)
+      if (financialTab === 'orders' && rec.kind !== 'order') return false
+      if (financialTab === 'quotes' && rec.kind !== 'quote') return false
+      if (financialTab === 'sales' && rec.kind !== 'sale') return false
 
       // 2. Filtro de Período
-      const recDate = rec.date.slice(0, 10)
-      if (qoPeriodMode === 'day') {
-        if (recDate !== qoSelectedDay) return false
-      } else if (qoPeriodMode === 'month') {
-        if (recDate.slice(0, 7) !== qoSelectedMonth) return false
-      } else if (qoPeriodMode === 'custom') {
-        if (qoCustomStartDate && recDate < qoCustomStartDate) return false
-        if (qoCustomEndDate && recDate > qoCustomEndDate) return false
+      if (!isDateInRange(rec.date, finEffectiveRange)) {
+        return false
       }
 
-      // 3. Filtro de Status / Filas
-      if (qoStatus !== 'all') {
-        if (qoStatus === 'maintenance_pending') {
-          if (rec.status !== 'pending' && rec.status !== 'in_maintenance') return false
-        } else if (rec.status !== qoStatus) {
-          return false
-        }
+      // 3. Filtro de Status
+      if (finStatusFilter !== 'all' && rec.status !== finStatusFilter) {
+        return false
       }
 
       // 4. Busca Textual
-      if (qoSearch.trim()) {
-        const q = qoSearch.toLowerCase()
+      if (finSearchQuery.trim()) {
+        const q = finSearchQuery.toLowerCase().trim()
         const matchNum = rec.number.toLowerCase().includes(q)
         const matchCust = rec.customerName.toLowerCase().includes(q)
-        const matchPhone = rec.customerPhone?.includes(q)
-        const matchDoc = rec.customerDocument?.toLowerCase().includes(q)
-        const matchResp = rec.responsiblePerson?.toLowerCase().includes(q)
         const matchDesc = rec.description.toLowerCase().includes(q)
-        if (!matchNum && !matchCust && !matchPhone && !matchDoc && !matchResp && !matchDesc) {
-          return false
-        }
+        const matchResp = rec.responsiblePerson?.toLowerCase().includes(q) || false
+        if (!matchNum && !matchCust && !matchDesc && !matchResp) return false
       }
 
       return true
     })
-  }, [allUnifiedRecords, qoTab, qoPeriodMode, qoSelectedDay, qoSelectedMonth, qoCustomStartDate, qoCustomEndDate, qoStatus, qoSearch])
+  }, [allFinancialRecords, financialTab, finEffectiveRange, finStatusFilter, finSearchQuery])
 
-  // Estatísticas do Relatório de O.S & Orçamentos
-  const qoMetrics = useMemo(() => {
-    let ordersTotal = 0
-    let ordersCount = 0
-    let quotesTotal = 0
-    let quotesCount = 0
+  const financialMetrics = useMemo(() => {
+    const totalVolume = filteredFinancialRecords.reduce((sum, r) => sum + r.total, 0)
+    const count = filteredFinancialRecords.length
+    const averageTicket = count > 0 ? totalVolume / count : 0
+    const approvedOrClosedCount = filteredFinancialRecords.filter(
+      (r) => r.status === 'approved' || r.status === 'closed' || r.status === 'ready' || r.kind === 'sale',
+    ).length
 
-    for (const rec of filteredQoRecords) {
-      const val = parseFloat(rec.total) || 0
-      if (rec.kind === 'order') {
-        ordersCount += 1
-        ordersTotal += val
+    return {
+      totalVolume,
+      count,
+      averageTicket,
+      approvedOrClosedCount,
+    }
+  }, [filteredFinancialRecords])
+
+  const handleExportFinExcel = () => {
+    const timestamp = todayIso
+    const tabName = financialTab === 'orders' ? 'Ordens_de_Servico' : financialTab === 'quotes' ? 'Orcamentos' : 'Vendas'
+    exportRowsToExcel(
+      `relatorio_${tabName.toLowerCase()}_${timestamp}`,
+      ['Número', 'Tipo', 'Data', 'Cliente', 'Responsável', 'Descrição', 'Subtotal (R$)', 'Desconto (R$)', 'Total (R$)', 'Status'],
+      filteredFinancialRecords.map((r) => [
+        r.number,
+        r.kind === 'order' ? 'O.S' : r.kind === 'quote' ? 'Orçamento' : 'Venda',
+        r.date.split('T')[0],
+        r.customerName,
+        r.responsiblePerson || '-',
+        r.description,
+        r.subtotal.toFixed(2),
+        r.discount.toFixed(2),
+        r.total.toFixed(2),
+        r.statusLabel,
+      ]),
+    )
+  }
+
+  const handleExportFinXml = () => {
+    const timestamp = todayIso
+    const tabName = financialTab === 'orders' ? 'Ordens_de_Servico' : financialTab === 'quotes' ? 'Orcamentos' : 'Vendas'
+    exportRowsToXml(
+      `relatorio_${tabName.toLowerCase()}_${timestamp}`,
+      tabName,
+      'RegistroFinanceiro',
+      ['Numero', 'Tipo', 'Data', 'Cliente', 'Responsavel', 'Total', 'Status'],
+      filteredFinancialRecords.map((r) => [
+        r.number,
+        r.kind,
+        r.date.split('T')[0],
+        r.customerName,
+        r.responsiblePerson || '',
+        r.total.toFixed(2),
+        r.statusLabel,
+      ]),
+    )
+  }
+
+  // ============================================================================
+  // CÁLCULOS E FILTRAGEM: RELATÓRIO DE ESTOQUE E SERVIÇOS
+  // ============================================================================
+  const salesLookupMap = useMemo(() => {
+    const map = new Map<string, { saleNumber: string; customerName: string; createdAt: string }>()
+    for (const s of dataset.sales) {
+      map.set(s.id, {
+        saleNumber: s.saleNumber || `#VEN-${s.id.slice(0, 6)}`,
+        customerName: s.customerName || 'Consumidor Final',
+        createdAt: s.createdAt,
+      })
+    }
+    for (const q of dataset.quotes) {
+      if (!map.has(q.id)) {
+        map.set(q.id, {
+          saleNumber: q.quoteNumber || `#ORC-${q.id.slice(0, 6)}`,
+          customerName: q.customerName || 'Cliente',
+          createdAt: q.createdAt,
+        })
+      }
+    }
+    return map
+  }, [dataset.sales, dataset.quotes])
+
+  const inventoryLookupMap = useMemo(() => {
+    const map = new Map<string, { name: string; sku: string; category: string; unit: string; createdAt: string; qty: number }>()
+    for (const item of dataset.inventory) {
+      map.set(item.id, {
+        name: item.name,
+        sku: item.sku || 'S/N',
+        category: item.category || 'Geral',
+        unit: item.unit || 'UN',
+        createdAt: item.createdAt || new Date().toISOString(),
+        qty: parseFloat(item.quantityOnHand) || 0,
+      })
+    }
+    return map
+  }, [dataset.inventory])
+
+  const servicesLookupMap = useMemo(() => {
+    const map = new Map<string, { name: string; code: string; category: string; unit: string; createdAt: string }>()
+    for (const s of dataset.services) {
+      map.set(s.id, {
+        name: s.name,
+        code: s.serviceCode || 'SRV',
+        category: s.categoryName || 'Serviços',
+        unit: s.billingUnit || 'UN',
+        createdAt: s.createdAt || new Date().toISOString(),
+      })
+    }
+    return map
+  }, [dataset.services])
+
+  // Todas as saídas/movimentações a partir dos itens de venda/orçamento
+  interface ItemMovementRow {
+    id: string
+    itemId: string
+    itemName: string
+    itemCode: string
+    itemType: 'material' | 'service'
+    category: string
+    unit: string
+    movementDate: string
+    registrationDate: string
+    effectiveDate: string
+    quantity: number
+    unitPrice: number
+    totalAmount: number
+    customerName: string
+    saleNumber: string
+    stockOnHand?: number
+  }
+
+  const allMovementRows = useMemo<ItemMovementRow[]>(() => {
+    const list: ItemMovementRow[] = []
+
+    for (const qi of dataset.quoteItems) {
+      const sale = salesLookupMap.get(qi.quote_id)
+      const isService = !!qi.service_id || qi.item_type === 'service'
+      const itemType: 'material' | 'service' = isService ? 'service' : 'material'
+
+      let itemName = qi.description || (isService ? 'Serviço' : 'Produto')
+      let itemCode = isService ? 'SRV' : 'MAT'
+      let category = isService ? 'Serviços' : 'Estoque'
+      let unit = qi.unit || 'UN'
+      let registrationDate = sale?.createdAt || new Date().toISOString()
+      let stockOnHand: number | undefined
+
+      if (isService && qi.service_id) {
+        const srv = servicesLookupMap.get(qi.service_id)
+        if (srv) {
+          itemName = srv.name
+          itemCode = srv.code
+          category = srv.category
+          unit = srv.unit
+          registrationDate = srv.createdAt
+        }
+      } else if (!isService && qi.inventory_item_id) {
+        const inv = inventoryLookupMap.get(qi.inventory_item_id)
+        if (inv) {
+          itemName = inv.name
+          itemCode = inv.sku
+          category = inv.category
+          unit = inv.unit
+          registrationDate = inv.createdAt
+          stockOnHand = inv.qty
+        }
+      }
+
+      const movementDate = sale?.createdAt || new Date().toISOString()
+      const effectiveDate = invDateField === 'movement' ? movementDate : registrationDate
+      const quantity = Math.max(1, parseFloat(String(qi.quantity)) || 1)
+      const unitPrice = Math.max(0, parseFloat(String(qi.unit_price)) || 0)
+      const totalAmount = Math.max(0, parseFloat(String(qi.total)) || quantity * unitPrice)
+
+      list.push({
+        id: qi.id,
+        itemId: qi.inventory_item_id || qi.service_id || qi.id,
+        itemName,
+        itemCode,
+        itemType,
+        category,
+        unit,
+        movementDate,
+        registrationDate,
+        effectiveDate,
+        quantity,
+        unitPrice,
+        totalAmount,
+        customerName: sale?.customerName || 'Consumidor Final',
+        saleNumber: sale?.saleNumber || '#VEN-0000',
+        stockOnHand,
+      })
+    }
+
+    return list
+  }, [dataset.quoteItems, salesLookupMap, inventoryLookupMap, servicesLookupMap, invDateField])
+
+  // Filtragem das Movimentações / Saídas
+  const filteredMovementRows = useMemo(() => {
+    return allMovementRows.filter((row) => {
+      // 1. Filtro Material ou Serviço
+      if (invItemType === 'material' && row.itemType !== 'material') return false
+      if (invItemType === 'service' && row.itemType !== 'service') return false
+
+      // 2. Filtro de Período pela data escolhida (saída ou cadastro)
+      if (!isDateInRange(row.effectiveDate, invDateFilter)) {
+        return false
+      }
+
+      // 3. Busca textual
+      if (invSearchQuery.trim()) {
+        const q = invSearchQuery.toLowerCase().trim()
+        const matchName = row.itemName.toLowerCase().includes(q)
+        const matchCode = row.itemCode.toLowerCase().includes(q)
+        const matchCust = row.customerName.toLowerCase().includes(q)
+        const matchSale = row.saleNumber.toLowerCase().includes(q)
+        if (!matchName && !matchCode && !matchCust && !matchSale) return false
+      }
+
+      return true
+    })
+  }, [allMovementRows, invItemType, invDateFilter, invSearchQuery])
+
+  // Ranking de Itens com Maior Movimentação
+  const mostMovedRanking = useMemo(() => {
+    const map = new Map<string, {
+      key: string
+      name: string
+      code: string
+      type: 'material' | 'service'
+      totalQty: number
+      totalRevenue: number
+      timesSold: number
+      unit: string
+    }>()
+
+    for (const r of filteredMovementRows) {
+      const k = `${r.itemType}:${r.itemCode}:${r.itemName}`
+      const existing = map.get(k)
+      if (existing) {
+        existing.totalQty += r.quantity
+        existing.totalRevenue += r.totalAmount
+        existing.timesSold += 1
       } else {
-        quotesCount += 1
-        quotesTotal += val
+        map.set(k, {
+          key: k,
+          name: r.itemName,
+          code: r.itemCode,
+          type: r.itemType,
+          totalQty: r.quantity,
+          totalRevenue: r.totalAmount,
+          timesSold: 1,
+          unit: r.unit,
+        })
       }
     }
 
-    return {
-      ordersCount,
-      ordersTotal,
-      quotesCount,
-      quotesTotal,
-      grandTotal: ordersTotal + quotesTotal,
-      totalCount: filteredQoRecords.length,
-    }
-  }, [filteredQoRecords])
+    return Array.from(map.values()).sort((a, b) => b.totalQty - a.totalQty)
+  }, [filteredMovementRows])
 
-  // Contadores das Filas de O.S (considerando o período ativo para auditoria precisa)
-  const queueCounts = useMemo(() => {
-    const osInPeriod = allUnifiedRecords.filter((rec) => {
-      if (rec.kind !== 'order') return false
-      const recDate = rec.date.slice(0, 10)
-      if (qoPeriodMode === 'day') {
-        if (recDate !== qoSelectedDay) return false
-      } else if (qoPeriodMode === 'month') {
-        if (recDate.slice(0, 7) !== qoSelectedMonth) return false
-      } else if (qoPeriodMode === 'custom') {
-        if (qoCustomStartDate && recDate < qoCustomStartDate) return false
-        if (qoCustomEndDate && recDate > qoCustomEndDate) return false
+  // Filtragem de Estoque Atual (Aba Estoque Físico)
+  const filteredCurrentInventory = useMemo(() => {
+    return dataset.inventory.filter((item) => {
+      // Filtro de status
+      const q = Math.max(0, parseFloat(item.quantityOnHand) || 0)
+      const min = Math.max(0, parseFloat(item.minimumQuantity) || 0)
+      if (invStockStatus === 'out' && q > 0) return false
+      if (invStockStatus === 'low' && (q <= 0 || q > min)) return false
+      if (invStockStatus === 'normal' && (q <= 0 || (min > 0 && q <= min))) return false
+
+      // Busca textual
+      if (invSearchQuery.trim()) {
+        const query = invSearchQuery.toLowerCase().trim()
+        const matchName = item.name.toLowerCase().includes(query)
+        const matchSku = item.sku ? item.sku.toLowerCase().includes(query) : false
+        const matchCat = item.category ? item.category.toLowerCase().includes(query) : false
+        if (!matchName && !matchSku && !matchCat) return false
+      }
+
+      return true
+    })
+  }, [dataset.inventory, invStockStatus, invSearchQuery])
+
+  // Filtragem de Serviços Cadastrados (Aba Serviços)
+  const filteredServices = useMemo(() => {
+    return dataset.services.filter((s) => {
+      if (invSearchQuery.trim()) {
+        const query = invSearchQuery.toLowerCase().trim()
+        const matchName = s.name.toLowerCase().includes(query)
+        const matchCode = s.serviceCode.toLowerCase().includes(query)
+        const matchCat = s.categoryName ? s.categoryName.toLowerCase().includes(query) : false
+        if (!matchName && !matchCode && !matchCat) return false
       }
       return true
     })
+  }, [dataset.services, invSearchQuery])
+
+  // Métricas do módulo Estoque e Serviços
+  const invServicesMetrics = useMemo(() => {
+    const totalQtyMoved = filteredMovementRows.reduce((sum, r) => sum + r.quantity, 0)
+    const materialsRevenue = filteredMovementRows
+      .filter((r) => r.itemType === 'material')
+      .reduce((sum, r) => sum + r.totalAmount, 0)
+    const servicesRevenue = filteredMovementRows
+      .filter((r) => r.itemType === 'service')
+      .reduce((sum, r) => sum + r.totalAmount, 0)
+    const topMovedItem = mostMovedRanking[0] || null
 
     return {
-      all: osInPeriod.length,
-      queue: osInPeriod.filter((r) => r.status === 'queue').length,
-      maintenance_pending: osInPeriod.filter((r) => r.status === 'pending' || r.status === 'in_maintenance').length,
-      ready: osInPeriod.filter((r) => r.status === 'ready').length,
-      closed: osInPeriod.filter((r) => r.status === 'closed').length,
+      totalQtyMoved,
+      materialsRevenue,
+      servicesRevenue,
+      totalRevenue: materialsRevenue + servicesRevenue,
+      topMovedItem,
     }
-  }, [allUnifiedRecords, qoPeriodMode, qoSelectedDay, qoSelectedMonth, qoCustomStartDate, qoCustomEndDate])
+  }, [filteredMovementRows, mostMovedRanking])
 
-  // Contadores de Status para Orçamentos (conforme filtro de período)
-  const quoteStatusCounts = useMemo(() => {
-    const quotesInPeriod = allUnifiedRecords.filter((rec) => {
-      if (rec.kind !== 'quote') return false
-      const recDate = rec.date.slice(0, 10)
-      if (qoPeriodMode === 'day') {
-        if (recDate !== qoSelectedDay) return false
-      } else if (qoPeriodMode === 'month') {
-        if (recDate.slice(0, 7) !== qoSelectedMonth) return false
-      } else if (qoPeriodMode === 'custom') {
-        if (qoCustomStartDate && recDate < qoCustomStartDate) return false
-        if (qoCustomEndDate && recDate > qoCustomEndDate) return false
-      }
-      return true
-    })
-
-    return {
-      total: quotesInPeriod.length,
-      draft: quotesInPeriod.filter((r) => r.status === 'draft').length,
-      approved: quotesInPeriod.filter((r) => r.status === 'approved' || r.status === 'completed').length,
-      sent: quotesInPeriod.filter((r) => r.status === 'sent').length,
-      rejected: quotesInPeriod.filter((r) => r.status === 'rejected').length,
+  const handleExportInvServicesExcel = () => {
+    const timestamp = todayIso
+    if (invServicesTab === 'movements') {
+      exportRowsToExcel(
+        `relatorio_saidas_movimentacoes_${timestamp}`,
+        ['Item', 'Código', 'Tipo', 'Data Movimentação', 'Data Cadastro', 'Quantidade', 'Cliente', 'Venda Utilizada', 'Preço Unitário (R$)', 'Total (R$)'],
+        filteredMovementRows.map((r) => [
+          r.itemName,
+          r.itemCode,
+          r.itemType === 'material' ? 'Material / Produto' : 'Serviço',
+          r.movementDate.split('T')[0],
+          r.registrationDate.split('T')[0],
+          r.quantity,
+          r.customerName,
+          r.saleNumber,
+          r.unitPrice.toFixed(2),
+          r.totalAmount.toFixed(2),
+        ]),
+      )
+    } else if (invServicesTab === 'inventory') {
+      exportRowsToExcel(
+        `relatorio_estoque_atual_${timestamp}`,
+        ['SKU', 'Produto', 'Categoria', 'Unidade', 'Qtd Estoque', 'Qtd Mínima', 'Preço Custo (R$)', 'Preço Venda (R$)'],
+        filteredCurrentInventory.map((i) => [
+          i.sku || 'S/N',
+          i.name,
+          i.category || 'Geral',
+          i.unit,
+          i.quantityOnHand,
+          i.minimumQuantity,
+          parseFloat(i.purchasePrice || '0').toFixed(2),
+          parseFloat(i.unitPrice).toFixed(2),
+        ]),
+      )
+    } else {
+      exportRowsToExcel(
+        `relatorio_servicos_cadastrados_${timestamp}`,
+        ['Código', 'Serviço', 'Categoria', 'Unidade', 'Preço Venda (R$)', 'Custo Total (R$)', 'Margem Lucro (%)'],
+        filteredServices.map((s) => [
+          s.serviceCode,
+          s.name,
+          s.categoryName || 'Serviços',
+          s.billingUnit,
+          parseFloat(s.salePrice).toFixed(2),
+          parseFloat(s.totalCost).toFixed(2),
+          `${s.profitMargin}%`,
+        ]),
+      )
     }
-  }, [allUnifiedRecords, qoPeriodMode, qoSelectedDay, qoSelectedMonth, qoCustomStartDate, qoCustomEndDate])
-
-  // Exportações de O.S & Orçamentos
-  const handleExportQoExcel = () => {
-    const timestamp = new Date().toISOString().split('T')[0]
-    const headers = [
-      'Tipo de Registro',
-      'Número',
-      'Data de Emissão',
-      'Cliente',
-      'Telefone',
-      'Documento',
-      'Status',
-      'Responsável / Técnico',
-      'Equipamento / Descrição',
-      'Subtotal (R$)',
-      'Desconto (R$)',
-      'Valor Total (R$)',
-    ]
-    const rows = filteredQoRecords.map((r) => [
-      r.kind === 'order' ? 'Ordem de Serviço (O.S)' : 'Orçamento',
-      r.number,
-      r.date ? new Date(r.date).toLocaleDateString('pt-BR') : '—',
-      r.customerName,
-      r.customerPhone ? formatPhoneNumber(r.customerPhone) : '—',
-      r.customerDocument || '—',
-      r.statusLabel,
-      r.responsiblePerson || '—',
-      r.description,
-      formatCurrency(r.subtotal),
-      formatCurrency(r.discount),
-      formatCurrency(r.total),
-    ])
-    exportRowsToExcel(`relatorio-os-orcamentos-${timestamp}.xlsx`, headers, rows)
   }
 
-  const handleExportQoXml = () => {
-    const timestamp = new Date().toISOString().split('T')[0]
-    const metadata = {
-      empresa: currentOrganization?.name || 'ControleSoft',
-      data_emissao: emissionDate,
-      hora_emissao: emissionTime,
-      periodo_modo: qoPeriodInfo.label,
-      periodo_intervalo: qoPeriodInfo.rangeText,
-      total_registros: filteredQoRecords.length,
-      total_financeiro: qoMetrics.grandTotal.toFixed(2),
+  const handleExportInvServicesXml = () => {
+    const timestamp = todayIso
+    if (invServicesTab === 'movements') {
+      exportRowsToXml(
+        `relatorio_saidas_movimentacoes_${timestamp}`,
+        'Movimentacoes',
+        'Movimentacao',
+        ['Item', 'Codigo', 'Tipo', 'DataMovimentacao', 'Quantidade', 'Cliente', 'Venda', 'Total'],
+        filteredMovementRows.map((r) => [
+          r.itemName,
+          r.itemCode,
+          r.itemType,
+          r.movementDate.split('T')[0],
+          r.quantity,
+          r.customerName,
+          r.saleNumber,
+          r.totalAmount.toFixed(2),
+        ]),
+      )
+    } else if (invServicesTab === 'inventory') {
+      exportRowsToXml(
+        `relatorio_estoque_atual_${timestamp}`,
+        'EstoqueAtual',
+        'Produto',
+        ['SKU', 'Produto', 'Categoria', 'Estoque', 'PrecoVenda'],
+        filteredCurrentInventory.map((i) => [
+          i.sku || '',
+          i.name,
+          i.category || '',
+          i.quantityOnHand,
+          i.unitPrice,
+        ]),
+      )
+    } else {
+      exportRowsToXml(
+        `relatorio_servicos_cadastrados_${timestamp}`,
+        'ServicosCadastrados',
+        'Servico',
+        ['Codigo', 'Servico', 'Categoria', 'PrecoVenda'],
+        filteredServices.map((s) => [
+          s.serviceCode,
+          s.name,
+          s.categoryName || '',
+          s.salePrice,
+        ]),
+      )
     }
-    const headers = [
-      'tipo',
-      'numero',
-      'data_emissao',
-      'cliente',
-      'telefone',
-      'documento',
-      'status',
-      'responsavel',
-      'descricao',
-      'subtotal',
-      'desconto',
-      'valor_total',
-    ]
-    const rows = filteredQoRecords.map((r) => [
-      r.kind === 'order' ? 'ordem_de_servico' : 'orcamento',
-      r.number,
-      r.date,
-      r.customerName,
-      r.customerPhone || '',
-      r.customerDocument || '',
-      r.status,
-      r.responsiblePerson || '',
-      r.description,
-      r.subtotal,
-      r.discount,
-      r.total,
-    ])
-    exportRowsToXml(
-      `relatorio-os-orcamentos-${timestamp}.xml`,
-      'relatorio_ordens_servico_orcamentos',
-      'registro',
-      headers,
-      rows,
-      metadata,
-    )
-  }
-
-  // ============================================================================
-  // CÁLCULOS: MÓDULO DE RELATÓRIO DE ESTOQUE
-  // ============================================================================
-  const invCategories = useMemo(() => {
-    const set = new Set<string>()
-    dataset.inventory.forEach((i) => {
-      if (i.category?.trim()) set.add(i.category.trim())
-    })
-    return Array.from(set).sort()
-  }, [dataset.inventory])
-
-  const invSuppliers = useMemo(() => {
-    const map = new Map<string, string>()
-    dataset.suppliers.forEach((s) => {
-      map.set(s.id, s.name)
-    })
-    dataset.inventory.forEach((i) => {
-      if (i.supplierId && i.supplierName) {
-        map.set(i.supplierId, i.supplierName)
-      }
-    })
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
-  }, [dataset.suppliers, dataset.inventory])
-
-  const enrichedInventory = useMemo(() => {
-    const list = dataset.inventory.map((item) => {
-      const qty = Math.max(0, parseFloat(item.quantityOnHand) || 0)
-      const minQty = Math.max(0, parseFloat(item.minimumQuantity) || 0)
-      const maxQty = parseFloat(item.maximumQuantity) || 0
-      const cost = Math.max(0, parseFloat(item.purchasePrice) || parseFloat(item.averageCost) || 0)
-      const price = Math.max(0, parseFloat(item.unitPrice) || 0)
-      const totalCostValue = qty * cost
-      const totalSaleValue = qty * price
-      const potentialProfit = totalSaleValue - totalCostValue
-      const marginPercent = price > 0 ? ((price - cost) / price) * 100 : 0
-
-      let stockStatus: 'out' | 'low' | 'normal' | 'excess' = 'normal'
-      let statusLabel = 'Normal'
-      let statusBadgeColor = 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300'
-
-      if (qty <= 0) {
-        stockStatus = 'out'
-        statusLabel = 'Esgotado'
-        statusBadgeColor = 'bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300'
-      } else if (minQty > 0 && qty <= minQty) {
-        stockStatus = 'low'
-        statusLabel = 'Estoque Baixo'
-        statusBadgeColor = 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300'
-      } else if (maxQty > 0 && qty > maxQty) {
-        stockStatus = 'excess'
-        statusLabel = 'Excedente'
-        statusBadgeColor = 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300'
-      }
-
-      return {
-        ...item,
-        qty,
-        minQty,
-        maxQty,
-        cost,
-        price,
-        totalCostValue,
-        totalSaleValue,
-        potentialProfit,
-        marginPercent,
-        stockStatus,
-        statusLabel,
-        statusBadgeColor,
-      }
-    })
-
-    // Curva ABC decrescente por valor total de venda
-    const sorted = [...list].sort((a, b) => b.totalSaleValue - a.totalSaleValue)
-    const grandSale = sorted.reduce((sum, i) => sum + i.totalSaleValue, 0)
-    let cumulative = 0
-    const abcMap = new Map<string, 'A' | 'B' | 'C'>()
-    sorted.forEach((i) => {
-      const share = grandSale > 0 ? (i.totalSaleValue / grandSale) * 100 : 0
-      cumulative += share
-      let cls: 'A' | 'B' | 'C' = 'C'
-      if (cumulative <= 80 || (cumulative - share < 80 && share > 0)) {
-        cls = 'A'
-      } else if (cumulative <= 95 || (cumulative - share < 95 && share > 0)) {
-        cls = 'B'
-      }
-      abcMap.set(i.id, cls)
-    })
-
-    return list.map((item) => ({
-      ...item,
-      abcClass: abcMap.get(item.id) || 'C',
-    }))
-  }, [dataset.inventory])
-
-  const filteredInventory = useMemo(() => {
-    return enrichedInventory
-      .filter((item) => {
-        // 1. Status do estoque
-        if (invStatus !== 'all' && item.stockStatus !== invStatus) return false
-
-        // 2. Categoria
-        if (invCategory !== 'all' && (item.category || '').trim() !== invCategory) return false
-
-        // 3. Fornecedor
-        if (invSupplier !== 'all') {
-          const matchSup =
-            item.supplierId === invSupplier ||
-            item.supplierName === invSupplier ||
-            item.suppliers?.some((s) => s.supplierId === invSupplier)
-          if (!matchSup) return false
-        }
-
-        // 4. Curva ABC
-        if (invAbcClass !== 'all' && item.abcClass !== invAbcClass) return false
-
-        // 5. Situação cadastral
-        if (invActiveFilter === 'active' && !item.isActive) return false
-        if (invActiveFilter === 'inactive' && item.isActive) return false
-        if (invActiveFilter === 'can_sell' && !item.canSell) return false
-
-        // 6. Busca textual
-        if (invSearch.trim()) {
-          const q = invSearch.toLowerCase()
-          const matchName = item.name.toLowerCase().includes(q)
-          const matchSku = item.sku?.toLowerCase().includes(q)
-          const matchBarcode = item.barcode?.toLowerCase().includes(q)
-          const matchBrand = item.brand?.toLowerCase().includes(q)
-          const matchModel = item.model?.toLowerCase().includes(q)
-          const matchCategory = item.category?.toLowerCase().includes(q)
-          const matchLocation = item.location?.toLowerCase().includes(q)
-          if (!matchName && !matchSku && !matchBarcode && !matchBrand && !matchModel && !matchCategory && !matchLocation) {
-            return false
-          }
-        }
-
-        return true
-      })
-      .sort((a, b) => {
-        if (invSortBy === 'value_desc') return b.totalSaleValue - a.totalSaleValue
-        if (invSortBy === 'cost_desc') return b.totalCostValue - a.totalCostValue
-        if (invSortBy === 'qty_asc') return a.qty - b.qty
-        if (invSortBy === 'qty_desc') return b.qty - a.qty
-        if (invSortBy === 'name_asc') return a.name.localeCompare(b.name, 'pt-BR')
-        if (invSortBy === 'margin_desc') return b.marginPercent - a.marginPercent
-        return 0
-      })
-  }, [
-    enrichedInventory,
-    invStatus,
-    invCategory,
-    invSupplier,
-    invAbcClass,
-    invActiveFilter,
-    invSearch,
-    invSortBy,
-  ])
-
-  const inventoryMetrics = useMemo(() => {
-    let totalUnits = 0
-    let totalCostValue = 0
-    let totalSaleValue = 0
-    let outCount = 0
-    let lowCount = 0
-    let normalCount = 0
-    let excessCount = 0
-
-    for (const item of filteredInventory) {
-      totalUnits += item.qty
-      totalCostValue += item.totalCostValue
-      totalSaleValue += item.totalSaleValue
-      if (item.stockStatus === 'out') outCount += 1
-      else if (item.stockStatus === 'low') lowCount += 1
-      else if (item.stockStatus === 'excess') excessCount += 1
-      else normalCount += 1
-    }
-
-    const potentialProfit = totalSaleValue - totalCostValue
-    const avgMargin = totalSaleValue > 0 ? (potentialProfit / totalSaleValue) * 100 : 0
-
-    return {
-      totalItems: filteredInventory.length,
-      totalUnits,
-      totalCostValue,
-      totalSaleValue,
-      potentialProfit,
-      avgMargin,
-      outCount,
-      lowCount,
-      normalCount,
-      excessCount,
-    }
-  }, [filteredInventory])
-
-  const inventoryGlobalCounts = useMemo(() => {
-    return {
-      all: enrichedInventory.length,
-      normal: enrichedInventory.filter((i) => i.stockStatus === 'normal').length,
-      low: enrichedInventory.filter((i) => i.stockStatus === 'low').length,
-      out: enrichedInventory.filter((i) => i.stockStatus === 'out').length,
-      excess: enrichedInventory.filter((i) => i.stockStatus === 'excess').length,
-    }
-  }, [enrichedInventory])
-
-  const inventoryStatusLabel = useMemo(() => {
-    switch (invStatus) {
-      case 'normal':
-        return 'Estoque Normal'
-      case 'low':
-        return 'Estoque Baixo'
-      case 'out':
-        return 'Estoque Zerado / Esgotado'
-      case 'excess':
-        return 'Estoque Excedente'
-      default:
-        return 'Todos os Itens'
-    }
-  }, [invStatus])
-
-  const handleExportInventoryExcel = () => {
-    const timestamp = new Date().toISOString().split('T')[0]
-    const headers = [
-      'Código / SKU',
-      'Código de Barras',
-      'Descrição do Produto',
-      'Categoria',
-      'Marca',
-      'Localização',
-      'Unidade',
-      'Qtd. em Estoque',
-      'Qtd. Mínima',
-      'Qtd. Máxima',
-      'Preço de Custo (R$)',
-      'Preço de Venda (R$)',
-      'Valor Total Custo (R$)',
-      'Valor Total Venda (R$)',
-      'Lucro Potencial (R$)',
-      'Margem de Lucro (%)',
-      'Situação do Estoque',
-      'Curva ABC',
-      'Fornecedor Principal',
-      'Ativo',
-    ]
-    const rows = filteredInventory.map((item) => [
-      item.sku || '—',
-      item.barcode || '—',
-      item.name,
-      item.category || 'Sem Categoria',
-      item.brand || '—',
-      item.location || '—',
-      item.unit || 'UN',
-      item.qty,
-      item.minQty,
-      item.maxQty > 0 ? item.maxQty : '—',
-      formatCurrency(item.cost.toFixed(2)),
-      formatCurrency(item.price.toFixed(2)),
-      formatCurrency(item.totalCostValue.toFixed(2)),
-      formatCurrency(item.totalSaleValue.toFixed(2)),
-      formatCurrency(item.potentialProfit.toFixed(2)),
-      `${item.marginPercent.toFixed(1)}%`,
-      item.statusLabel,
-      `Classe ${item.abcClass}`,
-      item.supplierName || '—',
-      item.isActive ? 'Sim' : 'Não',
-    ])
-    exportRowsToExcel(`relatorio-estoque-inventario-${timestamp}.xlsx`, headers, rows)
-  }
-
-  const handleExportInventoryXml = () => {
-    const timestamp = new Date().toISOString().split('T')[0]
-    const metadata = {
-      empresa: currentOrganization?.name || 'ControleSoft',
-      data_emissao: emissionDate,
-      hora_emissao: emissionTime,
-      filtro_status: invStatus,
-      filtro_categoria: invCategory,
-      total_produtos: filteredInventory.length,
-      unidades_em_estoque: inventoryMetrics.totalUnits,
-      valor_total_custo: inventoryMetrics.totalCostValue.toFixed(2),
-      valor_total_venda: inventoryMetrics.totalSaleValue.toFixed(2),
-      lucro_potencial: inventoryMetrics.potentialProfit.toFixed(2),
-    }
-    const headers = [
-      'sku',
-      'codigo_barras',
-      'nome_produto',
-      'categoria',
-      'marca',
-      'localizacao',
-      'unidade',
-      'quantidade_estoque',
-      'quantidade_minima',
-      'preco_custo',
-      'preco_venda',
-      'total_custo',
-      'total_venda',
-      'lucro_potencial',
-      'margem_percentual',
-      'status_estoque',
-      'curva_abc',
-      'fornecedor',
-    ]
-    const rows = filteredInventory.map((item) => [
-      item.sku || '',
-      item.barcode || '',
-      item.name,
-      item.category || '',
-      item.brand || '',
-      item.location || '',
-      item.unit || 'UN',
-      item.qty,
-      item.minQty,
-      item.cost.toFixed(2),
-      item.price.toFixed(2),
-      item.totalCostValue.toFixed(2),
-      item.totalSaleValue.toFixed(2),
-      item.potentialProfit.toFixed(2),
-      item.marginPercent.toFixed(1),
-      item.stockStatus,
-      item.abcClass,
-      item.supplierName || '',
-    ])
-    exportRowsToXml(
-      `relatorio-estoque-inventario-${timestamp}.xml`,
-      'relatorio_estoque',
-      'produto',
-      headers,
-      rows,
-      metadata
-    )
   }
 
   // ============================================================================
-  // VIEW: CENTRAL DE RELATÓRIO (HUB PRINCIPAL LIMPO)
+  // RENDERIZAÇÃO: CABEÇALHOS DE IMPRESSÃO
+  // ============================================================================
+  const emissionWeekday = useMemo(() => {
+    const days = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado']
+    return days[new Date().getDay()]
+  }, [])
+  const emissionDate = useMemo(() => new Date().toLocaleDateString('pt-BR'), [])
+  const emissionTime = useMemo(() => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), [])
+
+  // ============================================================================
+  // VIEW: CENTRAL DE RELATÓRIO (HUB PRINCIPAL - 3 MÓDULOS)
   // ============================================================================
   if (currentView === 'home') {
-    const totalQuotesOrdersAll = dataset.serviceOrders.length + dataset.quotes.length
-    const grandFinanceAll =
-      dataset.serviceOrders.reduce((sum, os) => sum + (parseFloat(os.total) || 0), 0) +
-      dataset.quotes.reduce((sum, q) => sum + (parseFloat(q.total) || 0), 0)
-
-    const totalInventorySkus = dataset.inventory.length
-    const totalInventoryUnits = dataset.inventory.reduce((sum, i) => sum + (parseFloat(i.quantityOnHand) || 0), 0)
-    const totalInventorySaleValue = dataset.inventory.reduce((sum, i) => {
-      const q = Math.max(0, parseFloat(i.quantityOnHand) || 0)
-      const p = Math.max(0, parseFloat(i.unitPrice) || 0)
-      return sum + q * p
-    }, 0)
-    const inventoryAttentionCount = dataset.inventory.filter((i) => {
-      const q = Math.max(0, parseFloat(i.quantityOnHand) || 0)
-      const min = Math.max(0, parseFloat(i.minimumQuantity) || 0)
-      return q <= 0 || (min > 0 && q <= min)
-    }).length
-
     return (
       <div className="space-y-6">
-        {/* CABEÇALHO DO HUB CENTRAL DE RELATÓRIO */}
+        {/* CABEÇALHO DO HUB CENTRAL */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 dark:border-slate-800 pb-5">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-3">
               <FileBarChart className="h-7 w-7 text-blue-600 dark:text-blue-400" />
-              Central de Relatório
+              Central de Relatórios
             </h1>
             <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-              Selecione um dos módulos abaixo para auditoria, visualização, exportação e impressão de relatórios.
+              Selecione uma das categorias de relatório abaixo para auditar, visualizar, filtrar, exportar e imprimir dados.
             </p>
           </div>
 
@@ -1185,7 +1071,7 @@ export function ReportsPage() {
               size="sm"
               onClick={() => void loadData()}
               disabled={isLoading}
-              className="gap-2 rounded-xl border-gray-200 dark:border-slate-800 text-xs"
+              className="gap-2 rounded-xl border-gray-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               Atualizar Dados
@@ -1193,41 +1079,41 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* CATÁLOGO EXCLUSIVO DOS MÓDULOS DE RELATÓRIO */}
+        {/* OS 3 MÓDULOS PRINCIPAIS DE RELATÓRIO */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
-              Módulos Disponíveis
+              Categorias de Relatórios
             </h2>
             <span className="text-xs text-gray-400">
-              Clique no módulo desejado para acessar os filtros e emitir relatórios
+              Design padronizado e paleta neutra com dados em tempo real
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* 1. MÓDULO: RELATÓRIO GERAL DE CADASTROS */}
-            <Card className="group relative overflow-hidden rounded-2xl border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* 1. MÓDULO: RELATÓRIOS CADASTRAIS */}
+            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
               <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
                 <div>
                   <div className="flex items-center justify-between">
-                    <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-700 dark:text-blue-300">
+                    <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-600 dark:text-blue-400">
                       <UserCheck className="h-6 w-6" />
                     </div>
-                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-800 dark:text-blue-300">
-                      CADASTROS &amp; EQUIPE
+                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                      MÓDULO 1
                     </span>
                   </div>
                   <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    RELATÓRIO GERAL DE CADASTROS
+                    RELATÓRIOS CADASTRAIS
                   </h3>
                   <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
-                    Auditoria cadastral completa de usuários do sistema, equipe de funcionários, fornecedores homologados e carteira de clientes.
+                    Auditoria completa de todos os cadastros do sistema: usuários de acesso, equipe de funcionários, fornecedores homologados e carteira de clientes.
                   </p>
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                    <span>Usuários: <b>{registrationsAnalytics.totalUsers}</b></span>
-                    <span>Funcionários: <b>{registrationsAnalytics.employeesCount}</b></span>
-                    <span>Fornecedores: <b>{registrationsAnalytics.totalSuppliers}</b></span>
-                    <span>Clientes: <b>{registrationsAnalytics.totalCustomers}</b></span>
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
+                    <span>Usuários: <b className="text-slate-900 dark:text-white">{dataset.members.length}</b></span>
+                    <span>Funcionários: <b className="text-slate-900 dark:text-white">{dataset.members.filter((m) => m.role !== 'owner').length}</b></span>
+                    <span>Fornecedores: <b className="text-slate-900 dark:text-white">{dataset.suppliers.length}</b></span>
+                    <span>Clientes: <b className="text-slate-900 dark:text-white">{dataset.customers.length}</b></span>
                   </div>
                 </div>
 
@@ -1239,7 +1125,7 @@ export function ReportsPage() {
                   >
                     <span className="inline-flex items-center gap-2">
                       <UserCheck className="h-4 w-4" />
-                      Abrir Relatório de Cadastros
+                      Abrir Relatórios Cadastrais
                     </span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -1247,41 +1133,41 @@ export function ReportsPage() {
               </CardContent>
             </Card>
 
-            {/* 2. MÓDULO: RELATÓRIO DE O.S E ORÇAMENTOS */}
-            <Card className="group relative overflow-hidden rounded-2xl border-gray-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+            {/* 2. MÓDULO: RELATÓRIOS FINANCEIROS */}
+            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
               <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
                 <div>
                   <div className="flex items-center justify-between">
-                    <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/60 p-3 text-amber-700 dark:text-amber-300">
-                      <Wrench className="h-6 w-6" />
+                    <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-600 dark:text-blue-400">
+                      <CreditCard className="h-6 w-6" />
                     </div>
-                    <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-amber-800 dark:text-amber-300">
-                      ORDENS DE SERVIÇO &amp; PROPOSTAS
+                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                      MÓDULO 2
                     </span>
                   </div>
                   <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    RELATÓRIO DE O.S &amp; ORÇAMENTOS
+                    RELATÓRIOS FINANCEIROS
                   </h3>
                   <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
-                    Auditoria e controle detalhado de Ordens de Serviço (O.S) e Orçamentos comerciais. Visualize e filtre por Dia, Mês ou Período Específico com exportação Excel e XML.
+                    Controle financeiro consolidado com alternância entre Ordens de Serviço (O.S), Orçamentos e Vendas efetuadas (PDV e Balcão).
                   </p>
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                    <span>O.S Emitidas: <b>{dataset.serviceOrders.length}</b></span>
-                    <span>Orçamentos: <b>{dataset.quotes.length}</b></span>
-                    <span>Total Registros: <b>{totalQuotesOrdersAll}</b></span>
-                    <span>Volume Total: <b>{formatCurrency(grandFinanceAll.toFixed(2))}</b></span>
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
+                    <span>O.S Emitidas: <b className="text-slate-900 dark:text-white">{dataset.serviceOrders.length}</b></span>
+                    <span>Orçamentos: <b className="text-slate-900 dark:text-white">{dataset.quotes.length}</b></span>
+                    <span>Vendas Realizadas: <b className="text-slate-900 dark:text-white">{dataset.sales.length}</b></span>
+                    <span>Total Registros: <b className="text-slate-900 dark:text-white">{dataset.serviceOrders.length + dataset.quotes.length + dataset.sales.length}</b></span>
                   </div>
                 </div>
 
                 <div className="pt-2">
                   <Button
                     size="sm"
-                    onClick={() => navigateToView('quotes_orders')}
-                    className="w-full justify-between rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-medium shadow-xs"
+                    onClick={() => navigateToView('financial')}
+                    className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <ClipboardList className="h-4 w-4" />
-                      Abrir Relatório de O.S &amp; Orçamentos
+                      <CreditCard className="h-4 w-4" />
+                      Abrir Relatórios Financeiros
                     </span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -1289,41 +1175,41 @@ export function ReportsPage() {
               </CardContent>
             </Card>
 
-            {/* 3. MÓDULO: RELATÓRIO DE ESTOQUE */}
-            <Card className="group relative overflow-hidden rounded-2xl border-gray-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+            {/* 3. MÓDULO: RELATÓRIO DE ESTOQUE E SERVIÇO */}
+            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
               <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
                 <div>
                   <div className="flex items-center justify-between">
-                    <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 p-3 text-emerald-700 dark:text-emerald-300">
-                      <Package className="h-6 w-6" />
+                    <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-600 dark:text-blue-400">
+                      <Boxes className="h-6 w-6" />
                     </div>
-                    <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-300">
-                      ESTOQUE &amp; INVENTÁRIO
+                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                      MÓDULO 3
                     </span>
                   </div>
                   <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    RELATÓRIO DE ESTOQUE
+                    ESTOQUE E SERVIÇO
                   </h3>
                   <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
-                    Balanço analítico do inventário físico, controle de reposição mínima, itens esgotados, valorização a custo e venda, e Curva ABC.
+                    Controle de materiais e serviços cadastrados, ranking de itens mais movimentados e histórico de saídas vinculado ao cliente e à venda utilizada.
                   </p>
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                    <span>Itens / SKUs: <b>{totalInventorySkus}</b></span>
-                    <span>Unidades Físicas: <b>{totalInventoryUnits}</b></span>
-                    <span>Atenção / Baixo: <b className={inventoryAttentionCount > 0 ? 'text-amber-600 font-bold' : ''}>{inventoryAttentionCount}</b></span>
-                    <span>Valor de Venda: <b>{formatCurrency(totalInventorySaleValue.toFixed(2))}</b></span>
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
+                    <span>Materiais / SKUs: <b className="text-slate-900 dark:text-white">{dataset.inventory.length}</b></span>
+                    <span>Serviços: <b className="text-slate-900 dark:text-white">{dataset.services.length}</b></span>
+                    <span>Saídas Registradas: <b className="text-slate-900 dark:text-white">{dataset.quoteItems.length}</b></span>
+                    <span>Total Cadastrado: <b className="text-slate-900 dark:text-white">{dataset.inventory.length + dataset.services.length}</b></span>
                   </div>
                 </div>
 
                 <div className="pt-2">
                   <Button
                     size="sm"
-                    onClick={() => navigateToView('inventory')}
-                    className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                    onClick={() => navigateToView('inventory_services')}
+                    className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
                   >
                     <span className="inline-flex items-center gap-2">
                       <Boxes className="h-4 w-4" />
-                      Abrir Relatório de Estoque
+                      Abrir Estoque e Serviços
                     </span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -1337,1608 +1223,1379 @@ export function ReportsPage() {
   }
 
   // ============================================================================
-  // VIEW: RELATÓRIO DE O.S E ORÇAMENTOS (FILTROS POR DIA, MÊS E ESPECÍFICO)
+  // VIEW: 1. RELATÓRIOS CADASTRAIS
   // ============================================================================
-  if (currentView === 'quotes_orders') {
+  if (currentView === 'registrations') {
     return (
       <div className="space-y-6">
-        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO (A4 PRINT MEDIA) */}
         <ReportPrintHeader
           organizationName={currentOrganization?.name}
           organizationLogoUrl={currentOrganization?.logoUrl}
-          reportTitle="Relatório de Ordens de Serviço & Orçamentos"
+          reportTitle="Relatório Geral de Cadastros"
           reportType={
-            qoTab === 'orders'
-              ? 'Ordens de Serviço (O.S)'
-              : qoTab === 'quotes'
-                ? 'Orçamentos & Propostas'
-                : 'Ordens de Serviço & Orçamentos'
+            registrationsTab === 'users'
+              ? 'Usuários de Acesso'
+              : registrationsTab === 'employees'
+                ? 'Funcionários'
+                : registrationsTab === 'suppliers'
+                  ? 'Fornecedores'
+                  : 'Clientes'
           }
-          totalRecords={filteredQoRecords.length}
-          totalAmountLabel="Valor Consolidado"
-          totalAmountValue={formatCurrency(qoMetrics.grandTotal.toFixed(2))}
+          totalRecords={
+            registrationsTab === 'users'
+              ? filteredUsers.length
+              : registrationsTab === 'employees'
+                ? filteredEmployees.length
+                : registrationsTab === 'suppliers'
+                  ? filteredSuppliers.length
+                  : filteredCustomers.length
+          }
           emissionWeekday={emissionWeekday}
           emissionDate={emissionDate}
           emissionTime={emissionTime}
-          periodLabel={qoPeriodInfo.label}
-          periodRange={qoPeriodInfo.rangeText}
+          periodLabel={PERIOD_LABELS[regDateFilter.preset]}
+          periodRange={`${regDateFilter.startDate.split('-').reverse().join('/')} a ${regDateFilter.endDate.split('-').reverse().join('/')}`}
         />
 
-        {/* BARRA DE AÇÃO COM VOLTAR, EXCEL, XML E IMPRESSÃO */}
         <ReportActionBar
-          title="Relatório de O.S e Orçamentos"
-          badgeText="Ordens de Serviço & Propostas"
-          badgeColorClass="bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300"
-          description="Auditoria analítica e controle de Ordens de Serviço (O.S) e Orçamentos comerciais com filtros flexíveis por Dia, Mês ou Período Específico."
+          title="Relatórios Cadastrais"
+          badgeText="Usuários, Funcionários, Fornecedores & Clientes"
+          badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+          description="Auditoria cadastral completa. Selecione a aba desejada para visualizar, exportar ou imprimir os registros."
           onBack={() => navigateToView('home')}
-          onExportExcel={handleExportQoExcel}
-          onExportXml={handleExportQoXml}
+          onExportExcel={handleExportCadastrosExcel}
+          onExportXml={handleExportCadastrosXml}
           onPrint={handlePrintReport}
           onRefresh={() => void loadData()}
           isRefreshing={isLoading}
-          disableExport={filteredQoRecords.length === 0}
           printOrientationMode={printOrientationMode}
           effectiveOrientation={effectiveOrientation}
           onPrintOrientationChange={setPrintOrientationMode}
         />
 
-        {/* BARRA DE FILTROS: POR DIA / POR MÊS / DATA ESPECÍFICA */}
-        <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden">
-          <CardContent className="p-4 space-y-4">
+        {/* CARD DE FILTROS DE PERÍODO PADRONIZADO */}
+        <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden bg-white dark:bg-slate-900">
+          <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(['today', '7d', 'month', '30d', 'year', 'all'] as ReportPeriodPreset[]).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    const range = getPresetDateRange(preset)
+                    setRegDateFilter({ preset, startDate: range.startDate, endDate: range.endDate })
+                  }}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    regDateFilter.preset === preset
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {PERIOD_LABELS[preset]}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-500">De:</span>
+              <input
+                type="date"
+                value={regDateFilter.startDate}
+                onChange={(e) =>
+                  setRegDateFilter((prev) => ({
+                    ...prev,
+                    preset: 'custom',
+                    startDate: e.target.value,
+                  }))
+                }
+                className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
+              />
+              <span className="text-gray-500">Até:</span>
+              <input
+                type="date"
+                value={regDateFilter.endDate}
+                onChange={(e) =>
+                  setRegDateFilter((prev) => ({
+                    ...prev,
+                    preset: 'custom',
+                    endDate: e.target.value,
+                  }))
+                }
+                className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ABAS DO RELATÓRIO CADASTRAIS */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 dark:border-slate-800 print:hidden gap-3">
+          <div className="flex space-x-1 sm:space-x-4 overflow-x-auto pb-1 sm:pb-0">
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('users')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                registrationsTab === 'users'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Usuários ({filteredUsers.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('employees')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                registrationsTab === 'employees'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Briefcase className="h-4 w-4" />
+              Funcionários ({filteredEmployees.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('suppliers')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                registrationsTab === 'suppliers'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Truck className="h-4 w-4" />
+              Fornecedores ({filteredSuppliers.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRegistrationsTab('customers')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                registrationsTab === 'customers'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              Clientes ({filteredCustomers.length})
+            </button>
+          </div>
+
+          <div className="relative pb-2">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar nos cadastros..."
+              value={regSearchQuery}
+              onChange={(e) => setRegSearchQuery(e.target.value)}
+              className="w-full sm:w-64 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* CARDS DE MÉTRICAS PADRONIZADOS (PALETA DO SITE) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 print:hidden">
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Usuários do Sistema
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                  {regAnalytics.usersCount} usuário(s)
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Funcionários / Equipe
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                  {regAnalytics.employeesCount} colaborador(es)
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <Briefcase className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Fornecedores Homologados
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                  {regAnalytics.suppliersCount} fornecedor(es)
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <Truck className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Carteira de Clientes
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                  {regAnalytics.customersCount} cliente(s)
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <Users className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* TABELAS DAS ABAS DE CADASTRO */}
+        <div className="space-y-4">
+          {registrationsTab === 'users' && (
+            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3">Usuário / Exibição</th>
+                    <th className="py-2.5 px-3">E-mail de Acesso</th>
+                    <th className="py-2.5 px-3">Papel no Sistema</th>
+                    <th className="py-2.5 px-3">Data de Cadastro</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-400">
+                        Nenhum usuário encontrado no período selecionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((u) => (
+                      <tr key={u.userId} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">
+                          {u.displayName || u.email.split('@')[0]}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-slate-600 dark:text-slate-300">{u.email}</td>
+                        <td className="py-2 px-3 text-slate-700 dark:text-slate-300 capitalize">{u.role}</td>
+                        <td className="py-2 px-3 text-slate-500">{u.createdAt.split('T')[0].split('-').reverse().join('/')}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-50 text-blue-700 border border-blue-200">
+                            Ativo
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {registrationsTab === 'employees' && (
+            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3">Funcionário</th>
+                    <th className="py-2.5 px-3">E-mail Corporativo</th>
+                    <th className="py-2.5 px-3">Atribuição / Cargo</th>
+                    <th className="py-2.5 px-3">Data de Cadastro</th>
+                    <th className="py-2.5 px-3 text-center">Situação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-400">
+                        Nenhum funcionário encontrado no período selecionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredEmployees.map((e) => (
+                      <tr key={e.userId} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">
+                          {e.displayName || e.email.split('@')[0]}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-slate-600 dark:text-slate-300">{e.email}</td>
+                        <td className="py-2 px-3 text-slate-700 dark:text-slate-300 capitalize">{e.role}</td>
+                        <td className="py-2 px-3 text-slate-500">{e.createdAt.split('T')[0].split('-').reverse().join('/')}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-50 text-blue-700 border border-blue-200">
+                            Ativo
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {registrationsTab === 'suppliers' && (
+            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3">Razão Social / Nome</th>
+                    <th className="py-2.5 px-3">CNPJ / CPF</th>
+                    <th className="py-2.5 px-3">Telefone</th>
+                    <th className="py-2.5 px-3">E-mail</th>
+                    <th className="py-2.5 px-3">Endereço</th>
+                    <th className="py-2.5 px-3">Cadastro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {filteredSuppliers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                        Nenhum fornecedor encontrado no período selecionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSuppliers.map((s) => (
+                      <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">{s.name}</td>
+                        <td className="py-2 px-3 font-mono text-slate-600 dark:text-slate-300">{s.document || '-'}</td>
+                        <td className="py-2 px-3 text-slate-600 dark:text-slate-300">
+                          {s.phone ? formatPhoneNumber(s.phone) : '-'}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 dark:text-slate-300">{s.email || '-'}</td>
+                        <td className="py-2 px-3 text-slate-600 dark:text-slate-300">{s.address || '-'}</td>
+                        <td className="py-2 px-3 text-slate-500">{s.createdAt.split('T')[0].split('-').reverse().join('/')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {registrationsTab === 'customers' && (
+            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3">Cliente</th>
+                    <th className="py-2.5 px-3">CPF / CNPJ</th>
+                    <th className="py-2.5 px-3">Telefone</th>
+                    <th className="py-2.5 px-3">E-mail</th>
+                    <th className="py-2.5 px-3 text-right">Volume Compras (R$)</th>
+                    <th className="py-2.5 px-3 text-center">Cadastro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {filteredCustomers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                        Nenhum cliente encontrado no período selecionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCustomers.map((c) => {
+                      const totalSpent = customerMetricsMap.get(c.id)?.totalSpent || 0
+                      return (
+                        <tr key={c.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                          <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">{c.name}</td>
+                          <td className="py-2 px-3 font-mono text-slate-600 dark:text-slate-300">{c.document || '-'}</td>
+                          <td className="py-2 px-3 text-slate-600 dark:text-slate-300">
+                            {c.phone ? formatPhoneNumber(c.phone) : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 dark:text-slate-300">{c.email || '-'}</td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                            {formatCurrency(totalSpent.toFixed(2))}
+                          </td>
+                          <td className="py-2 px-3 text-center text-slate-500">
+                            {c.createdAt.split('T')[0].split('-').reverse().join('/')}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <ReportPrintFooter
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+        />
+      </div>
+    )
+  }
+
+  // ============================================================================
+  // VIEW: 2. RELATÓRIOS FINANCEIROS (O.S, Orçamentos, Vendas)
+  // ============================================================================
+  if (currentView === 'financial') {
+    return (
+      <div className="space-y-6">
+        <ReportPrintHeader
+          organizationName={currentOrganization?.name}
+          organizationLogoUrl={currentOrganization?.logoUrl}
+          reportTitle="Relatórios Financeiros & Comerciais"
+          reportType={
+            financialTab === 'orders'
+              ? 'Ordens de Serviço (O.S)'
+              : financialTab === 'quotes'
+                ? 'Orçamentos & Propostas'
+                : 'Vendas Realizadas'
+          }
+          totalRecords={filteredFinancialRecords.length}
+          totalAmountLabel="Valor Consolidado"
+          totalAmountValue={formatCurrency(financialMetrics.totalVolume.toFixed(2))}
+          emissionWeekday={emissionWeekday}
+          emissionDate={emissionDate}
+          emissionTime={emissionTime}
+          periodLabel={finEffectiveRange.label}
+          periodRange={`${finEffectiveRange.startDate.split('-').reverse().join('/')} a ${finEffectiveRange.endDate.split('-').reverse().join('/')}`}
+        />
+
+        <ReportActionBar
+          title="Relatórios Financeiros"
+          badgeText="Ordens de Serviço, Orçamentos & Vendas"
+          badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+          description="Controle analítico financeiro com alternância rápida entre Ordens de Serviço, Orçamentos e Vendas."
+          onBack={() => navigateToView('home')}
+          onExportExcel={handleExportFinExcel}
+          onExportXml={handleExportFinXml}
+          onPrint={handlePrintReport}
+          onRefresh={() => void loadData()}
+          isRefreshing={isLoading}
+          printOrientationMode={printOrientationMode}
+          effectiveOrientation={effectiveOrientation}
+          onPrintOrientationChange={setPrintOrientationMode}
+        />
+
+        {/* CARD DE FILTROS: DIA / MÊS / PRESETS / PERSONALIZADO (PADRÃO CADASTRAL) */}
+        <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden bg-white dark:bg-slate-900">
+          <CardContent className="p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Seletor de Modo: Dia / Mês / Específico */}
               <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                 <button
                   type="button"
-                  onClick={() => setQoPeriodMode('day')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    qoPeriodMode === 'day'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  onClick={() => setFinPeriodMode('presets')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    finPeriodMode === 'presets' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Período Rápido
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFinPeriodMode('day')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    finPeriodMode === 'day' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   Por Dia
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQoPeriodMode('month')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    qoPeriodMode === 'month'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  onClick={() => setFinPeriodMode('month')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    finPeriodMode === 'month' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   Por Mês
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQoPeriodMode('custom')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    qoPeriodMode === 'custom'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  onClick={() => setFinPeriodMode('custom')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    finPeriodMode === 'custom' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  Data Específica / Período
+                  De / Até
                 </button>
               </div>
 
-              {/* Controles do Seletor conforme o Modo Ativo */}
-              {qoPeriodMode === 'day' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const d = new Date(qoSelectedDay + 'T12:00:00')
-                      d.setDate(d.getDate() - 1)
-                      setQoSelectedDay(d.toISOString().split('T')[0])
-                    }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
-                    title="Dia anterior"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <input
-                    type="date"
-                    value={qoSelectedDay}
-                    onChange={(e) => setQoSelectedDay(e.target.value)}
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const d = new Date(qoSelectedDay + 'T12:00:00')
-                      d.setDate(d.getDate() + 1)
-                      setQoSelectedDay(d.toISOString().split('T')[0])
-                    }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
-                    title="Próximo dia"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQoSelectedDay(todayIso)}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition"
-                  >
-                    Hoje
-                  </button>
+              {/* Seletor Dinâmico */}
+              {finPeriodMode === 'presets' && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(['today', '7d', 'month', '30d', 'year', 'all'] as ReportPeriodPreset[]).map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        const range = getPresetDateRange(preset)
+                        setFinDateFilter({ preset, startDate: range.startDate, endDate: range.endDate })
+                      }}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                        finDateFilter.preset === preset
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {PERIOD_LABELS[preset]}
+                    </button>
+                  ))}
                 </div>
               )}
 
-              {qoPeriodMode === 'month' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const [y, m] = qoSelectedMonth.split('-').map(Number)
-                      const d = new Date(y, m - 2, 1)
-                      const prevM = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                      setQoSelectedMonth(prevM)
-                    }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
-                    title="Mês anterior"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
+              {finPeriodMode === 'day' && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500 font-medium">Dia:</span>
+                  <input
+                    type="date"
+                    value={finSelectedDay}
+                    onChange={(e) => setFinSelectedDay(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              {finPeriodMode === 'month' && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500 font-medium">Mês:</span>
                   <input
                     type="month"
-                    value={qoSelectedMonth}
-                    onChange={(e) => setQoSelectedMonth(e.target.value)}
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const [y, m] = qoSelectedMonth.split('-').map(Number)
-                      const d = new Date(y, m, 1)
-                      const nextM = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                      setQoSelectedMonth(nextM)
-                    }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
-                    title="Próximo mês"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQoSelectedMonth(currentMonthIso)}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition"
-                  >
-                    Mês Atual
-                  </button>
-                </div>
-              )}
-
-              {qoPeriodMode === 'custom' && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">De:</span>
-                  <input
-                    type="date"
-                    value={qoCustomStartDate}
-                    onChange={(e) => setQoCustomStartDate(e.target.value)}
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
-                  <span className="text-xs text-slate-500">Até:</span>
-                  <input
-                    type="date"
-                    value={qoCustomEndDate}
-                    onChange={(e) => setQoCustomEndDate(e.target.value)}
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    value={finSelectedMonth}
+                    onChange={(e) => setFinSelectedMonth(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
                   />
                 </div>
               )}
-            </div>
 
-            {/* Linha de Seleção Principal: Ordens de Serviço / Orçamentos / Todas, Status e Busca */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
-              {/* Botões Principais de Seleção: O.S e Orçamentos */}
-              <div className="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQoTab('orders')
-                    setQoStatus('all')
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    qoTab === 'orders'
-                      ? 'bg-amber-500 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Wrench className="h-3.5 w-3.5" />
-                  Ordens de Serviço ({dataset.serviceOrders.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQoTab('quotes')
-                    setQoStatus('all')
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    qoTab === 'quotes'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  Orçamentos ({dataset.quotes.length})
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Filtro de Status contextualizado */}
-                <select
-                  value={qoStatus}
-                  onChange={(e) => setQoStatus(e.target.value)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none"
-                >
-                  {qoTab === 'orders' ? (
-                    <>
-                      <option value="all">Todas as O.S ({queueCounts.all})</option>
-                      <option value="queue">Fila de Atendimento ({queueCounts.queue})</option>
-                      <option value="maintenance_pending">Manutenção Pendente ({queueCounts.maintenance_pending})</option>
-                      <option value="in_maintenance">Em Manutenção</option>
-                      <option value="pending">Pendente</option>
-                      <option value="ready">Pronto p/ Retirada ({queueCounts.ready})</option>
-                      <option value="closed">O.S. Encerrada ({queueCounts.closed})</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="all">Todos os Orçamentos ({quoteStatusCounts.total})</option>
-                      <option value="draft">Em Rascunho ({quoteStatusCounts.draft})</option>
-                      <option value="approved">Aprovados ({quoteStatusCounts.approved})</option>
-                      <option value="sent">Enviados ao Cliente ({quoteStatusCounts.sent})</option>
-                      <option value="rejected">Recusados ({quoteStatusCounts.rejected})</option>
-                      <option value="expired">Expirados</option>
-                    </>
-                  )}
-                </select>
-
-                {/* Campo de Busca */}
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              {finPeriodMode === 'custom' && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500">De:</span>
                   <input
-                    type="text"
-                    placeholder="Buscar O.S, orçamento, cliente..."
-                    value={qoSearch}
-                    onChange={(e) => setQoSearch(e.target.value)}
-                    className="w-48 sm:w-60 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    type="date"
+                    value={finDateFilter.startDate}
+                    onChange={(e) =>
+                      setFinDateFilter((prev) => ({ ...prev, preset: 'custom', startDate: e.target.value }))
+                    }
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
+                  />
+                  <span className="text-gray-500">Até:</span>
+                  <input
+                    type="date"
+                    value={finDateFilter.endDate}
+                    onChange={(e) =>
+                      setFinDateFilter((prev) => ({ ...prev, preset: 'custom', endDate: e.target.value }))
+                    }
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
                   />
                 </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* CARDS DE MÉTRICAS VISUAIS (EXIBIÇÃO EM TELA, OCULTOS NA IMPRESSÃO A4) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 print:hidden">
-          {qoTab === 'quotes' ? (
-            <>
-              {/* 1. Total de Orçamentos */}
-              <Card
-                onClick={() => setQoStatus('all')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
-                  qoStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Total de Orçamentos
-                    </p>
-                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
-                      {quoteStatusCounts.total} cadastrado(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
+        {/* ABAS DO MÓDULO FINANCEIRO (O.S, ORÇAMENTO, VENDAS) */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 dark:border-slate-800 print:hidden gap-3">
+          <div className="flex space-x-1 sm:space-x-4 overflow-x-auto pb-1 sm:pb-0">
+            <button
+              type="button"
+              onClick={() => setFinancialTab('orders')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                financialTab === 'orders'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Wrench className="h-4 w-4" />
+              Ordens de Serviço ({allFinancialRecords.filter((r) => r.kind === 'order').length})
+            </button>
 
-              {/* 2. Em Rascunho */}
-              <Card
-                onClick={() => setQoStatus('draft')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
-                  qoStatus === 'draft' ? 'ring-2 ring-amber-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Em Rascunho
-                    </p>
-                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
-                      {quoteStatusCounts.draft} rascunho(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
-                    <FileEdit className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
+            <button
+              type="button"
+              onClick={() => setFinancialTab('quotes')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                financialTab === 'quotes'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <ClipboardList className="h-4 w-4" />
+              Orçamentos ({allFinancialRecords.filter((r) => r.kind === 'quote').length})
+            </button>
 
-              {/* 3. Aprovados */}
-              <Card
-                onClick={() => setQoStatus('approved')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
-                  qoStatus === 'approved' ? 'ring-2 ring-emerald-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Orçamentos Aprovados
-                    </p>
-                    <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {quoteStatusCounts.approved} aprovado(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
+            <button
+              type="button"
+              onClick={() => setFinancialTab('sales')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                financialTab === 'sales'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <ShoppingBag className="h-4 w-4" />
+              Vendas Realizadas ({allFinancialRecords.filter((r) => r.kind === 'sale').length})
+            </button>
+          </div>
 
-              {/* 4. Enviado ao Cliente */}
-              <Card
-                onClick={() => setQoStatus('sent')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
-                  qoStatus === 'sent' ? 'ring-2 ring-blue-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Enviado ao Cliente
-                    </p>
-                    <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
-                      {quoteStatusCounts.sent} enviado(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
-                    <Send className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
+          <div className="flex items-center gap-2 pb-2">
+            <select
+              value={finStatusFilter}
+              onChange={(e) => setFinStatusFilter(e.target.value)}
+              className="rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs text-gray-700 dark:text-slate-300"
+            >
+              <option value="all">Todos os Status</option>
+              {financialTab === 'orders' && (
+                <>
+                  <option value="queue">Fila de Atendimento</option>
+                  <option value="in_maintenance">Em Manutenção</option>
+                  <option value="ready">Pronto / Concluído</option>
+                  <option value="closed">Encerrado</option>
+                </>
+              )}
+              {financialTab === 'quotes' && (
+                <>
+                  <option value="draft">Em Aberto</option>
+                  <option value="approved">Aprovado</option>
+                  <option value="rejected">Rejeitado</option>
+                </>
+              )}
+              {financialTab === 'sales' && (
+                <>
+                  <option value="approved">Concluídas</option>
+                  <option value="rejected">Canceladas</option>
+                </>
+              )}
+            </select>
 
-              {/* 5. Recusados */}
-              <Card
-                onClick={() => setQoStatus('rejected')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-rose-100 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/50 to-white dark:from-rose-950/30 dark:to-slate-900 ${
-                  qoStatus === 'rejected' ? 'ring-2 ring-rose-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Recusados
-                    </p>
-                    <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5">
-                      {quoteStatusCounts.rejected} recusado(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
-                    <Ban className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <>
-              {/* 1. Total O.S */}
-              <Card
-                onClick={() => setQoStatus('all')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
-                  qoStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Total de O.S
-                    </p>
-                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
-                      {queueCounts.all} cadastrada(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
-                    <Wrench className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 2. Fila de Atendimento */}
-              <Card
-                onClick={() => setQoStatus('queue')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
-                  qoStatus === 'queue' ? 'ring-2 ring-blue-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Fila de Atendimento
-                    </p>
-                    <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
-                      {queueCounts.queue} na fila
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 3. Manutenção Pendente */}
-              <Card
-                onClick={() => setQoStatus('maintenance_pending')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
-                  qoStatus === 'maintenance_pending' ? 'ring-2 ring-amber-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Manutenção Pendente
-                    </p>
-                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
-                      {queueCounts.maintenance_pending} em serviço
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
-                    <Wrench className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 4. Pronto */}
-              <Card
-                onClick={() => setQoStatus('ready')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
-                  qoStatus === 'ready' ? 'ring-2 ring-emerald-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Pronto p/ Retirada
-                    </p>
-                    <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {queueCounts.ready} pronto(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 5. O.S Encerrada */}
-              <Card
-                onClick={() => setQoStatus('closed')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-slate-200 dark:border-slate-800 bg-gradient-to-br from-slate-100 to-white dark:from-slate-900 dark:to-slate-950 ${
-                  qoStatus === 'closed' ? 'ring-2 ring-slate-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      O.S. Encerradas
-                    </p>
-                    <p className="text-xl font-extrabold text-slate-800 dark:text-slate-200 mt-0.5">
-                      {queueCounts.closed} encerrada(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-slate-200 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar registros..."
+                value={finSearchQuery}
+                onChange={(e) => setFinSearchQuery(e.target.value)}
+                className="w-full sm:w-56 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
         </div>
 
-        {/* LISTAGEM EM TABELA OFICIAL FORMATADA PARA TELA E IMPRESSÃO A4 */}
-        <div className="space-y-4">
-          {filteredQoRecords.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center bg-white dark:bg-slate-900/40">
-              <ClipboardList className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Nenhum registro encontrado
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-                Não foram localizadas Ordens de Serviço ou Orçamentos para os filtros selecionados.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-              <div className="w-full">
-                <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
-                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <th className="py-2 px-2">Número</th>
-                      <th className="py-2 px-2">Tipo</th>
-                      <th className="py-2 px-2">Data</th>
-                      <th className="py-2 px-2">Cliente / Contato</th>
-                      <th className="py-2 px-2">Equipamento / Descrição</th>
-                      <th className="py-2 px-2">Responsável</th>
-                      <th className="py-2 px-2 text-center">Status</th>
-                      <th className="py-2 px-2 text-right">Valor Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {filteredQoRecords.map((item) => (
-                      <tr
-                        key={`${item.kind}-${item.id}`}
-                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
-                      >
-                        <td className="py-2 px-2 font-mono font-bold text-slate-900 dark:text-white break-words">
-                          {item.number}
-                        </td>
-                        <td className="py-2 px-2 font-medium text-slate-600 dark:text-slate-300">
-                          {item.kind === 'order' ? 'O.S' : 'Orçamento'}
-                        </td>
-                        <td className="py-2 px-2 text-slate-500 whitespace-nowrap">
-                          {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '—'}
-                        </td>
-                        <td className="py-2 px-2 break-words">
-                          <span className="font-semibold text-slate-900 dark:text-white block">{item.customerName}</span>
-                          <span className="text-[10px] text-slate-500 block">
-                            {[item.customerPhone ? formatPhoneNumber(item.customerPhone) : null, item.customerDocument].filter(Boolean).join(' • ')}
-                          </span>
-                        </td>
-                        <td className="py-2 px-2 text-slate-700 dark:text-slate-300 break-words whitespace-normal">
-                          {item.description}
-                        </td>
-                        <td className="py-2 px-2 text-slate-600 dark:text-slate-400 break-words">
-                          {item.responsiblePerson || '—'}
-                        </td>
-                        <td className="py-2 px-2 text-center">
-                          <span
-                            className={`inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide border ${item.statusBadgeColor}`}
-                          >
-                            {item.statusLabel}
-                          </span>
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                          {formatCurrency(item.total)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
-                    <tr>
-                      <td colSpan={7} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
-                        Total Geral ({filteredQoRecords.length} registros)
-                      </td>
-                      <td className="py-2.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
-                        {formatCurrency(qoMetrics.grandTotal.toFixed(2))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+        {/* CARDS DE MÉTRICAS PADRONIZADOS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 print:hidden">
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Volume Total ({financialTab === 'orders' ? 'O.S' : financialTab === 'quotes' ? 'Orçamentos' : 'Vendas'})
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1 font-mono">
+                  {formatCurrency(financialMetrics.totalVolume.toFixed(2))}
+                </p>
               </div>
-            </div>
-          )}
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <CreditCard className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Total de Lançamentos
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                  {financialMetrics.count} registro(s)
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Ticket Médio
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1 font-mono">
+                  {formatCurrency(financialMetrics.averageTicket.toFixed(2))}
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Aprovados / Concluídos
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                  {financialMetrics.approvedOrClosedCount} registro(s)
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        {/* TABELA FINANCEIRA CONSOLIDADA */}
+        <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+          <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+            <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="py-2.5 px-3">Identificação</th>
+                <th className="py-2.5 px-3">Data</th>
+                <th className="py-2.5 px-3">Cliente</th>
+                <th className="py-2.5 px-3">Responsável</th>
+                <th className="py-2.5 px-3">Descrição / Canal</th>
+                <th className="py-2.5 px-3 text-right">Valor Total (R$)</th>
+                <th className="py-2.5 px-3 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              {filteredFinancialRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                    Nenhum registro financeiro encontrado no período selecionado.
+                  </td>
+                </tr>
+              ) : (
+                filteredFinancialRecords.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                    <td className="py-2 px-3 font-mono font-bold text-slate-900 dark:text-white">{r.number}</td>
+                    <td className="py-2 px-3 text-slate-500">{r.date.split('T')[0].split('-').reverse().join('/')}</td>
+                    <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">{r.customerName}</td>
+                    <td className="py-2 px-3 text-slate-600 dark:text-slate-300">{r.responsiblePerson || '-'}</td>
+                    <td className="py-2 px-3 text-slate-600 dark:text-slate-400 truncate max-w-xs">{r.description}</td>
+                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                      {formatCurrency(r.total.toFixed(2))}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border ${r.statusBadgeClass}`}>
+                        {r.statusLabel}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            {filteredFinancialRecords.length > 0 && (
+              <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
+                <tr>
+                  <td colSpan={5} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                    Total Geral do Período ({filteredFinancialRecords.length} lançamentos)
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                    {formatCurrency(financialMetrics.totalVolume.toFixed(2))}
+                  </td>
+                  <td className="py-2.5 px-3"></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
         <ReportPrintFooter
           emissionWeekday={emissionWeekday}
           emissionDate={emissionDate}
           emissionTime={emissionTime}
-          documentType="Relatório Oficial de Auditoria de O.S & Orçamentos"
         />
       </div>
     )
   }
 
   // ============================================================================
-  // VIEW: RELATÓRIO DE ESTOQUE
+  // VIEW: 3. RELATÓRIO DE ESTOQUE E SERVIÇO
   // ============================================================================
-  if (currentView === 'inventory') {
+  if (currentView === 'inventory_services') {
     return (
       <div className="space-y-6">
-        {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO (A4 PRINT MEDIA) */}
         <ReportPrintHeader
           organizationName={currentOrganization?.name}
           organizationLogoUrl={currentOrganization?.logoUrl}
-          reportTitle="Relatório Analítico de Estoque"
-          reportType="Produtos em Estoque"
-          totalRecords={filteredInventory.length}
-          totalAmountLabel="Valor Total a Custo"
-          totalAmountValue={formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
+          reportTitle="Relatório de Estoque e Serviços"
+          reportType={
+            invServicesTab === 'movements'
+              ? 'Saídas & Movimentações de Materiais e Serviços'
+              : invServicesTab === 'inventory'
+                ? 'Estoque Atual (Produtos & Materiais)'
+                : 'Catálogo de Serviços Cadastrados'
+          }
+          totalRecords={
+            invServicesTab === 'movements'
+              ? filteredMovementRows.length
+              : invServicesTab === 'inventory'
+                ? filteredCurrentInventory.length
+                : filteredServices.length
+          }
+          totalAmountLabel="Faturamento Movimentado"
+          totalAmountValue={formatCurrency(invServicesMetrics.totalRevenue.toFixed(2))}
           emissionWeekday={emissionWeekday}
           emissionDate={emissionDate}
           emissionTime={emissionTime}
-          periodLabel="Posição Atual do Estoque"
-          periodRange={invCategory !== 'all' ? `${inventoryStatusLabel} • Categoria: ${invCategory}` : inventoryStatusLabel}
+          periodLabel={PERIOD_LABELS[invDateFilter.preset]}
+          periodRange={`${invDateFilter.startDate.split('-').reverse().join('/')} a ${invDateFilter.endDate.split('-').reverse().join('/')}`}
         />
 
-        {/* BARRA DE AÇÃO COM VOLTAR, EXCEL, XML E IMPRESSÃO */}
         <ReportActionBar
-          title="Relatório de Estoque"
-          badgeText="Inventário & Balanço Físico"
-          badgeColorClass="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
-          description="Auditoria analítica e controle de estoque com filtros de reposição mínima, itens zerados/esgotados, fornecedores e valorização a custo."
+          title="Relatório de Estoque e Serviço"
+          badgeText="Materiais, Serviços & Movimentações de Saída"
+          badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+          description="Auditoria analítica de estoque físico e serviços cadastrados, ranking dos itens mais movimentados e histórico de vendas com cliente associado."
           onBack={() => navigateToView('home')}
-          onExportExcel={handleExportInventoryExcel}
-          onExportXml={handleExportInventoryXml}
+          onExportExcel={handleExportInvServicesExcel}
+          onExportXml={handleExportInvServicesXml}
           onPrint={handlePrintReport}
           onRefresh={() => void loadData()}
           isRefreshing={isLoading}
-          disableExport={filteredInventory.length === 0}
           printOrientationMode={printOrientationMode}
           effectiveOrientation={effectiveOrientation}
           onPrintOrientationChange={setPrintOrientationMode}
         />
 
-        {/* PAINEL DE FILTROS AVANÇADOS DO ESTOQUE */}
-        <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden">
+        {/* PAINEL DE FILTROS: MATERIAL OU SERVIÇO, DATA DE CADASTRO OU SAÍDA, E PERÍODO */}
+        <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden bg-white dark:bg-slate-900">
           <CardContent className="p-4 space-y-4">
-            {/* Linha 1: Status do Estoque (Pills Rápidos com Contadores) */}
+            {/* Linha 1: Seletores de Tipo (Material/Serviço) e Tipo de Data (Saída/Cadastro) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800 pb-3">
+              {/* Filtro: Escolher Material ou Serviço */}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+                  Filtrar Tipo:
+                </span>
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setInvItemType('all')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      invItemType === 'all' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvItemType('material')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      invItemType === 'material' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Material / Produto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvItemType('service')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      invItemType === 'service' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Serviço
+                  </button>
+                </div>
+              </div>
+
+              {/* Filtro: Por Data de Cadastro ou Data de Saída */}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+                  Filtrar Data Por:
+                </span>
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setInvDateField('movement')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      invDateField === 'movement' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Data de Saída / Venda
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvDateField('registration')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      invDateField === 'registration' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Data de Cadastro
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Linha 2: Intervalo de Datas com Presets */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
-                  Status:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setInvStatus('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    invStatus === 'all'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  Todos ({inventoryGlobalCounts.all})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInvStatus('normal')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    invStatus === 'normal'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
-                  }`}
-                >
-                  Estoque Normal ({inventoryGlobalCounts.normal})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInvStatus('low')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    invStatus === 'low'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60'
-                  }`}
-                >
-                  Estoque Baixo ({inventoryGlobalCounts.low})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInvStatus('out')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    invStatus === 'out'
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60'
-                  }`}
-                >
-                  Zerado / Esgotado ({inventoryGlobalCounts.out})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInvStatus('excess')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    invStatus === 'excess'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60'
-                  }`}
-                >
-                  Excedente ({inventoryGlobalCounts.excess})
-                </button>
+                {(['today', '7d', 'month', '30d', 'year', 'all'] as ReportPeriodPreset[]).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      const range = getPresetDateRange(preset)
+                      setInvDateFilter({ preset, startDate: range.startDate, endDate: range.endDate })
+                    }}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                      invDateFilter.preset === preset
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {PERIOD_LABELS[preset]}
+                  </button>
+                ))}
               </div>
 
-              {/* Botão para limpar todos os filtros */}
-              {(invStatus !== 'all' ||
-                invCategory !== 'all' ||
-                invSupplier !== 'all' ||
-                invAbcClass !== 'all' ||
-                invActiveFilter !== 'all' ||
-                invSearch.trim() ||
-                invSortBy !== 'value_desc') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInvStatus('all')
-                    setInvCategory('all')
-                    setInvSupplier('all')
-                    setInvAbcClass('all')
-                    setInvActiveFilter('all')
-                    setInvSearch('')
-                    setInvSortBy('value_desc')
-                  }}
-                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition"
-                  title="Restaurar todos os filtros"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>Limpar Filtros</span>
-                </button>
-              )}
-            </div>
-
-            {/* CARDS DE MÉTRICAS VISUAIS (DIRETAMENTE ABAIXO DO STATUS) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-1">
-              {/* 1. Total Itens */}
-              <Card
-                onClick={() => setInvStatus('all')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
-                  invStatus === 'all' ? 'ring-2 ring-indigo-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Total de Produtos
-                    </p>
-                    <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
-                      {inventoryMetrics.totalItems} produto(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
-                    <Package className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 2. Em Falta (Zerados) */}
-              <Card
-                onClick={() => setInvStatus('out')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-rose-100 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/50 to-white dark:from-rose-950/30 dark:to-slate-900 ${
-                  invStatus === 'out' ? 'ring-2 ring-rose-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Em Falta (Zerado)
-                    </p>
-                    <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-0.5">
-                      {inventoryMetrics.outCount} zerado(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
-                    <Ban className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 3. Estoque Baixo */}
-              <Card
-                onClick={() => setInvStatus('low')}
-                className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900 ${
-                  invStatus === 'low' ? 'ring-2 ring-amber-500/50' : ''
-                }`}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Abaixo do Mínimo
-                    </p>
-                    <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-0.5">
-                      {inventoryMetrics.lowCount} alerta(s)
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
-                    <AlertTriangle className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 4. Valor a Custo */}
-              <Card className="transition-all rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Valor a Custo
-                    </p>
-                    <p className="text-lg font-extrabold text-blue-700 dark:text-blue-300 mt-0.5 font-mono">
-                      {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 5. Total de Unidades Físicas */}
-              <Card className="transition-all rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                      Total Unidades Físicas
-                    </p>
-                    <p className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} un.
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-                    <Boxes className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Linha 2: Dropdowns de Categoria, Fornecedor, Situação, Ordenação e Busca */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80">
-              {/* Filtro de Categoria */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Categoria
-                </label>
-                <select
-                  value={invCategory}
-                  onChange={(e) => setInvCategory(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                >
-                  <option value="all">Todas as Categorias</option>
-                  {invCategories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filtro de Fornecedor */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Fornecedor
-                </label>
-                <select
-                  value={invSupplier}
-                  onChange={(e) => setInvSupplier(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                >
-                  <option value="all">Todos os Fornecedores</option>
-                  {invSuppliers.map((sup) => (
-                    <option key={sup.id} value={sup.id}>
-                      {sup.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filtro Situação Cadastral */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Situação
-                </label>
-                <select
-                  value={invActiveFilter}
-                  onChange={(e) => setInvActiveFilter(e.target.value as 'all' | 'active' | 'inactive' | 'can_sell')}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                >
-                  <option value="all">Todos os Itens</option>
-                  <option value="active">Apenas Ativos</option>
-                  <option value="can_sell">Disponíveis para Venda</option>
-                  <option value="inactive">Inativos</option>
-                </select>
-              </div>
-
-              {/* Ordenação */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Ordenar Por
-                </label>
-                <select
-                  value={invSortBy}
-                  onChange={(e) => setInvSortBy(e.target.value as 'value_desc' | 'cost_desc' | 'qty_asc' | 'qty_desc' | 'name_asc' | 'margin_desc')}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                >
-                  <option value="cost_desc">Maior Valor Custo</option>
-                  <option value="qty_asc">Menor Qtd. (Reposição)</option>
-                  <option value="qty_desc">Maior Qtd.</option>
-                  <option value="name_asc">Nome (A - Z)</option>
-                </select>
-              </div>
-
-              {/* Busca Textual */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Pesquisar
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Nome, SKU, barras..."
-                    value={invSearch}
-                    onChange={(e) => setInvSearch(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-8 pr-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">De:</span>
+                <input
+                  type="date"
+                  value={invDateFilter.startDate}
+                  onChange={(e) =>
+                    setInvDateFilter((prev) => ({ ...prev, preset: 'custom', startDate: e.target.value }))
+                  }
+                  className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
+                />
+                <span className="text-gray-500">Até:</span>
+                <input
+                  type="date"
+                  value={invDateFilter.endDate}
+                  onChange={(e) =>
+                    setInvDateFilter((prev) => ({ ...prev, preset: 'custom', endDate: e.target.value }))
+                  }
+                  className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
+                />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* TABELA OFICIAL DE ITENS FORMATADA PARA TELA E IMPRESSÃO A4 */}
-        <div className="space-y-4">
-          {filteredInventory.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center bg-white dark:bg-slate-900/40">
-              <Boxes className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Nenhum produto encontrado no estoque
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-                Não foram localizados itens com os critérios e filtros selecionados. Tente ajustar os parâmetros.
-              </p>
+        {/* ABAS DO MÓDULO ESTOQUE E SERVIÇO */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 dark:border-slate-800 print:hidden gap-3">
+          <div className="flex space-x-1 sm:space-x-4 overflow-x-auto pb-1 sm:pb-0">
+            <button
+              type="button"
+              onClick={() => setInvServicesTab('movements')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                invServicesTab === 'movements'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4" />
+              Saídas &amp; Mais Movimentados ({filteredMovementRows.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setInvServicesTab('inventory')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                invServicesTab === 'inventory'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Package className="h-4 w-4" />
+              Estoque Atual ({dataset.inventory.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setInvServicesTab('services')}
+              className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition whitespace-nowrap ${
+                invServicesTab === 'services'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Wrench className="h-4 w-4" />
+              Serviços Cadastrados ({dataset.services.length})
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pb-2">
+            {invServicesTab === 'inventory' && (
+              <select
+                value={invStockStatus}
+                onChange={(e) => setInvStockStatus(e.target.value as any)}
+                className="rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs text-gray-700 dark:text-slate-300"
+              >
+                <option value="all">Todos os Saldos</option>
+                <option value="normal">Estoque Normal</option>
+                <option value="low">Estoque Baixo</option>
+                <option value="out">Zerado / Esgotado</option>
+              </select>
+            )}
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar item, cliente, venda..."
+                value={invSearchQuery}
+                onChange={(e) => setInvSearchQuery(e.target.value)}
+                className="w-full sm:w-60 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
             </div>
-          ) : (
-            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-              <div className="w-full">
-                <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
-                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <th className="py-2 px-2">Produto / Identificação</th>
-                      <th className="py-2 px-2">Categoria</th>
-                      <th className="py-2 px-2">Fornecedor / Localização</th>
-                      <th className="py-2 px-2 text-center">Status</th>
-                      <th className="py-2 px-2 text-right">Qtd. / Mín.</th>
-                      <th className="py-2 px-2 text-right">Custo Unit.</th>
-                      <th className="py-2 px-2 text-right">Total Custo</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {filteredInventory.map((item) => (
-                      <tr
-                        key={item.id}
-                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
+          </div>
+        </div>
+
+        {/* CARDS DE MÉTRICAS PADRONIZADOS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 print:hidden">
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Qtd Total Movimentada
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                  {invServicesMetrics.totalQtyMoved} un.
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <Boxes className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Faturamento Materiais
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1 font-mono">
+                  {formatCurrency(invServicesMetrics.materialsRevenue.toFixed(2))}
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <Package className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Faturamento Serviços
+                </p>
+                <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1 font-mono">
+                  {formatCurrency(invServicesMetrics.servicesRevenue.toFixed(2))}
+                </p>
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <Wrench className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                  Item Mais Movimentado
+                </p>
+                <p className="text-sm font-extrabold text-gray-900 dark:text-white mt-1 truncate max-w-[180px]" title={invServicesMetrics.topMovedItem?.name}>
+                  {invServicesMetrics.topMovedItem ? invServicesMetrics.topMovedItem.name : 'Nenhum'}
+                </p>
+                {invServicesMetrics.topMovedItem && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {invServicesMetrics.topMovedItem.totalQty} un. movimentadas
+                  </p>
+                )}
+              </div>
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-2.5 text-blue-600 dark:text-blue-400">
+                <Sparkles className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ABA 1: MOVIMENTAÇÕES, MAIS VENDIDOS E VENDAS UTILIZADAS */}
+        {invServicesTab === 'movements' && (
+          <div className="space-y-6">
+            {/* SEÇÃO DE DESTAQUE: RANKING DOS MAIS MOVIMENTADOS */}
+            {mostMovedRanking.length > 0 && (
+              <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden bg-white dark:bg-slate-900">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-blue-600" />
+                      Itens com Maior Movimentação no Período (Top 5)
+                    </h3>
+                    <span className="text-[11px] text-slate-400">
+                      Ordenado pela quantidade total de saídas
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                    {mostMovedRanking.slice(0, 5).map((item, index) => (
+                      <div
+                        key={item.key}
+                        className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-slate-50/50 dark:bg-slate-800/40 space-y-1.5"
                       >
-                        <td className="py-2 px-2 break-words">
-                          <span className="font-semibold text-slate-900 dark:text-white block">
-                            {item.name}
+                        <div className="flex items-center justify-between">
+                          <span className="rounded-md bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 text-[10px] font-bold">
+                            #{index + 1}
                           </span>
-                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                            SKU: {item.sku || '—'} {item.barcode ? `• Barras: ${item.barcode}` : ''}
+                          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold border ${
+                            item.type === 'service'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            {item.type === 'service' ? 'Serviço' : 'Material'}
                           </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate" title={item.name}>
+                          {item.name}
+                        </p>
+                        <div className="flex items-baseline justify-between text-[11px] text-slate-500 pt-1">
+                          <span>Qtd: <b className="text-slate-900 dark:text-white font-mono">{item.totalQty}</b></span>
+                          <span className="font-mono font-bold text-blue-600">{formatCurrency(item.totalRevenue.toFixed(2))}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* TABELA DETALHADA COM CLIENTE E VENDA UTILIZADA */}
+            <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3">Item / Descrição</th>
+                    <th className="py-2.5 px-3">Tipo</th>
+                    <th className="py-2.5 px-3">
+                      {invDateField === 'movement' ? 'Data da Saída' : 'Data Cadastro'}
+                    </th>
+                    <th className="py-2.5 px-3 text-center">Qtd Saída</th>
+                    <th className="py-2.5 px-3">Cliente Atendido</th>
+                    <th className="py-2.5 px-3">Venda Utilizada</th>
+                    <th className="py-2.5 px-3 text-right">Preço Unit.</th>
+                    <th className="py-2.5 px-3 text-right">Total (R$)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {filteredMovementRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                        Nenhuma movimentação ou saída encontrada com os filtros selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredMovementRows.map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-slate-900 dark:text-white block">{m.itemName}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{m.itemCode}</span>
                         </td>
-                        <td className="py-2 px-2 text-slate-600 dark:text-slate-400 break-words">
-                          {item.category || 'Sem Categoria'}
-                        </td>
-                        <td className="py-2 px-2 text-slate-600 dark:text-slate-400 break-words">
-                          <span className="block font-medium text-slate-800 dark:text-slate-200">
-                            {item.supplierName || '—'}
-                          </span>
-                          {item.location && (
-                            <span className="block text-[10px] text-slate-400">
-                              Loc: {item.location}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-2 text-center">
+                        <td className="py-2 px-3">
                           <span
-                            className={`inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide border ${item.statusBadgeColor}`}
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                              m.itemType === 'service'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}
                           >
-                            {item.statusLabel}
+                            {m.itemType === 'service' ? 'Serviço' : 'Material'}
                           </span>
                         </td>
-                        <td className="py-2 px-2 text-right whitespace-nowrap">
-                          <span className="font-bold text-slate-900 dark:text-white block">
-                            {item.qty} <span className="text-[10px] text-slate-400 font-normal">{item.unit || 'UN'}</span>
-                          </span>
-                          <span className="text-[10px] text-slate-500 block">
-                            Mín: {item.minQty}
-                          </span>
+                        <td className="py-2 px-3 text-slate-500">
+                          {m.effectiveDate.split('T')[0].split('-').reverse().join('/')}
                         </td>
-                        <td className="py-2 px-2 text-right whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
-                          {formatCurrency(item.cost.toFixed(2))}
+                        <td className="py-2 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                          {m.quantity} {m.unit}
                         </td>
-                        <td className="py-2 px-2 text-right whitespace-nowrap font-mono font-bold text-slate-900 dark:text-white">
-                          {formatCurrency(item.totalCostValue.toFixed(2))}
+                        <td className="py-2 px-3 text-slate-900 dark:text-white font-medium">
+                          {m.customerName}
+                        </td>
+                        <td className="py-2 px-3 font-mono font-semibold text-blue-600">
+                          {m.saleNumber}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-300">
+                          {formatCurrency(m.unitPrice.toFixed(2))}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                          {formatCurrency(m.totalAmount.toFixed(2))}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
+                    ))
+                  )}
+                </tbody>
+                {filteredMovementRows.length > 0 && (
                   <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                     <tr>
-                      <td colSpan={4} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
-                        Totais Consolidados ({filteredInventory.length} itens)
+                      <td colSpan={3} className="py-2.5 px-3 uppercase text-slate-700 dark:text-slate-300">
+                        Total Consolidado ({filteredMovementRows.length} saídas)
                       </td>
-                      <td className="py-2.5 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        {inventoryMetrics.totalUnits.toLocaleString('pt-BR')} un.
+                      <td className="py-2.5 px-3 text-center font-mono text-slate-900 dark:text-white">
+                        {invServicesMetrics.totalQtyMoved}
                       </td>
-                      <td className="py-2.5 px-2 text-right text-slate-400">—</td>
-                      <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        {formatCurrency(inventoryMetrics.totalCostValue.toFixed(2))}
+                      <td colSpan={3}></td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                        {formatCurrency(invServicesMetrics.totalRevenue.toFixed(2))}
                       </td>
                     </tr>
                   </tfoot>
-                </table>
-              </div>
+                )}
+              </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
+        {/* ABA 2: ESTOQUE ATUAL DE MATERIAIS */}
+        {invServicesTab === 'inventory' && (
+          <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-2.5 px-3">Código / SKU</th>
+                  <th className="py-2.5 px-3">Produto / Material</th>
+                  <th className="py-2.5 px-3">Categoria</th>
+                  <th className="py-2.5 px-3 text-center">Saldo em Estoque</th>
+                  <th className="py-2.5 px-3 text-center">Estoque Mínimo</th>
+                  <th className="py-2.5 px-3 text-right">Preço Venda (R$)</th>
+                  <th className="py-2.5 px-3 text-right">Valor em Estoque (R$)</th>
+                  <th className="py-2.5 px-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                {filteredCurrentInventory.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-slate-400">
+                      Nenhum produto em estoque encontrado com os filtros aplicados.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCurrentInventory.map((i) => {
+                    const q = Math.max(0, parseFloat(i.quantityOnHand) || 0)
+                    const min = Math.max(0, parseFloat(i.minimumQuantity) || 0)
+                    const p = Math.max(0, parseFloat(i.unitPrice) || 0)
+                    const totalVal = q * p
+                    const isOut = q <= 0
+                    const isLow = !isOut && min > 0 && q <= min
+
+                    return (
+                      <tr key={i.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2 px-3 font-mono font-semibold text-slate-600">{i.sku || 'S/N'}</td>
+                        <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">{i.name}</td>
+                        <td className="py-2 px-3 text-slate-500">{i.category || 'Geral'}</td>
+                        <td className="py-2 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                          {i.quantityOnHand} {i.unit}
+                        </td>
+                        <td className="py-2 px-3 text-center font-mono text-slate-500">
+                          {i.minimumQuantity} {i.unit}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono text-slate-700 dark:text-slate-300">
+                          {formatCurrency(p.toFixed(2))}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                          {formatCurrency(totalVal.toFixed(2))}
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                              isOut
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : isLow
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            {isOut ? 'Zerado' : isLow ? 'Baixo' : 'Normal'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ABA 3: SERVIÇOS CADASTRADOS */}
+        {invServicesTab === 'services' && (
+          <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+            <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-2.5 px-3">Código</th>
+                  <th className="py-2.5 px-3">Nome do Serviço</th>
+                  <th className="py-2.5 px-3">Categoria</th>
+                  <th className="py-2.5 px-3 text-center">Unidade</th>
+                  <th className="py-2.5 px-3 text-right">Custo Total</th>
+                  <th className="py-2.5 px-3 text-right">Preço de Venda</th>
+                  <th className="py-2.5 px-3 text-center">Margem</th>
+                  <th className="py-2.5 px-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                {filteredServices.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-slate-400">
+                      Nenhum serviço cadastrado encontrado.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredServices.map((s) => (
+                    <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                      <td className="py-2 px-3 font-mono font-bold text-blue-600">{s.serviceCode}</td>
+                      <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">{s.name}</td>
+                      <td className="py-2 px-3 text-slate-500">{s.categoryName || 'Serviços'}</td>
+                      <td className="py-2 px-3 text-center text-slate-600 uppercase font-mono">{s.billingUnit}</td>
+                      <td className="py-2 px-3 text-right font-mono text-slate-600">
+                        {formatCurrency(parseFloat(s.totalCost).toFixed(2))}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                        {formatCurrency(parseFloat(s.salePrice).toFixed(2))}
+                      </td>
+                      <td className="py-2 px-3 text-center font-mono font-semibold text-emerald-600">
+                        {s.profitMargin}%
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                            s.isActive
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {s.isActive ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         <ReportPrintFooter
           emissionWeekday={emissionWeekday}
           emissionDate={emissionDate}
           emissionTime={emissionTime}
-          documentType="Relatório Oficial de Auditoria & Balanço de Estoque"
         />
       </div>
     )
   }
 
-  // ============================================================================
-  // VIEW: RELATÓRIO GERAL DE CADASTROS (DETALHADO)
-  // ============================================================================
-  return (
-    <div className="space-y-6">
-      {/* CABEÇALHO EXCLUSIVO DE IMPRESSÃO (PRINT MEDIA) */}
-      <ReportPrintHeader
-        organizationName={currentOrganization?.name}
-        organizationLogoUrl={currentOrganization?.logoUrl}
-        reportTitle="Relatório Geral de Cadastros"
-        reportType={`Cadastro • ${activeTabTitle}`}
-        totalRecords={activeTabRecordsCount}
-        emissionWeekday={emissionWeekday}
-        emissionDate={emissionDate}
-        emissionTime={emissionTime}
-        periodLabel={PERIOD_LABELS[dateFilter.preset]}
-        periodRange={
-          dateFilter.startDate && dateFilter.endDate
-            ? `${dateFilter.startDate.split('-').reverse().join('/')} a ${dateFilter.endDate.split('-').reverse().join('/')}`
-            : ''
-        }
-      />
-
-      {/* CABEÇALHO PADRÃO EM TELA COM BOTÃO VOLTAR */}
-      <ReportActionBar
-        title="Relatório Geral de Cadastros"
-        badgeText="Cadastros & Equipe"
-        badgeColorClass="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
-        description="Auditoria cadastral completa de usuários do sistema, equipe de funcionários, fornecedores homologados e carteira de clientes."
-        onBack={() => navigateToView('home')}
-        onExportExcel={handleExportCadastrosExcel}
-        onExportXml={handleExportCadastrosXml}
-        onPrint={handlePrintReport}
-        onRefresh={() => void loadData()}
-        isRefreshing={isLoading}
-        disableExport={activeTabRecordsCount === 0}
-        printOrientationMode={printOrientationMode}
-        effectiveOrientation={effectiveOrientation}
-        onPrintOrientationChange={setPrintOrientationMode}
-      />
-
-      {/* FILTROS DE PERÍODO */}
-      <Card className="rounded-2xl border-gray-200 dark:border-slate-800 shadow-xs print:hidden">
-        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(['today', '7d', 'month', '30d', 'year', 'all'] as ReportPeriodPreset[]).map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => {
-                  const range = getPresetDateRange(preset)
-                  setDateFilter({ preset, startDate: range.startDate, endDate: range.endDate })
-                }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  dateFilter.preset === preset
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                {PERIOD_LABELS[preset]}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-gray-500">De:</span>
-            <input
-              type="date"
-              value={dateFilter.startDate}
-              onChange={(e) =>
-                setDateFilter((prev) => ({
-                  ...prev,
-                  preset: 'custom',
-                  startDate: e.target.value,
-                }))
-              }
-              className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
-            />
-            <span className="text-gray-500">Até:</span>
-            <input
-              type="date"
-              value={dateFilter.endDate}
-              onChange={(e) =>
-                setDateFilter((prev) => ({
-                  ...prev,
-                  preset: 'custom',
-                  endDate: e.target.value,
-                }))
-              }
-              className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-gray-900 dark:text-white"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ABAS DO RELATÓRIO GERAL DE CADASTROS */}
-      <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-800 print:hidden">
-        <div className="flex space-x-1 sm:space-x-4">
-          <button
-            type="button"
-            onClick={() => handleTabChange('users')}
-            className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition ${
-              registrationsTab === 'users'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
-            }`}
-          >
-            <ShieldCheck className="h-4 w-4" />
-            Usuários ({filteredUsers.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('employees')}
-            className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition ${
-              registrationsTab === 'employees'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
-            }`}
-          >
-            <Briefcase className="h-4 w-4" />
-            Funcionários ({filteredEmployees.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('suppliers')}
-            className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition ${
-              registrationsTab === 'suppliers'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
-            }`}
-          >
-            <Truck className="h-4 w-4" />
-            Fornecedores ({filteredSuppliers.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabChange('customers')}
-            className={`flex items-center gap-2 border-b-2 py-3 px-3 sm:px-4 text-xs font-bold transition ${
-              registrationsTab === 'customers'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-slate-300'
-            }`}
-          >
-            <Users className="h-4 w-4" />
-            Clientes ({filteredCustomers.length})
-          </button>
-        </div>
-
-        {/* Busca por texto */}
-        <div className="relative pb-2">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar nos cadastros..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-48 sm:w-64 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
-      {/* CARDS DE MÉTRICAS VISUAIS (EXIBIÇÃO EM TELA, OCULTOS NA IMPRESSÃO A4) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 print:hidden">
-        {/* 1. Usuários */}
-        <Card
-          onClick={() => handleTabChange('users')}
-          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-purple-100 dark:border-purple-900/50 bg-gradient-to-br from-purple-50/50 to-white dark:from-purple-950/30 dark:to-slate-900 ${
-            registrationsTab === 'users' ? 'ring-2 ring-purple-500/50' : ''
-          }`}
-        >
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                Usuários Acesso
-              </p>
-              <p className="text-xl font-extrabold text-purple-700 dark:text-purple-300 mt-0.5">
-                {filteredUsers.length} usuário(s)
-              </p>
-            </div>
-            <div className="rounded-xl bg-purple-100 dark:bg-purple-900/60 p-2 text-purple-700 dark:text-purple-300">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 2. Funcionários */}
-        <Card
-          onClick={() => handleTabChange('employees')}
-          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/30 dark:to-slate-900 ${
-            registrationsTab === 'employees' ? 'ring-2 ring-indigo-500/50' : ''
-          }`}
-        >
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                Funcionários
-              </p>
-              <p className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
-                {filteredEmployees.length} funcionário(s)
-              </p>
-            </div>
-            <div className="rounded-xl bg-indigo-100 dark:bg-indigo-900/60 p-2 text-indigo-700 dark:text-indigo-300">
-              <Briefcase className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 3. Fornecedores */}
-        <Card
-          onClick={() => handleTabChange('suppliers')}
-          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-950/30 dark:to-slate-900 ${
-            registrationsTab === 'suppliers' ? 'ring-2 ring-blue-500/50' : ''
-          }`}
-        >
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                Fornecedores
-              </p>
-              <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">
-                {filteredSuppliers.length} fornecedor(es)
-              </p>
-            </div>
-            <div className="rounded-xl bg-blue-100 dark:bg-blue-900/60 p-2 text-blue-700 dark:text-blue-300">
-              <Truck className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 4. Clientes */}
-        <Card
-          onClick={() => handleTabChange('customers')}
-          className={`cursor-pointer transition-all hover:shadow-md rounded-xl shadow-xs border-emerald-100 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/30 dark:to-slate-900 ${
-            registrationsTab === 'customers' ? 'ring-2 ring-emerald-500/50' : ''
-          }`}
-        >
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                Clientes
-              </p>
-              <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                {filteredCustomers.length} cliente(s)
-              </p>
-            </div>
-            <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-              <Users className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 5. Total Compras Clientes */}
-        <Card className="transition-all rounded-xl shadow-xs border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/30 dark:to-slate-900">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                Faturamento Clientes
-              </p>
-              <p className="text-lg font-extrabold text-amber-700 dark:text-amber-300 mt-0.5 font-mono">
-                {formatCurrency(
-                  filteredCustomers
-                    .reduce((sum, c) => sum + (customerMetricsMap.get(c.id)?.totalSpent || 0), 0)
-                    .toFixed(2),
-                )}
-              </p>
-            </div>
-            <div className="rounded-xl bg-amber-100 dark:bg-amber-900/60 p-2 text-amber-700 dark:text-amber-300">
-              <FileText className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* CONTEÚDO DAS ABAS DE CADASTROS */}
-      <div className="space-y-4">
-        {registrationsTab === 'users' && (
-          <div className="space-y-4">
-            {filteredUsers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
-                Nenhum usuário encontrado.
-              </div>
-            ) : (
-              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="w-full">
-                  <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-                      <tr>
-                        <th className="py-2.5 px-2.5">Usuário / Exibição</th>
-                        <th className="py-2.5 px-2.5">E-mail de Acesso</th>
-                        <th className="py-2.5 px-2.5">Papel no Sistema</th>
-                        <th className="py-2.5 px-2.5">Nível de Permissão</th>
-                        <th className="py-2.5 px-2.5 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {filteredUsers.map((u) => (
-                        <tr
-                          key={u.userId}
-                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
-                        >
-                          <td className="py-2 px-2.5 font-semibold text-slate-900 dark:text-white break-words">
-                            {u.displayName || u.email.split('@')[0]}
-                          </td>
-                          <td className="py-2 px-2.5 font-mono text-slate-600 dark:text-slate-300 break-all">
-                            {u.email}
-                          </td>
-                          <td className="py-2 px-2.5 text-slate-700 dark:text-slate-300 break-words">
-                            {u.role === 'owner' ? 'Proprietário' : u.role === 'admin' ? 'Administrador' : 'Operador'}
-                          </td>
-                          <td className="py-2 px-2.5 text-slate-600 dark:text-slate-400 break-words">
-                            {u.isOwner ? 'Acesso Total (Owner)' : u.isAdmin ? 'Acesso Administrativo' : 'Acesso Operacional'}
-                          </td>
-                          <td className="py-2 px-2.5 text-center">
-                            <span
-                              className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border ${
-                                u.isOwner
-                                  ? 'bg-purple-100 text-purple-800 border-purple-200'
-                                  : u.isAdmin
-                                    ? 'bg-blue-100 text-blue-800 border-blue-200'
-                                    : 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                              }`}
-                            >
-                              Ativo
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
-                      <tr>
-                        <td colSpan={4} className="py-2.5 px-2.5 uppercase text-slate-700 dark:text-slate-300">
-                          Total de Usuários Cadastrados
-                        </td>
-                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-900 dark:text-white">
-                          {filteredUsers.length}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {registrationsTab === 'employees' && (
-          <div className="space-y-4">
-            {filteredEmployees.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
-                Nenhum funcionário cadastrado.
-              </div>
-            ) : (
-              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="w-full">
-                  <table className="report-fit-table w-full text-left text-xs print:text-[9.5px]">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-                      <tr>
-                        <th className="py-2.5 px-2.5">Nome do Funcionário</th>
-                        <th className="py-2.5 px-2.5">Cargo / Função</th>
-                        <th className="py-2.5 px-2.5">E-mail Corporativo</th>
-                        <th className="py-2.5 px-2.5">Atribuição</th>
-                        <th className="py-2.5 px-2.5 text-center">Situação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {filteredEmployees.map((e) => (
-                        <tr
-                          key={e.userId}
-                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
-                        >
-                          <td className="py-2 px-2.5 font-semibold text-slate-900 dark:text-white break-words">
-                            {e.name}
-                          </td>
-                          <td className="py-2 px-2.5 text-indigo-600 dark:text-indigo-400 font-medium break-words">
-                            {e.jobTitle}
-                          </td>
-                          <td className="py-2 px-2.5 font-mono text-slate-600 dark:text-slate-300 break-all">
-                            {e.email}
-                          </td>
-                          <td className="py-2 px-2.5 text-slate-700 dark:text-slate-300 break-words">
-                            {e.role === 'owner' ? 'Gestão Geral' : e.role === 'admin' ? 'Supervisão' : 'Operação'}
-                          </td>
-                          <td className="py-2 px-2.5 text-center">
-                            <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              Ativo
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
-                      <tr>
-                        <td colSpan={4} className="py-2.5 px-2.5 uppercase text-slate-700 dark:text-slate-300">
-                          Total de Funcionários
-                        </td>
-                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-900 dark:text-white">
-                          {filteredEmployees.length}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {registrationsTab === 'suppliers' && (
-          <div className="space-y-4">
-            {filteredSuppliers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
-                Nenhum fornecedor cadastrado.
-              </div>
-            ) : (
-              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="w-full">
-                  <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-                      <tr>
-                        <th className="py-2 px-2">Razão Social / Nome</th>
-                        <th className="py-2 px-2">CNPJ / CPF</th>
-                        <th className="py-2 px-2">Telefone / WhatsApp</th>
-                        <th className="py-2 px-2">E-mail Comercial</th>
-                        <th className="py-2 px-2">Endereço</th>
-                        <th className="py-2 px-2 text-center">Data Cadastro</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {filteredSuppliers.map((s) => (
-                        <tr
-                          key={s.id}
-                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
-                        >
-                          <td className="py-2 px-2 font-semibold text-slate-900 dark:text-white break-words">
-                            {s.name}
-                          </td>
-                          <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                            {s.document || '—'}
-                          </td>
-                          <td className="py-2 px-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                            {s.phone ? formatPhoneNumber(s.phone) : '—'}
-                          </td>
-                          <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 break-all">
-                            {s.email || '—'}
-                          </td>
-                          <td className="py-2 px-2 text-slate-700 dark:text-slate-300 break-words whitespace-normal">
-                            {s.address || '—'}
-                          </td>
-                          <td className="py-2 px-2 text-center whitespace-nowrap text-slate-500">
-                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
-                      <tr>
-                        <td colSpan={5} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
-                          Total de Fornecedores Homologados
-                        </td>
-                        <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900 dark:text-white">
-                          {filteredSuppliers.length}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {registrationsTab === 'customers' && (
-          <div className="space-y-4">
-            {filteredCustomers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
-                Nenhum cliente cadastrado.
-              </div>
-            ) : (
-              <div className="overflow-hidden print:overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs print:border-slate-400 print:shadow-none">
-                <div className="w-full">
-                  <table className="report-fit-table w-full text-left text-[11px] leading-snug print:text-[9.5px]">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-                      <tr>
-                        <th className="py-2 px-2">Cliente / Razão Social</th>
-                        <th className="py-2 px-2 text-center">Tipo</th>
-                        <th className="py-2 px-2">Documento (CPF/CNPJ)</th>
-                        <th className="py-2 px-2">Telefone / WhatsApp</th>
-                        <th className="py-2 px-2">E-mail</th>
-                        <th className="py-2 px-2 text-right">Total Compras</th>
-                        <th className="py-2 px-2 text-center">Faturamentos</th>
-                        <th className="py-2 px-2 text-center">Data Cadastro</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {filteredCustomers.map((c) => {
-                        const metrics = customerMetricsMap.get(c.id)
-                        return (
-                          <tr
-                            key={c.id}
-                            className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors break-inside-avoid"
-                          >
-                            <td className="py-2 px-2 font-semibold text-slate-900 dark:text-white break-words">
-                              {c.name}
-                            </td>
-                            <td className="py-2 px-2 text-center">
-                              <span className="inline-block rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                                {c.personType === 'company' ? 'PJ' : 'PF'}
-                              </span>
-                            </td>
-                            <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                              {c.document || '—'}
-                            </td>
-                            <td className="py-2 px-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                              {c.phone ? formatPhoneNumber(c.phone) : '—'}
-                            </td>
-                            <td className="py-2 px-2 font-mono text-slate-600 dark:text-slate-300 break-all">
-                              {c.email || '—'}
-                            </td>
-                            <td className="py-2 px-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                              {formatCurrency((metrics?.totalSpent || 0).toFixed(2))}
-                            </td>
-                            <td className="py-2 px-2 text-center font-mono text-slate-700 dark:text-slate-300">
-                              {metrics?.salesCount || 0}
-                            </td>
-                            <td className="py-2 px-2 text-center whitespace-nowrap text-slate-500">
-                              {c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '—'}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                    <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
-                      <tr>
-                        <td colSpan={5} className="py-2.5 px-2 uppercase text-slate-700 dark:text-slate-300">
-                          Total de Clientes ({filteredCustomers.length})
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-300 font-black whitespace-nowrap">
-                          {formatCurrency(
-                            filteredCustomers
-                              .reduce((sum, c) => sum + (customerMetricsMap.get(c.id)?.totalSpent || 0), 0)
-                              .toFixed(2),
-                          )}
-                        </td>
-                        <td colSpan={2} className="py-2.5 px-2 text-center text-slate-400">—</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* RODAPÉ OFICIAL DE IMPRESSÃO */}
-      <ReportPrintFooter
-        emissionWeekday={emissionWeekday}
-        emissionDate={emissionDate}
-        emissionTime={emissionTime}
-        documentType="Documento Oficial de Auditoria Cadastral"
-      />
-    </div>
-  )
+  return null
 }

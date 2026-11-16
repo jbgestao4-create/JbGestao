@@ -31,6 +31,7 @@ import {
   Palette,
   Phone,
   Receipt,
+  X,
 } from 'lucide-react'
 import type {
   DashboardModuleCode,
@@ -458,6 +459,13 @@ export function OrganizationSettingsPage() {
 
     if (res.success) {
       setIsAddModalOpen(false)
+      setName('')
+      setJobTitle('')
+      setEmail('')
+      setPhone('')
+      setPassword('')
+      setSelectedDashboardModules([])
+      setFormError('')
 
       // Atualização otimista imediata na interface
       const newMember: OrganizationMemberDetail = {
@@ -610,7 +618,7 @@ export function OrganizationSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
           Configurações da Organização
@@ -638,35 +646,14 @@ export function OrganizationSettingsPage() {
         <button
           type="button"
           onClick={() => handleTabChange('customization')}
-          className={`group relative flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer shadow-xs ${
-            activeTab === 'customization'
-              ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white shadow-md shadow-purple-500/25 ring-2 ring-purple-400/50 scale-[1.02]'
-              : 'bg-gradient-to-r from-purple-50 via-pink-50 to-amber-50 dark:from-purple-950/40 dark:via-pink-950/40 dark:to-amber-950/40 text-purple-700 dark:text-purple-300 border-2 border-purple-300 dark:border-purple-600/70 hover:border-purple-500 hover:shadow-md hover:scale-[1.02]'
-          }`}
-        >
-          <span
-            className={`p-1 rounded-md transition-colors ${
-              activeTab === 'customization'
-                ? 'bg-white/20 text-white'
-                : 'bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-300 group-hover:bg-purple-200'
-            }`}
-          >
-            <Palette className="w-4 h-4" />
-          </span>
-          <span>Personalização do Sistema</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleTabChange('privacy')}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-            activeTab === 'privacy'
-              ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-xs border border-emerald-300 dark:border-emerald-700'
+            activeTab === 'customization'
+              ? 'bg-white dark:bg-slate-800 text-[var(--theme-primary,#2563eb)] shadow-xs border border-gray-200 dark:border-slate-700'
               : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
           }`}
         >
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          Privacidade e LGPD
+          <Palette className="w-4 h-4" />
+          Personalização do Sistema
         </button>
 
         {canManageMembers && (
@@ -675,11 +662,11 @@ export function OrganizationSettingsPage() {
             onClick={() => handleTabChange('system-invoices')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
               activeTab === 'system-invoices'
-                ? 'bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-400 shadow-xs border border-purple-300 dark:border-purple-700'
+                ? 'bg-white dark:bg-slate-800 text-[var(--theme-primary,#2563eb)] shadow-xs border border-gray-200 dark:border-slate-700'
                 : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
-            <Receipt className="w-4 h-4 text-purple-600" />
+            <Receipt className="w-4 h-4" />
             Faturas do Sistema
           </button>
         )}
@@ -946,11 +933,24 @@ export function OrganizationSettingsPage() {
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs">
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                <UserPlus className="w-5 h-5" />
+            <div className="flex items-center justify-between gap-2.5 mb-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Cadastrar Novo Funcionário</h3>
               </div>
-              <h3 className="text-lg font-bold text-gray-900">Cadastrar Novo Funcionário</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddModalOpen(false)
+                  setFormError('')
+                }}
+                className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <p className="text-xs text-gray-500 mb-5">
               Selecione a organização e os módulos ativos aos quais o funcionário terá acesso.
@@ -1151,7 +1151,10 @@ export function OrganizationSettingsPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setIsAddModalOpen(false)
+                    setFormError('')
+                  }}
                   disabled={isSubmitting}
                 >
                   Cancelar
