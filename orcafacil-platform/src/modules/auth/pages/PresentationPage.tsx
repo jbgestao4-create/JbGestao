@@ -270,12 +270,6 @@ export function PresentationPage() {
         'Encerrado o 1º mês gratuito, inicia-se o ciclo mensal normal do plano escolhido. Para continuar utilizando o sistema no próximo mês, você deve efetuar o pagamento da mensalidade (via PIX com QR Code ou Boleto Bancário) até a data de vencimento diretamente em Configurações → Faturas do Sistema.',
     },
     {
-      question:
-        'Caso eu não pague a mensalidade no próximo mês, o que acontece com o meu acesso?',
-      answer:
-        'De acordo com as Políticas de Privacidade e os Termos de Uso (Cláusula 6) aprovados no momento do cadastro, caso o pagamento do mês seguinte não seja identificado, o sistema retirará e suspenderá automaticamente o acesso da conta. Seus dados cadastrados permanecem íntegros pelo período de carência contratual (30 a 90 dias) para que você possa regularizar o pagamento e reativar o acesso imediatamente ou solicitar exportação nos termos da LGPD.',
-    },
-    {
       question: 'Posso controlar quais módulos cada funcionário da minha empresa pode acessar?',
       answer:
         'Sim! Dentro dos módulos liberados pelo seu plano, o Administrador da empresa conta com o módulo de Organização (MOD-07), podendo conceder ou restringir o acesso de cada colaborador módulo por módulo e sub-função por sub-função, além de definir 3 níveis de permissão no Estoque.',
@@ -328,6 +322,12 @@ export function PresentationPage() {
                 className="rounded-lg px-3 py-2 transition-colors hover:bg-slate-800 hover:text-white"
               >
                 Planos Cadastrados
+              </a>
+              <a
+                href="#seguranca-lgpd"
+                className="rounded-lg px-3 py-2 transition-colors hover:bg-slate-800 hover:text-white"
+              >
+                Segurança & LGPD
               </a>
               <a
                 href="#faq"
@@ -943,7 +943,7 @@ export function PresentationPage() {
             </p>
           </div>
 
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto gap-6">
             {/* Etapa 1 */}
             <div className="relative rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-7 backdrop-blur-xs">
               <div className="flex items-center justify-between mb-5">
@@ -991,30 +991,6 @@ export function PresentationPage() {
                 <span>Avisos automáticos 3 dias antes do vencimento</span>
               </div>
             </div>
-
-            {/* Etapa 3 */}
-            <div className="relative rounded-3xl border border-amber-400/30 bg-amber-500/10 p-6 sm:p-7 backdrop-blur-xs">
-              <div className="flex items-center justify-between mb-5">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/20 border border-amber-400/30 text-amber-300">
-                  <Lock className="h-6 w-6" />
-                </span>
-                <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-extrabold text-amber-300">
-                  Política Contratual
-                </span>
-              </div>
-              <h3 className="text-lg font-bold text-white">
-                3. Retirada Automática de Acesso se Não Houver Pagamento
-              </h3>
-              <p className="mt-2.5 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Caso o pagamento do próximo mês não seja efetuado,{' '}
-                <strong>o sistema retirará automaticamente o acesso da conta</strong>, em estrito
-                cumprimento às Políticas e aos Termos de Uso aprovados no momento do cadastro.
-              </p>
-              <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-2 text-xs text-amber-300 font-semibold">
-                <Scale className="h-4 w-4 shrink-0" />
-                <span>Dados preservados no prazo de carência (30 a 90 dias LGPD)</span>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -1023,7 +999,7 @@ export function PresentationPage() {
       {/* PLANOS CADASTRADOS NA PLATAFORMA (#planos)                             */}
       {/* ===================================================================== */}
       <section id="planos" className="py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[100rem] px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="mx-auto max-w-3xl text-center">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700 border border-blue-200">
               <Zap className="h-3.5 w-3.5 text-blue-600" />
@@ -1039,8 +1015,8 @@ export function PresentationPage() {
             </p>
           </div>
 
-          {/* Grid de Cards dos Planos Cadastrados */}
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
+          {/* Grid de Cards dos Planos Cadastrados - Os 5 um ao lado do outro */}
+          <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-4.5 items-stretch">
             {plans.map((plan) => {
               const isPopular =
                 plan.isActive &&
@@ -1186,9 +1162,7 @@ export function PresentationPage() {
                       </a>
                     )}
                     <p className="text-[10px] text-center text-slate-400">
-                      {isAvailable
-                        ? 'Sem cobrança no 1º mês • Suspensão automática se não renovar'
-                        : 'Em fase de homologação fiscal SEFAZ'}
+                      Sem cobrança no 1º mês • Ativação rápida via WhatsApp
                     </p>
                   </div>
                 </div>
@@ -1297,6 +1271,92 @@ export function PresentationPage() {
       </section>
 
       {/* ===================================================================== */}
+      {/* SEGURANÇA, CRIPTOGRAFIA & CONFORMIDADE LGPD                           */}
+      {/* ===================================================================== */}
+      <section id="seguranca-lgpd" className="py-16 sm:py-20 bg-gradient-to-b from-white via-slate-50 to-white border-t border-slate-200/80">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3.5 py-1 text-xs font-bold text-blue-700">
+              <ShieldCheck className="h-4 w-4 text-blue-600" />
+              Segurança Máxima & Proteção de Dados
+            </span>
+            <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+              Criptografia de Ponta a Ponta e 100% em Conformidade com a LGPD
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-600 leading-relaxed">
+              O ControleSoft foi projetado desde a sua arquitetura base para garantir a total proteção,
+              confidencialidade e integridade dos dados da sua empresa e dos seus clientes, em estrita
+              conformidade com a <strong>Lei Geral de Proteção de Dados (Lei nº 13.709/2018)</strong>.
+            </p>
+          </div>
+
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                <Lock className="h-6 w-6" />
+              </div>
+              <h3 className="mt-4 text-base font-bold text-slate-900">Criptografia em Trânsito e em Repouso</h3>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                Toda comunicação com nossos servidores é criptografada utilizando o protocolo <strong>TLS 1.3 / SSL de 256 bits</strong>.
+                Bancos de dados e backups contam com cifragem de alto padrão criptográfico.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                <Scale className="h-6 w-6" />
+              </div>
+              <h3 className="mt-4 text-base font-bold text-slate-900">Conformidade Total com a LGPD</h3>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                Adequação integral à <strong>Lei nº 13.709/2018 (LGPD)</strong>. Respeito irrestrito aos direitos dos titulares,
+                tratamento legítimo e seguro de dados pessoais e política de privacidade transparente.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100 text-purple-700">
+                <Database className="h-6 w-6" />
+              </div>
+              <h3 className="mt-4 text-base font-bold text-slate-900">Isolamento de Dados Multitenant</h3>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                Garantia arquitetural de isolamento absoluto por empresa via <strong>Row-Level Security (RLS)</strong> a nível de banco de dados.
+                Nenhuma organização acessa informações de outra.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <h3 className="mt-4 text-base font-bold text-slate-900">Consentimento e Auditoria</h3>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                Registro auditável de termos de uso e consentimento com carimbo de data, hora e IP,
+                além de trilha de auditoria para operações críticas e fiscais.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-xs font-semibold text-slate-600">
+            <Link
+              to="/politica-de-privacidade?tab=privacy"
+              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              <FileText className="h-4 w-4" />
+              Consultar nossa Política de Privacidade Completa
+            </Link>
+            <span className="hidden sm:inline text-slate-300">•</span>
+            <Link
+              to="/politica-de-privacidade?tab=terms"
+              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              <FileText className="h-4 w-4" />
+              Termos de Uso e Condições Gerais
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ===================================================================== */}
       {/* FAQ E POLÍTICAS DE USO / LGPD (#faq)                                  */}
       {/* ===================================================================== */}
       <section id="faq" className="py-20 bg-white border-t border-slate-200/80">
@@ -1339,40 +1399,6 @@ export function PresentationPage() {
                 </div>
               )
             })}
-          </div>
-
-          {/* Banner CTA Final */}
-          <div className="mt-14 rounded-3xl bg-gradient-to-r from-[#0F172A] via-blue-950 to-[#1E3A8A] p-8 sm:p-10 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="space-y-2 text-center md:text-left max-w-xl">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 px-3 py-1 text-xs font-bold text-emerald-300">
-                1º Mês Grátis • Liberação Imediata
-              </span>
-              <h3 className="text-2xl sm:text-3xl font-extrabold">
-                Pronto para profissionalizar a gestão da sua empresa?
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Escolha seu plano agora, aproveite 30 dias grátis sem compromisso inicial e decida
-                no próximo mês com total segurança jurídica e conformidade LGPD.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={() => handleChoosePlan()}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-6 py-3.5 text-sm font-bold text-white shadow-lg transition-colors cursor-pointer"
-              >
-                <span>Começar 1 Mês Grátis</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              <Link
-                to="/politica-de-privacidade?tab=terms"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/15 px-5 py-3.5 text-xs font-bold text-white transition-colors"
-              >
-                <FileText className="h-4 w-4" />
-                <span>Ler Termos de Uso</span>
-              </Link>
-            </div>
           </div>
         </div>
       </section>

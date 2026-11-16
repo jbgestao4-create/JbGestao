@@ -268,6 +268,14 @@ export const router = createBrowserRouter([
 
   // Rotas do módulo ControleSoft (protegidas por autenticação e concessão de módulo)
   {
+    path: '/sales/pdv',
+    element: <Navigate to="/orcafacil/sales/pdv" replace />,
+  },
+  {
+    path: '/pdv',
+    element: <Navigate to="/orcafacil/sales/pdv" replace />,
+  },
+  {
     path: '/orcafacil/sales/pdv',
     element: (
       <ProtectedRoute hideLayout>
