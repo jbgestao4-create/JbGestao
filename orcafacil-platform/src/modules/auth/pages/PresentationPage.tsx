@@ -198,6 +198,17 @@ export function PresentationPage() {
     return () => window.clearTimeout(timer)
   }, [activeShowcaseTab, pdvSlide])
 
+  // Rotação automática das abas do showcase: a cada 8 segundos avança para a próxima
+  // (PDV → O.S. → Caixa → Estoque → Relatórios → PDV). O clique manual reinicia o tempo.
+  useEffect(() => {
+    const order = ['pdv', 'os', 'cash', 'inventory', 'reports'] as const
+    const timer = window.setTimeout(() => {
+      const index = order.indexOf(activeShowcaseTab)
+      setActiveShowcaseTab(order[(index + 1) % order.length])
+    }, 8000)
+    return () => window.clearTimeout(timer)
+  }, [activeShowcaseTab])
+
   // Carrossel de O.S.: alterna de 5 em 5 segundos
   useEffect(() => {
     if (activeShowcaseTab !== 'os') {
