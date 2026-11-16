@@ -532,17 +532,17 @@ export function PresentationPage() {
                       </ul>
                     </div>
 
-                    <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="w-full lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 overflow-hidden">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                         <div>
-                          <span className="text-[11px] font-bold uppercase text-blue-600">
+                          <span className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-600">
                             Terminal PDV #01 • Operador Ativo
                           </span>
-                          <h4 className="text-sm font-bold text-slate-900">
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900">
                             Cupom de Venda #2026-0842
                           </h4>
                         </div>
-                        <span className="rounded-lg bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
+                        <span className="self-start sm:self-auto rounded-lg bg-emerald-50 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold text-emerald-700 border border-emerald-200">
                           F2 Finalizar Venda
                         </span>
                       </div>
@@ -555,40 +555,40 @@ export function PresentationPage() {
                         ].map((item) => (
                           <div
                             key={item.code}
-                            className="flex items-center justify-between rounded-xl bg-slate-50 px-3.5 py-2.5 border border-slate-200/70"
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-4 rounded-xl bg-slate-50 px-3 sm:px-3.5 py-2 sm:py-2.5 border border-slate-200/70"
                           >
-                            <div>
-                              <span className="font-mono text-[10px] font-bold text-blue-600 mr-2">
+                            <div className="min-w-0">
+                              <span className="font-mono text-[10px] font-bold text-blue-600 mr-1.5 sm:mr-2">
                                 {item.code}
                               </span>
-                              <span className="font-semibold text-slate-800">{item.name}</span>
+                              <span className="font-semibold text-slate-800 break-words">{item.name}</span>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <span className="text-slate-500">{item.qty}</span>
-                              <span className="font-bold text-slate-900">{item.total}</span>
+                            <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 text-right">
+                              <span className="text-slate-500 text-[11px] sm:text-xs">{item.qty}</span>
+                              <span className="font-bold text-slate-900 text-xs sm:text-sm">{item.total}</span>
                             </div>
                           </div>
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3 pt-2">
-                        <div className="rounded-xl bg-slate-50 p-3 border border-slate-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 pt-1 sm:pt-2">
+                        <div className="rounded-xl bg-slate-50 p-2.5 sm:p-3 border border-slate-200 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-slate-400 block">
                             Subtotal
                           </span>
-                          <span className="text-base font-bold text-slate-800">R$ 554,90</span>
+                          <span className="text-sm sm:text-base font-bold text-slate-800">R$ 554,90</span>
                         </div>
-                        <div className="rounded-xl bg-emerald-50 p-3 border border-emerald-200">
+                        <div className="rounded-xl bg-emerald-50 p-2.5 sm:p-3 border border-emerald-200 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-emerald-700 block">
                             Pagamento
                           </span>
-                          <span className="text-base font-bold text-emerald-800">PIX Instantâneo</span>
+                          <span className="text-sm sm:text-base font-bold text-emerald-800">PIX Instantâneo</span>
                         </div>
-                        <div className="rounded-xl bg-blue-600 p-3 text-white">
+                        <div className="rounded-xl bg-blue-600 p-2.5 sm:p-3 text-white flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-blue-200 block">
                             Total Líquido
                           </span>
-                          <span className="text-base font-black">R$ 554,90</span>
+                          <span className="text-sm sm:text-base font-black">R$ 554,90</span>
                         </div>
                       </div>
                     </div>
@@ -627,17 +627,17 @@ export function PresentationPage() {
                       </ul>
                     </div>
 
-                    <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="w-full lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 overflow-hidden">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                         <div>
-                          <span className="text-[11px] font-bold uppercase text-blue-600">
+                          <span className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-600">
                             Ordem de Serviço #OS-2026-0194
                           </span>
-                          <h4 className="text-sm font-bold text-slate-900">
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900">
                             Equipamento: Notebook Dell Inspiron 15 • Cliente: Mariana Costa
                           </h4>
                         </div>
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                        <span className="self-start sm:self-auto rounded-full bg-emerald-100 px-3 py-1 text-[11px] sm:text-xs font-bold text-emerald-800">
                           ✓ Aprovado no Portal pelo Cliente
                         </span>
                       </div>
@@ -701,37 +701,37 @@ export function PresentationPage() {
                       </ul>
                     </div>
 
-                    <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5">
+                    <div className="w-full lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 overflow-hidden">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 sm:p-3.5 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-emerald-700 block">
                             Entradas do Dia
                           </span>
-                          <span className="text-lg font-black text-emerald-800">R$ 4.820,00</span>
+                          <span className="text-base sm:text-lg font-black text-emerald-800">R$ 4.820,00</span>
                         </div>
-                        <div className="rounded-xl bg-rose-50 border border-rose-200 p-3.5">
+                        <div className="rounded-xl bg-rose-50 border border-rose-200 p-2.5 sm:p-3.5 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-rose-700 block">
                             Saídas / Boletos Pagos
                           </span>
-                          <span className="text-lg font-black text-rose-800">R$ 1.150,00</span>
+                          <span className="text-base sm:text-lg font-black text-rose-800">R$ 1.150,00</span>
                         </div>
-                        <div className="rounded-xl bg-blue-50 border border-blue-200 p-3.5">
+                        <div className="rounded-xl bg-blue-50 border border-blue-200 p-2.5 sm:p-3.5 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-blue-700 block">
                             Saldo em Caixa
                           </span>
-                          <span className="text-lg font-black text-blue-900">R$ 3.670,00</span>
+                          <span className="text-base sm:text-lg font-black text-blue-900">R$ 3.670,00</span>
                         </div>
                       </div>
-                      <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-center justify-between text-xs">
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                         <div>
-                          <span className="font-bold text-amber-950 block">
+                          <span className="font-bold text-amber-950 block text-[11px] sm:text-xs">
                             Leitor Inteligente de Boletos PDF Ativo
                           </span>
-                          <span className="text-amber-800">
+                          <span className="text-amber-800 text-[10px] sm:text-xs">
                             Distribuidora Nacional Ltda • Vencimento extraído automaticamente
                           </span>
                         </div>
-                        <span className="rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white">
+                        <span className="self-start sm:self-auto rounded-lg bg-amber-600 px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-white shrink-0">
                           Dar Baixa no Caixa
                         </span>
                       </div>
@@ -770,12 +770,12 @@ export function PresentationPage() {
                       </ul>
                     </div>
 
-                    <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3 text-xs">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <span className="font-bold text-slate-900">
+                    <div className="w-full lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 text-xs overflow-hidden">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                        <span className="font-bold text-slate-900 text-xs sm:text-sm">
                           Posição de Estoque & Margem Comercial
                         </span>
-                        <span className="rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                        <span className="self-start sm:self-auto rounded-lg bg-indigo-50 px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-indigo-700">
                           Importar XML NF-e
                         </span>
                       </div>
@@ -786,17 +786,17 @@ export function PresentationPage() {
                       ].map((row) => (
                         <div
                           key={row.sku}
-                          className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 px-3.5 py-2.5"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-4 rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 sm:px-3.5 py-2 sm:py-2.5"
                         >
-                          <div>
-                            <span className="font-mono text-[10px] font-bold text-indigo-600 mr-2">
+                          <div className="min-w-0">
+                            <span className="font-mono text-[10px] font-bold text-indigo-600 mr-1.5 sm:mr-2">
                               {row.sku}
                             </span>
-                            <span className="font-semibold text-slate-800">{row.item}</span>
+                            <span className="font-semibold text-slate-800 break-words">{row.item}</span>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-bold text-slate-900">{row.stock}</span>
-                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${row.color}`}>
+                          <div className="flex items-center justify-between sm:justify-end gap-2.5 sm:gap-3 shrink-0">
+                            <span className="font-bold text-slate-900 text-xs sm:text-sm">{row.stock}</span>
+                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${row.color}`}>
                               {row.status}
                             </span>
                           </div>
@@ -837,33 +837,33 @@ export function PresentationPage() {
                       </ul>
                     </div>
 
-                    <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 text-xs">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <span className="font-bold text-slate-900">
+                    <div className="w-full lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 text-xs overflow-hidden">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                        <span className="font-bold text-slate-900 text-xs sm:text-sm">
                           Demonstrativo Gerencial & Permissões de Equipe
                         </span>
-                        <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">
+                        <span className="self-start sm:self-auto rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-blue-700">
                           Exportar / Imprimir A4
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div className="rounded-xl border border-slate-200 p-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                        <div className="rounded-xl border border-slate-200 p-2.5 sm:p-3 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-slate-400 block">
                             Ticket Médio
                           </span>
-                          <span className="text-base font-black text-slate-900">R$ 312,40</span>
+                          <span className="text-sm sm:text-base font-black text-slate-900">R$ 312,40</span>
                         </div>
-                        <div className="rounded-xl border border-slate-200 p-3">
+                        <div className="rounded-xl border border-slate-200 p-2.5 sm:p-3 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-slate-400 block">
                             Conversão de Orçamentos
                           </span>
-                          <span className="text-base font-black text-emerald-700">78,5%</span>
+                          <span className="text-sm sm:text-base font-black text-emerald-700">78,5%</span>
                         </div>
-                        <div className="col-span-2 sm:col-span-1 rounded-xl border border-slate-200 p-3">
+                        <div className="rounded-xl border border-slate-200 p-2.5 sm:p-3 flex sm:flex-col justify-between items-center sm:items-start">
                           <span className="text-[10px] font-bold uppercase text-slate-400 block">
                             Colaboradores Ativos
                           </span>
-                          <span className="text-base font-black text-blue-700">Permissões Granulares</span>
+                          <span className="text-sm sm:text-base font-black text-blue-700">Permissões Granulares</span>
                         </div>
                       </div>
                     </div>
