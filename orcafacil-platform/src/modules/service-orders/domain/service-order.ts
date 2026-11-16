@@ -1,5 +1,12 @@
+import type {
+  CommercialScopeSnapshot,
+  QuoteOsHistoryEntry,
+} from './quote-os-integration'
+
 export type ServiceOrderStatus =
   | 'queue'
+  | 'approved'
+  | 'pending_approval'
   | 'pending'
   | 'in_maintenance'
   | 'ready'
@@ -53,6 +60,9 @@ export interface ServiceOrderListItem {
   subtotal: string
   discount: string
   total: string
+  quoteId: string | null
+  quoteNumber: string | null
+  quoteVersion: number
   saleId: string | null
   saleNumber: string | null
   creatorName: string | null
@@ -95,6 +105,11 @@ export interface ServiceOrderDetail {
   subtotal: string
   discount: string
   total: string
+  quoteId: string | null
+  quoteNumber: string | null
+  quoteVersion: number
+  approvedQuoteSnapshot: CommercialScopeSnapshot | null
+  statusHistory: QuoteOsHistoryEntry[]
   saleId: string | null
   saleNumber: string | null
   creatorName: string | null
@@ -106,15 +121,21 @@ export interface ServiceOrderDetail {
 
 export const SERVICE_ORDER_STATUS_LABELS: Record<ServiceOrderStatus, string> = {
   queue: 'Fila de Atendimento',
+  approved: 'Aprovada',
+  pending_approval: 'Pendente de Aprovação',
   pending: 'Pendente',
   in_maintenance: 'Em Manutenção',
-  ready: 'Pronto',
+  ready: 'Finalizada',
   closed: 'O.S. Encerrada',
 }
 
 export const SERVICE_ORDER_STATUS_BADGE_CLASSES: Record<ServiceOrderStatus, string> = {
   queue:
     'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800',
+  approved:
+    'bg-teal-50 text-teal-800 border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800',
+  pending_approval:
+    'bg-orange-50 text-orange-800 border-orange-300 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-800',
   pending:
     'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800',
   in_maintenance:
@@ -151,4 +172,3 @@ export const DEFAULT_DAMAGE_CHECKLIST_OPTIONS = [
   'Botões / teclas com defeito físico',
   'Equipamento chegou desligado / não liga',
 ] as const
-

@@ -21,6 +21,7 @@ export interface PortalQuote {
   id: UUID
   quoteNumber: string
   status: QuoteStatus
+  version?: number
   approvedBy?: 'client' | 'user' | string | null
   approvedAt?: string | null
   subtotal: string

@@ -25,6 +25,9 @@ export interface OrganizationBillingInfo {
   isSuspended: boolean
   oldestOverdueInvoice: ContractInvoice | null
   maxDaysOverdue: number
+  // Controle pós-teste de 1 mês: indica se já pagou o mês seguinte ou se está pendente de pagamento pós-trial
+  hasPaidPostTrialInvoice?: boolean
+  isPostTrialUnpaid?: boolean
 }
 
 /**
@@ -182,6 +185,12 @@ export const organizationBillingService = {
       }
     }
 
+    const hasPaidPostTrialInvoice = paidInvoices.some((inv) => inv.amount > 0) && maxDaysOverdue === 0
+    const hadExpiredTrial = Boolean(
+      effectiveTrialEndsAt && new Date(effectiveTrialEndsAt).getTime() < Date.now(),
+    )
+    const isPostTrialUnpaid = hadExpiredTrial && !hasPaidPostTrialInvoice
+
     return {
       isTrial: false,
       trialEndsAt: org.trialEndsAt,
@@ -199,6 +208,8 @@ export const organizationBillingService = {
       isSuspended,
       oldestOverdueInvoice,
       maxDaysOverdue,
+      hasPaidPostTrialInvoice,
+      isPostTrialUnpaid,
     }
   },
 }

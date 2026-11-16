@@ -6,6 +6,15 @@ import { getMinimumSalePriceViolations } from '../domain/minimum-sale-price'
 import type { QuoteStatus } from '@shared/types/database'
 import type { ServiceResult, UUID } from '@shared/types/common'
 import { formatCurrency } from '@shared/utils/monetary'
+import type { ServiceOrderStatus } from '@modules/service-orders/domain/service-order'
+import {
+  buildApprovedQuoteSnapshot,
+  encodeOsInternalNotes,
+  parseOsInternalNotes,
+  type CommercialChangeEntry,
+  type CommercialScopeSnapshot,
+  type QuoteOsHistoryEntry,
+} from '@modules/service-orders/domain/quote-os-integration'
 
 export interface QuoteListItem {
   id: UUID
@@ -27,6 +36,10 @@ export interface QuoteListItem {
   sellerName?: string | null
   saleId?: string | null
   saleNumber?: string | null
+  serviceOrderId?: string | null
+  serviceOrderNumber?: string | null
+  serviceOrderStatus?: ServiceOrderStatus | null
+  version?: number
 }
 
 export interface QuoteDetailItem {
@@ -76,6 +89,11 @@ export interface QuoteDetail extends QuoteListItem {
   sellerName?: string | null
   saleId?: string | null
   saleNumber?: string | null
+  serviceOrderId?: string | null
+  serviceOrderNumber?: string | null
+  serviceOrderStatus?: ServiceOrderStatus | null
+  version?: number
+  approvalHistory?: QuoteOsHistoryEntry[]
   customerPhone: string | null
   customerEmail: string | null
   customerAddress: string | null
@@ -98,6 +116,78 @@ export interface UpdateQuoteParams {
   items: QuoteItemInput[]
 }
 
+export interface SyncQuoteFromServiceOrderParams {
+  serviceOrderId: UUID
+  serviceOrderNumber: string
+  discount: string
+  items: QuoteItemInput[]
+  changes: CommercialChangeEntry[]
+  actorName?: string | null
+}
+
+interface LinkedOsSummary {
+  id: string
+  orderNumber: string
+  status: ServiceOrderStatus
+  quoteVersion: number
+  history: QuoteOsHistoryEntry[]
+}
+
+function normalizeLinkedOsStatus(rawStatus: string, logicalStatus?: ServiceOrderStatus): ServiceOrderStatus {
+  if (logicalStatus) return logicalStatus
+  if (rawStatus === 'approved' || rawStatus === 'pending_approval') return rawStatus
+  if (rawStatus === 'queue' || rawStatus === 'waiting_parts') return 'queue'
+  if (rawStatus === 'in_maintenance' || rawStatus === 'closed') return rawStatus
+  if (rawStatus === 'ready' || rawStatus === 'finalized') return 'ready'
+  return 'pending'
+}
+
+async function fetchLinkedServiceOrdersByQuoteMap(
+  organizationId: UUID,
+): Promise<Map<string, LinkedOsSummary>> {
+  const map = new Map<string, LinkedOsSummary>()
+  try {
+    let { data, error } = await supabase
+      .from('service_orders')
+      .select('id, order_number, status, internal_notes, quote_id, quote_version, status_history')
+      .eq('organization_id', organizationId)
+
+    if (error) {
+      const fallback = await supabase
+        .from('service_orders')
+        .select('id, order_number, status, internal_notes')
+        .eq('organization_id', organizationId)
+      data = fallback.data as typeof data
+    }
+
+    for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+      const { metadata } = parseOsInternalNotes(row.internal_notes as string | null)
+      const qId = (row.quote_id as string | null) || metadata.quoteId || null
+      if (!qId) continue
+
+      const status = normalizeLinkedOsStatus(
+        String(row.status || 'pending'),
+        metadata.logicalStatus,
+      )
+      const version = Number(row.quote_version || metadata.quoteVersion || 1)
+      const history = Array.isArray(row.status_history)
+        ? (row.status_history as QuoteOsHistoryEntry[])
+        : metadata.statusHistory || []
+
+      map.set(qId, {
+        id: String(row.id),
+        orderNumber: String(row.order_number),
+        status,
+        quoteVersion: version,
+        history,
+      })
+    }
+  } catch {
+    // Ignora falha silenciosa de lookup secundário
+  }
+  return map
+}
+
 async function validateMinimumSalePrices(
   organizationId: UUID,
   items: QuoteItemInput[],
@@ -110,7 +200,6 @@ async function validateMinimumSalePrices(
     .select('id, name, minimum_sale_price, can_sell, attributes')
     .eq('organization_id', organizationId)
     .in('id', inventoryItemIds)
-    // The shared Supabase client is untyped; this keeps the response typed locally.
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     .returns<InventoryMinimumPriceRow[]>()
 
@@ -205,6 +294,9 @@ function isMissingTrackingColumnsError(
     code === 'PGRST204' ||
     msg.includes('approved_by') ||
     msg.includes('approved_at') ||
+    msg.includes('service_order') ||
+    msg.includes('version') ||
+    msg.includes('approval_history') ||
     msg.includes('approved') ||
     msg.includes('schema cache') ||
     details.includes('approved')
@@ -228,6 +320,9 @@ export const quoteService = {
           status,
           approved_by,
           approved_at,
+          service_order_id,
+          service_order_number,
+          version,
           subtotal,
           discount,
           total,
@@ -262,6 +357,8 @@ export const quoteService = {
             customer_id,
             quote_number,
             status,
+            approved_by,
+            approved_at,
             subtotal,
             discount,
             total,
@@ -285,14 +382,54 @@ export const quoteService = {
           )
           .eq('organization_id', organizationId)
           .order('created_at', { ascending: false })
-        data = fallback.data as typeof data
-        error = fallback.error
+
+        if (fallback.error && isMissingTrackingColumnsError(fallback.error)) {
+          const minimalFallback = await supabase
+            .from('quotes')
+            .select(
+              `
+              id,
+              organization_id,
+              customer_id,
+              quote_number,
+              status,
+              subtotal,
+              discount,
+              total,
+              valid_until,
+              creator_name,
+              seller_name,
+              sale_id,
+              created_at,
+              updated_at,
+              sale:sale_id (
+                id,
+                quote_number,
+                seller_name,
+                creator_name
+              ),
+              customers (
+                name,
+                phone
+              )
+            `,
+            )
+            .eq('organization_id', organizationId)
+            .order('created_at', { ascending: false })
+          data = minimalFallback.data as typeof data
+          error = minimalFallback.error
+        } else {
+          data = fallback.data as typeof data
+          error = fallback.error
+        }
       }
 
       if (error) {
         logger.error('Erro ao listar orçamentos', error)
         return { success: false, error: 'Não foi possível carregar os orçamentos.' }
       }
+
+      const linkedOsMap = await fetchLinkedServiceOrdersByQuoteMap(organizationId)
 
       const list: QuoteListItem[] = (data ?? [])
         .filter((q) => !q.quote_number?.startsWith('VND-'))
@@ -308,7 +445,12 @@ export const quoteService = {
           const rawQuote = q as unknown as {
             approved_by?: string | null
             approved_at?: string | null
+            service_order_id?: string | null
+            service_order_number?: string | null
+            version?: number | null
           }
+
+          const linkedOs = linkedOsMap.get(q.id)
 
           return {
             id: q.id,
@@ -330,6 +472,10 @@ export const quoteService = {
             sellerName: q.seller_name || linkedSale?.seller_name || linkedSale?.creator_name || null,
             saleId: q.sale_id || linkedSale?.id || null,
             saleNumber: linkedSale?.quote_number || null,
+            serviceOrderId: rawQuote.service_order_id || linkedOs?.id || null,
+            serviceOrderNumber: rawQuote.service_order_number || linkedOs?.orderNumber || null,
+            serviceOrderStatus: linkedOs?.status ?? null,
+            version: Number(rawQuote.version || linkedOs?.quoteVersion || 1),
           }
         })
 
@@ -356,6 +502,10 @@ export const quoteService = {
           status,
           approved_by,
           approved_at,
+          service_order_id,
+          service_order_number,
+          version,
+          approval_history,
           subtotal,
           discount,
           total,
@@ -395,6 +545,8 @@ export const quoteService = {
             customer_id,
             quote_number,
             status,
+            approved_by,
+            approved_at,
             subtotal,
             discount,
             total,
@@ -423,8 +575,51 @@ export const quoteService = {
           .eq('organization_id', organizationId)
           .eq('id', quoteId)
           .maybeSingle()
-        quote = fallback.data as typeof quote
-        quoteError = fallback.error
+
+        if (fallback.error && isMissingTrackingColumnsError(fallback.error)) {
+          const minimalFallback = await supabase
+            .from('quotes')
+            .select(
+              `
+              id,
+              organization_id,
+              customer_id,
+              quote_number,
+              status,
+              subtotal,
+              discount,
+              total,
+              valid_until,
+              notes,
+              creator_name,
+              seller_name,
+              sale_id,
+              created_at,
+              updated_at,
+              sale:sale_id (
+                id,
+                quote_number,
+                seller_name,
+                creator_name
+              ),
+              customers (
+                name,
+                phone,
+                email,
+                address,
+                address_number
+              )
+            `,
+            )
+            .eq('organization_id', organizationId)
+            .eq('id', quoteId)
+            .maybeSingle()
+          quote = minimalFallback.data as typeof quote
+          quoteError = minimalFallback.error
+        } else {
+          quote = fallback.data as typeof quote
+          quoteError = fallback.error
+        }
       }
 
       if (quoteError || !quote) {
@@ -437,7 +632,6 @@ export const quoteService = {
         .eq('organization_id', organizationId)
         .eq('quote_id', quoteId)
         .order('sort_order', { ascending: true })
-        // The shared Supabase client is untyped; this keeps the response typed locally.
         // eslint-disable-next-line @typescript-eslint/no-deprecated
         .returns<QuoteItemRow[]>()
 
@@ -445,6 +639,9 @@ export const quoteService = {
         logger.error('Erro ao carregar itens do orçamento', itemsError)
         return { success: false, error: 'Não foi possível carregar os itens do orçamento.' }
       }
+
+      const linkedOsMap = await fetchLinkedServiceOrdersByQuoteMap(organizationId)
+      const linkedOs = linkedOsMap.get(quoteId)
 
       const cust = Array.isArray(quote.customers) ? quote.customers[0] : quote.customers
       const customerAddress = [cust?.address, cust?.address_number].filter(Boolean).join(', ')
@@ -458,7 +655,15 @@ export const quoteService = {
       const rawQuote = quote as unknown as {
         approved_by?: string | null
         approved_at?: string | null
+        service_order_id?: string | null
+        service_order_number?: string | null
+        version?: number | null
+        approval_history?: unknown
       }
+
+      const approvalHistory = Array.isArray(rawQuote.approval_history)
+        ? (rawQuote.approval_history as QuoteOsHistoryEntry[])
+        : linkedOs?.history || []
 
       return {
         success: true,
@@ -480,6 +685,11 @@ export const quoteService = {
           sellerName: quote.seller_name || linkedSale?.seller_name || linkedSale?.creator_name || null,
           saleId: quote.sale_id || linkedSale?.id || null,
           saleNumber: linkedSale?.quote_number || null,
+          serviceOrderId: rawQuote.service_order_id || linkedOs?.id || null,
+          serviceOrderNumber: rawQuote.service_order_number || linkedOs?.orderNumber || null,
+          serviceOrderStatus: linkedOs?.status ?? null,
+          version: Number(rawQuote.version || linkedOs?.quoteVersion || 1),
+          approvalHistory,
           createdAt: quote.created_at,
           updatedAt: quote.updated_at,
           customerPhone: cust?.phone ?? null,
@@ -598,7 +808,6 @@ export const quoteService = {
 
         if (itemsError) {
           logger.error('Erro ao inserir itens do orçamento', itemsError)
-          // Tenta limpar o cabeçalho em caso de falha nos itens
           await supabase.from('quotes').delete().eq('id', quote.id)
           if (
             itemsError.code === '23514' &&
@@ -632,6 +841,9 @@ export const quoteService = {
       const minimumPriceValidation = await validateMinimumSalePrices(organizationId, params.items)
       if (!minimumPriceValidation.success) return minimumPriceValidation
 
+      const servicePriceValidation = await validateServiceMinimumPrices(organizationId, params.items)
+      if (!servicePriceValidation.success) return servicePriceValidation
+
       const calculated = recalculateQuote(params.items, params.discount)
       const { error } = await supabase.rpc('update_quote_with_items', {
         p_organization_id: organizationId,
@@ -650,6 +862,8 @@ export const quoteService = {
           sort_order: item.sortOrder,
           inventory_item_id: params.items[index]?.inventoryItemId ?? null,
           unit: params.items[index]?.unit?.trim() || null,
+          item_type: params.items[index]?.itemType || (params.items[index]?.serviceId ? 'service' : 'product'),
+          service_id: params.items[index]?.serviceId ?? null,
         })),
       })
 
@@ -702,6 +916,22 @@ export const quoteService = {
         return { success: false, error: 'Não foi possível salvar as alterações do orçamento.' }
       }
 
+      // Garante que item_type e service_id estejam preenchidos mesmo caso a RPC no banco seja a versão anterior à 00119
+      for (let index = 0; index < calculated.items.length; index++) {
+        const inputItem = params.items[index]
+        if (inputItem?.itemType === 'service' || inputItem?.serviceId) {
+          await supabase
+            .from('quote_items')
+            .update({
+              item_type: 'service',
+              service_id: inputItem.serviceId ?? null,
+            })
+            .eq('organization_id', organizationId)
+            .eq('quote_id', quoteId)
+            .eq('sort_order', calculated.items[index].sortOrder)
+        }
+      }
+
       return { success: true, data: undefined }
     } catch (err) {
       logger.error('Exceção ao editar orçamento', err)
@@ -710,7 +940,195 @@ export const quoteService = {
   },
 
   /**
+   * Fluxo 2: Incorpora alterações comerciais (novos materiais/serviços, quantidades, valores ou descontos)
+   * originadas na Ordem de Serviço ao orçamento vinculado, retornando o orçamento para o status 'sent' (ENVIADO)
+   * e preservando o histórico da aprovação anterior.
+   */
+  async syncCommercialChangesFromServiceOrder(
+    organizationId: UUID,
+    quoteId: UUID,
+    params: SyncQuoteFromServiceOrderParams,
+  ): Promise<
+    ServiceResult<{
+      newVersion: number
+      subtotal: string
+      discount: string
+      total: string
+      historyEntry: QuoteOsHistoryEntry
+    }>
+  > {
+    try {
+      const minimumPriceValidation = await validateMinimumSalePrices(organizationId, params.items)
+      if (!minimumPriceValidation.success) return minimumPriceValidation
+
+      const servicePriceValidation = await validateServiceMinimumPrices(organizationId, params.items)
+      if (!servicePriceValidation.success) return servicePriceValidation
+
+      const quoteRes = await this.getQuote(organizationId, quoteId)
+      if (!quoteRes.success) {
+        return { success: false, error: quoteRes.error }
+      }
+
+      const currentQuote = quoteRes.data
+      const calculated = recalculateQuote(params.items, params.discount || '0.00')
+      const nextVersion = (currentQuote.version || 1) + 1
+      const nowIso = new Date().toISOString()
+
+      const historyEntry: QuoteOsHistoryEntry = {
+        id: crypto.randomUUID(),
+        timestamp: nowIso,
+        eventType: 'commercial_change_detected',
+        quoteVersion: nextVersion,
+        previousQuoteStatus: currentQuote.status,
+        newQuoteStatus: 'sent',
+        previousOsStatus: currentQuote.serviceOrderStatus ?? 'approved',
+        newOsStatus: 'pending_approval',
+        previousTotal: currentQuote.total,
+        newTotal: calculated.total,
+        actorName: params.actorName || 'Técnico / Operador',
+        description: `Alteração comercial na O.S. #${params.serviceOrderNumber}: orçamento atualizado para v${String(nextVersion)} e retornado para ENVIADO aguardando nova aprovação do cliente.`,
+        changes: params.changes,
+      }
+
+      const updatedHistory = [...(currentQuote.approvalHistory || []), historyEntry]
+
+      // 1. Remove os quote_items antigos enquanto o status atual é 'approved' (devolve reserva anterior ao estoque se aplicável)
+      const { error: deleteItemsError } = await supabase
+        .from('quote_items')
+        .delete()
+        .eq('organization_id', organizationId)
+        .eq('quote_id', quoteId)
+
+      if (deleteItemsError) {
+        logger.error('Erro ao limpar itens do orçamento para sincronização com O.S.', deleteItemsError)
+        return {
+          success: false,
+          error: 'Não foi possível atualizar os itens do orçamento vinculado.',
+        }
+      }
+
+      // 2. Atualiza cabeçalho do orçamento retornando status para 'sent' (ENVIADO)
+      const fullUpdatePayload: Record<string, unknown> = {
+        status: 'sent',
+        approved_by: null,
+        approved_at: null,
+        subtotal: calculated.subtotal,
+        discount: calculated.discount,
+        total: calculated.total,
+        service_order_id: params.serviceOrderId,
+        service_order_number: params.serviceOrderNumber,
+        version: nextVersion,
+        approval_history: updatedHistory,
+        updated_at: nowIso,
+      }
+
+      let { error: updateQuoteError } = await supabase
+        .from('quotes')
+        .update(fullUpdatePayload)
+        .eq('organization_id', organizationId)
+        .eq('id', quoteId)
+
+      if (updateQuoteError && isMissingTrackingColumnsError(updateQuoteError)) {
+        const fallbackUpdate = await supabase
+          .from('quotes')
+          .update({
+            status: 'sent',
+            subtotal: calculated.subtotal,
+            discount: calculated.discount,
+            total: calculated.total,
+            updated_at: nowIso,
+          })
+          .eq('organization_id', organizationId)
+          .eq('id', quoteId)
+        updateQuoteError = fallbackUpdate.error
+      }
+
+      if (updateQuoteError) {
+        logger.error('Erro ao retornar orçamento para ENVIADO após alteração na O.S.', updateQuoteError)
+        return {
+          success: false,
+          error: 'Não foi possível atualizar o status do orçamento para Enviado.',
+        }
+      }
+
+      // 3. Insere os novos itens consolidados da O.S. no orçamento (status 'sent')
+      if (calculated.items.length > 0) {
+        const itemsToInsert = calculated.items.map((item, index) => ({
+          organization_id: organizationId,
+          quote_id: quoteId,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          total: item.total,
+          sort_order: item.sortOrder,
+          inventory_item_id:
+            params.items[index]?.itemType === 'service'
+              ? null
+              : (params.items[index]?.inventoryItemId ?? null),
+          unit: params.items[index]?.unit?.trim() || 'UN',
+          item_type:
+            params.items[index]?.itemType ||
+            (params.items[index]?.serviceId ? 'service' : 'product'),
+          service_id:
+            params.items[index]?.itemType === 'service'
+              ? (params.items[index]?.serviceId ?? null)
+              : null,
+        }))
+
+        const { error: insertItemsError } = await supabase.from('quote_items').insert(itemsToInsert)
+        if (insertItemsError) {
+          logger.error('Erro ao inserir novos itens do orçamento sincronizado com O.S.', insertItemsError)
+          return {
+            success: false,
+            error: 'Não foi possível registrar os novos materiais/serviços no orçamento.',
+          }
+        }
+      }
+
+      // 4. Registra na tabela de histórico se existir
+      await supabase
+        .from('quote_service_order_history' as any)
+        .insert({
+          organization_id: organizationId,
+          quote_id: quoteId,
+          service_order_id: params.serviceOrderId,
+          event_type: 'commercial_change_detected',
+          quote_version: nextVersion,
+          previous_quote_status: currentQuote.status,
+          new_quote_status: 'sent',
+          previous_os_status: currentQuote.serviceOrderStatus ?? 'approved',
+          new_os_status: 'pending_approval',
+          previous_total: currentQuote.total,
+          new_total: calculated.total,
+          description: historyEntry.description,
+          changes_summary: params.changes,
+          actor_name: params.actorName || 'Técnico / Operador',
+        })
+        .then(() => {})
+
+      return {
+        success: true,
+        data: {
+          newVersion: nextVersion,
+          subtotal: calculated.subtotal,
+          discount: calculated.discount,
+          total: calculated.total,
+          historyEntry,
+        },
+      }
+    } catch (err) {
+      logger.error('Exceção ao sincronizar alterações comerciais da O.S. com o orçamento', err)
+      return {
+        success: false,
+        error: 'Erro inesperado ao atualizar o orçamento com as alterações da O.S.',
+      }
+    }
+  },
+
+  /**
    * Altera o status do orçamento com validação estrita da máquina de estados.
+   * Fluxo 3: Quando um orçamento vinculado a uma O.S. é aprovado novamente,
+   * identifica automaticamente a O.S. vinculada e atualiza seu status para APROVADA.
    */
   async updateStatus(
     organizationId: UUID,
@@ -721,7 +1139,7 @@ export const quoteService = {
       // 1. Consulta status atual
       const { data: current, error: fetchError } = await supabase
         .from('quotes')
-        .select('status')
+        .select('status, quote_number, subtotal, discount, total')
         .eq('organization_id', organizationId)
         .eq('id', quoteId)
         .single()
@@ -741,13 +1159,14 @@ export const quoteService = {
       }
 
       // 3. Aplica alteração (registra aprovação pelo usuário se newStatus for 'approved')
+      const nowIso = new Date().toISOString()
       let updateError: { code?: string; message: string; details?: string; hint?: string } | null = null
 
       if (newStatus === 'approved') {
         const updatePayload: Record<string, unknown> = {
           status: newStatus,
           approved_by: 'user',
-          approved_at: new Date().toISOString(),
+          approved_at: nowIso,
         }
 
         const res = await supabase
@@ -840,10 +1259,219 @@ export const quoteService = {
         }
       }
 
+      // 4. Fluxo 3: Se o orçamento possui O.S. vinculada, reflete a nova aprovação (ou recusa) automaticamente na O.S.!
+      if (newStatus === 'approved' || newStatus === 'rejected') {
+        await this.reflectQuoteDecisionOnLinkedServiceOrder(
+          organizationId,
+          quoteId,
+          newStatus,
+          'user',
+        )
+      }
+
       return { success: true, data: undefined }
     } catch (err) {
       logger.error('Exceção ao atualizar status', err)
       return { success: false, error: 'Erro inesperado ao atualizar status.' }
+    }
+  },
+
+  /**
+   * Fluxo 3: Identifica automaticamente a O.S. vinculada ao orçamento e,
+   * quando o orçamento é aprovado, atualiza o status da O.S. para APROVADA e atualiza o snapshot aprovado.
+   * Caso o orçamento seja recusado, mantém a O.S. bloqueada em PENDENTE DE APROVAÇÃO registrando o evento.
+   */
+  async reflectQuoteDecisionOnLinkedServiceOrder(
+    organizationId: UUID,
+    quoteId: UUID,
+    decision: 'approved' | 'rejected',
+    approvedBy: 'client' | 'user' = 'user',
+  ): Promise<void> {
+    try {
+      const quoteDetailRes = await this.getQuote(organizationId, quoteId)
+      if (!quoteDetailRes.success) return
+
+      const quote = quoteDetailRes.data
+      const linkedOsId = quote.serviceOrderId
+      if (!linkedOsId) return
+
+      const { data: osRow } = await supabase
+        .from('service_orders')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('id', linkedOsId)
+        .maybeSingle()
+
+      if (!osRow) return
+
+      const rawOs = osRow as Record<string, unknown>
+      const { metadata, cleanNotes } = parseOsInternalNotes(rawOs.internal_notes as string | null)
+      const currentOsStatus = normalizeLinkedOsStatus(
+        String(rawOs.status || 'pending'),
+        metadata.logicalStatus,
+      )
+
+      const nowIso = new Date().toISOString()
+      const currentVersion = quote.version || metadata.quoteVersion || 1
+      const existingHistory: QuoteOsHistoryEntry[] = Array.isArray(rawOs.status_history)
+        ? (rawOs.status_history as QuoteOsHistoryEntry[])
+        : metadata.statusHistory || []
+
+      if (decision === 'approved') {
+        // Somente reativa para 'approved' se a O.S. estava bloqueada aguardando aprovação
+        if (
+          currentOsStatus !== 'pending_approval' &&
+          currentOsStatus !== 'pending' &&
+          currentOsStatus !== 'queue'
+        ) {
+          return
+        }
+
+        const newSnapshot: CommercialScopeSnapshot = buildApprovedQuoteSnapshot({
+          version: currentVersion,
+          subtotal: quote.subtotal,
+          discount: quote.discount,
+          total: quote.total,
+          approvedBy,
+          approvedAt: nowIso,
+          items: quote.items.map((it) => ({
+            id: it.id,
+            itemType: it.itemType || (it.serviceId ? 'service' : 'product'),
+            inventoryItemId: it.inventoryItemId,
+            serviceId: it.serviceId,
+            description: it.description,
+            unit: it.unit || 'UN',
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            total: it.total,
+          })),
+        })
+
+        const reapprovalEntry: QuoteOsHistoryEntry = {
+          id: crypto.randomUUID(),
+          timestamp: nowIso,
+          eventType: 'quote_reapproved',
+          quoteVersion: currentVersion,
+          previousQuoteStatus: 'sent',
+          newQuoteStatus: 'approved',
+          previousOsStatus: currentOsStatus,
+          newOsStatus: 'approved',
+          newTotal: quote.total,
+          actorName: approvedBy === 'client' ? 'Cliente (Portal)' : 'Operador / Usuário',
+          description: `Orçamento #${quote.quoteNumber} (v${String(currentVersion)}) aprovado (${formatCurrency(quote.total)}). O.S. #${String(rawOs.order_number)} atualizada para APROVADA e liberada para execução/finalização.`,
+        }
+
+        const updatedHistory = [...existingHistory, reapprovalEntry]
+        const updatedNotes = encodeOsInternalNotes(
+          {
+            ...metadata,
+            quoteId: quote.id,
+            quoteNumber: quote.quoteNumber,
+            quoteVersion: currentVersion,
+            logicalStatus: 'approved',
+            approvedQuoteSnapshot: newSnapshot,
+            statusHistory: updatedHistory,
+          },
+          cleanNotes,
+        )
+
+        const { error: osUpdateErr } = await supabase
+          .from('service_orders')
+          .update({
+            status: 'approved',
+            quote_id: quote.id,
+            quote_number: quote.quoteNumber,
+            quote_version: currentVersion,
+            approved_quote_snapshot: newSnapshot,
+            status_history: updatedHistory,
+            internal_notes: updatedNotes,
+            updated_at: nowIso,
+          })
+          .eq('organization_id', organizationId)
+          .eq('id', linkedOsId)
+
+        if (osUpdateErr) {
+          await supabase
+            .from('service_orders')
+            .update({
+              status: 'in_maintenance',
+              internal_notes: updatedNotes,
+              updated_at: nowIso,
+            })
+            .eq('organization_id', organizationId)
+            .eq('id', linkedOsId)
+        }
+
+        await supabase
+          .from('quote_service_order_history' as any)
+          .insert({
+            organization_id: organizationId,
+            quote_id: quote.id,
+            service_order_id: linkedOsId,
+            event_type: 'quote_reapproved',
+            quote_version: currentVersion,
+            previous_quote_status: 'sent',
+            new_quote_status: 'approved',
+            previous_os_status: currentOsStatus,
+            new_os_status: 'approved',
+            new_total: quote.total,
+            description: reapprovalEntry.description,
+            actor_name: reapprovalEntry.actorName,
+          })
+          .then(() => {})
+      } else if (decision === 'rejected') {
+        const rejectionEntry: QuoteOsHistoryEntry = {
+          id: crypto.randomUUID(),
+          timestamp: nowIso,
+          eventType: 'quote_rejected',
+          quoteVersion: currentVersion,
+          previousQuoteStatus: 'sent',
+          newQuoteStatus: 'rejected',
+          previousOsStatus: currentOsStatus,
+          newOsStatus: 'pending_approval',
+          newTotal: quote.total,
+          actorName: approvedBy === 'client' ? 'Cliente (Portal)' : 'Operador / Usuário',
+          description: `Alteração comercial do Orçamento #${quote.quoteNumber} (v${String(currentVersion)}) não foi aprovada pelo cliente. A O.S. permanece bloqueada para finalização.`,
+        }
+
+        const updatedHistory = [...existingHistory, rejectionEntry]
+        const updatedNotes = encodeOsInternalNotes(
+          {
+            ...metadata,
+            quoteId: quote.id,
+            quoteNumber: quote.quoteNumber,
+            quoteVersion: currentVersion,
+            logicalStatus: 'pending_approval',
+            statusHistory: updatedHistory,
+          },
+          cleanNotes || 'Orçamento recusado pelo cliente — O.S. bloqueada aguardando decisão.',
+        )
+
+        const { error: osRejectErr } = await supabase
+          .from('service_orders')
+          .update({
+            status: 'pending_approval',
+            status_history: updatedHistory,
+            internal_notes: updatedNotes,
+            updated_at: nowIso,
+          })
+          .eq('organization_id', organizationId)
+          .eq('id', linkedOsId)
+
+        if (osRejectErr) {
+          await supabase
+            .from('service_orders')
+            .update({
+              status: 'pending',
+              internal_notes: updatedNotes,
+              updated_at: nowIso,
+            })
+            .eq('organization_id', organizationId)
+            .eq('id', linkedOsId)
+        }
+      }
+    } catch (err) {
+      logger.warn('Aviso ao refletir decisão do orçamento na O.S. vinculada', { error: err })
     }
   },
 

@@ -330,17 +330,10 @@ export function OrganizationPrivacyLgpdSection({
                 isolamento lógico (<em>Row-Level Security</em>). Canal direto com o Encarregado de
                 Dados (DPO):{' '}
                 <a
-                  href="mailto:dpo@controlesoft.com.br"
+                  href="mailto:controlesoft@outlook.com"
                   className="font-semibold text-blue-600 underline"
                 >
-                  dpo@controlesoft.com.br
-                </a>{' '}
-                /{' '}
-                <a
-                  href="mailto:privacidade@controlesoft.com.br"
-                  className="font-semibold text-blue-600 underline"
-                >
-                  privacidade@controlesoft.com.br
+                  controlesoft@outlook.com
                 </a>
                 .
               </p>
@@ -515,11 +508,11 @@ export function OrganizationPrivacyLgpdSection({
                   Revogar Solicitação de Exclusão
                 </Button>
                 <a
-                  href={`mailto:dpo@controlesoft.com.br?subject=${encodeURIComponent(`Protocolo ${deletionSchedule.protocol} - Exclusão LGPD (${organization.name})`)}`}
+                  href={`mailto:controlesoft@outlook.com?subject=${encodeURIComponent(`Protocolo ${deletionSchedule.protocol} - Exclusão LGPD (${organization.name})`)}`}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 underline"
                 >
                   <Mail className="h-3.5 w-3.5" />
-                  Contatar DPO (dpo@controlesoft.com.br)
+                  Contatar DPO (controlesoft@outlook.com)
                 </a>
               </div>
             </div>

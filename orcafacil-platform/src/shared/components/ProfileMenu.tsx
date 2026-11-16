@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, LogOut } from 'lucide-react'
+import { ChevronDown, LogOut, UserCog } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { supabase } from '@app/config/supabase'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
+import { SYSTEM_ACCESS_PLAN_NAMES } from '@modules/organizations/services/organization.service'
 import {
+  isOrganizationInTrial,
   organizationBillingService,
   type OrganizationBillingInfo,
 } from '@modules/organizations/services/organization-billing.service'
@@ -43,15 +46,65 @@ export function ProfileMenu({
 }: ProfileMenuProps) {
   const [isSignOutDialogOpen, setIsSignOutDialogOpen] = useState(false)
   const [billingInfo, setBillingInfo] = useState<OrganizationBillingInfo | null>(null)
+  const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null>(null)
+  const [fetchedOrgMeta, setFetchedOrgMeta] = useState<{
+    pdvBackgroundUrl?: string | null
+    accessPlanId?: string | null
+    trialEndsAt?: string | null
+  } | null>(null)
   const { currentOrganization } = useOrganization()
   const navigate = useNavigate()
 
   useEffect(() => {
+    const syncLocalPhoto = () => {
+      if (typeof window === 'undefined') return
+      try {
+        const stored =
+          (currentOrganization?.id ? localStorage.getItem(`pdv_bg_${currentOrganization.id}`) : null) ||
+          localStorage.getItem('pdv_bg_last') ||
+          localStorage.getItem('pdv_background_url') ||
+          null
+        setLocalPhotoUrl(stored)
+      } catch {
+        setLocalPhotoUrl(null)
+      }
+    }
+
+    syncLocalPhoto()
+    window.addEventListener('storage', syncLocalPhoto)
+    return () => {
+      window.removeEventListener('storage', syncLocalPhoto)
+    }
+  }, [currentOrganization?.id])
+
+  useEffect(() => {
     if (!currentOrganization?.id) {
       setBillingInfo(null)
+      setFetchedOrgMeta(null)
       return
     }
     let isCurrent = true
+
+    void Promise.resolve(
+      supabase
+        .from('organizations')
+        .select('pdv_background_url, access_plan_id, trial_ends_at')
+        .eq('id', currentOrganization.id)
+        .maybeSingle(),
+    )
+      .then(({ data }) => {
+        if (isCurrent && data) {
+          setFetchedOrgMeta({
+            pdvBackgroundUrl: (data as any).pdv_background_url ?? null,
+            accessPlanId: (data as any).access_plan_id ?? null,
+            trialEndsAt: (data as any).trial_ends_at ?? null,
+          })
+        }
+      })
+      .catch(() => {
+        // non-blocking
+      })
+
     void organizationBillingService
       .getBillingInfo({
         id: currentOrganization.id,
@@ -83,8 +136,45 @@ export function ProfileMenu({
 
   const storeName = currentOrganization?.name || displayName || 'Minha Loja'
 
-  const rawPlanName =
+  const companyPhotoUrl =
+    currentOrganization?.logoUrl ||
+    currentOrganization?.pdvBackgroundUrl ||
+    fetchedOrgMeta?.pdvBackgroundUrl ||
+    localPhotoUrl ||
+    avatarUrl ||
+    '/controlesoft-mark.png'
+
+  const effectiveAccessPlanId =
+    currentOrganization?.accessPlanId || fetchedOrgMeta?.accessPlanId || null
+  const effectiveAccessPlanName =
     currentOrganization?.accessPlanName ||
+    (effectiveAccessPlanId ? SYSTEM_ACCESS_PLAN_NAMES[effectiveAccessPlanId] : null) ||
+    null
+  const effectiveTrialEndsAt =
+    currentOrganization?.trialEndsAt ?? fetchedOrgMeta?.trialEndsAt ?? billingInfo?.trialEndsAt ?? null
+
+  const hasActiveContractPlan = Boolean(
+    billingInfo?.contract &&
+      billingInfo.contract.status !== 'cancelled' &&
+      !billingInfo.isTrial &&
+      !isOrganizationInTrial(billingInfo.contract.trialEndsAt),
+  )
+  const hasPaidInvoices = Boolean(
+    billingInfo?.paidInvoices && billingInfo.paidInvoices.some((inv) => inv.amount > 0),
+  )
+  const hasPlan = Boolean(
+    effectiveAccessPlanId ||
+      effectiveAccessPlanName ||
+      hasActiveContractPlan ||
+      hasPaidInvoices,
+  )
+  const isTrialPeriod = Boolean(
+    isOrganizationInTrial(effectiveTrialEndsAt) || billingInfo?.isTrial,
+  )
+  const shouldShowSubscribeButton = isTrialPeriod && !hasPlan
+
+  const rawPlanName =
+    effectiveAccessPlanName ||
     billingInfo?.contract?.planName ||
     'Fiscal'
   const planName = rawPlanName.replace(/^Plano\s+/i, '').trim() || 'Fiscal'
@@ -97,12 +187,12 @@ export function ProfileMenu({
       }
     }
 
-    if (currentOrganization?.trialEndsAt) {
-      const endMs = new Date(currentOrganization.trialEndsAt).getTime()
+    if (effectiveTrialEndsAt) {
+      const endMs = new Date(effectiveTrialEndsAt).getTime()
       const isFuture = !isNaN(endMs) && endMs >= Date.now()
       return {
         expirationLabel: isFuture ? 'Teste até' : 'Encerra em',
-        expirationDate: formatDatePtBr(currentOrganization.trialEndsAt),
+        expirationDate: formatDatePtBr(effectiveTrialEndsAt),
       }
     }
 
@@ -134,6 +224,13 @@ export function ProfileMenu({
           expirationLabel: 'Encerra em',
           expirationDate: formatDatePtBr(targetDate.toISOString()),
         }
+      }
+    }
+
+    if (hasPlan) {
+      return {
+        expirationLabel: 'Situação',
+        expirationDate: 'Ativo',
       }
     }
 
@@ -183,65 +280,20 @@ export function ProfileMenu({
           sideOffset={8}
           className="z-50 w-76 sm:w-80 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-0 shadow-xl shadow-slate-900/15 dark:shadow-black/60"
         >
-          {/* TOPO CENTRALIZADO: ÍCONE DA LOJA, NOME, EMAIL, PLANO E DATA */}
+          {/* TOPO CENTRALIZADO: FOTO DA EMPRESA, NOME, EMAIL, PLANO E DATA */}
           <div className="flex flex-col items-center px-6 pt-6 pb-5 text-center">
-            {currentOrganization?.logoUrl ? (
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-1 shadow-2xs">
-                <img
-                  src={currentOrganization.logoUrl}
-                  alt={storeName}
-                  className="h-full w-full object-contain"
-                />
-              </div>
-            ) : (
-              <svg
-                viewBox="0 0 64 64"
-                className="h-14 w-14 shrink-0"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
-              >
-                {/* Corpo da loja */}
-                <path
-                  d="M14 28V52C14 54.2091 15.7909 56 18 56H46C48.2091 56 50 54.2091 50 52V28"
-                  fill="#ffffff"
-                  stroke="#0f172a"
-                  strokeWidth="2.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Porta */}
-                <path
-                  d="M30 56V30"
-                  stroke="#0f172a"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-                {/* Maçaneta da porta */}
-                <circle cx="24" cy="43" r="1.8" fill="#0f172a" />
-                {/* Toldo superior verde claro */}
-                <path
-                  d="M15.5 11H48.5C50.1 11 51.5 12 52 13.5L55 22H9L12 13.5C12.5 12 13.9 11 15.5 11Z"
-                  fill="#bbf7d0"
-                  stroke="#0f172a"
-                  strokeWidth="2.75"
-                  strokeLinejoin="round"
-                />
-                {/* Ondas do toldo */}
-                <path
-                  d="M9 22C9 25.866 12.134 29 16 29C19.866 29 23 25.866 23 22C23 25.866 26.134 29 30 29C32 29 33.8 28.1 35 26.8C36.2 28.1 38 29 40 29C43.866 29 47 25.866 47 22C47 25.866 49.5 29 52.5 29C54.5 29 55 25.866 55 22H9Z"
-                  fill="#dcfce7"
-                  stroke="#0f172a"
-                  strokeWidth="2.75"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            )}
+            <div className="mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 shadow-2xs">
+              <img
+                src={companyPhotoUrl}
+                alt={`Foto da empresa ${storeName}`}
+                className="h-full w-full rounded-lg object-contain"
+              />
+            </div>
 
             <DropdownMenu.Item asChild>
               <Link
                 to="/settings/organization"
-                className="mt-3 block max-w-full text-base sm:text-lg font-bold leading-snug text-slate-900 dark:text-white underline underline-offset-4 decoration-slate-900 dark:decoration-white hover:text-blue-600 dark:hover:text-blue-400 hover:decoration-blue-600 outline-none cursor-pointer"
+                className="block max-w-full text-base sm:text-lg font-bold leading-snug text-slate-900 dark:text-white underline underline-offset-4 decoration-slate-900 dark:decoration-white hover:text-blue-600 dark:hover:text-blue-400 hover:decoration-blue-600 outline-none cursor-pointer"
               >
                 {storeName}
               </Link>
@@ -273,64 +325,28 @@ export function ProfileMenu({
               </div>
             </div>
 
-            {/* BOTÃO ASSINAR AGORA */}
-            <DropdownMenu.Item
-              onSelect={() => {
-                void navigate('/settings/organization?tab=system-invoices')
-              }}
-              className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-full bg-[#0088ff] hover:bg-[#0077e6] active:bg-[#0066cc] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors outline-none"
-            >
-              ASSINAR AGORA!
-            </DropdownMenu.Item>
+            {/* BOTÃO ASSINE AGORA (SOMENTE EM PERÍODO DE TESTE E SEM PLANO ATIVO) */}
+            {shouldShowSubscribeButton && (
+              <DropdownMenu.Item
+                onSelect={() => {
+                  void navigate('/settings/organization?tab=system-invoices')
+                }}
+                className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-full bg-[#0088ff] hover:bg-[#0077e6] active:bg-[#0066cc] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors outline-none"
+              >
+                Assine Agora
+              </DropdownMenu.Item>
+            )}
           </div>
 
           {/* LISTA DE OPÇÕES INFERIOR */}
           <div className="divide-y divide-slate-200 dark:divide-slate-800 border-t border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200">
             <DropdownMenu.Item asChild>
               <Link
-                to="/settings/organization?tab=system-invoices&plan=pro"
-                className="flex w-full cursor-pointer items-center px-6 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 outline-none"
-              >
-                Migrar para o plano PRO
-              </Link>
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item asChild>
-              <Link
-                to="/settings/organization?tab=system-invoices&plan=fiscal"
-                className="flex w-full cursor-pointer items-center px-6 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 outline-none"
-              >
-                Migrar para o plano Fiscal
-              </Link>
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item asChild>
-              <Link
                 to="/profile"
                 className="flex w-full cursor-pointer items-center gap-2.5 px-6 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 outline-none"
               >
-                <svg
-                  viewBox="0 0 20 14"
-                  className="h-3.5 w-4 shrink-0 rounded-[2px] shadow-2xs"
-                  aria-hidden="true"
-                >
-                  <rect width="20" height="14" fill="#16a34a" />
-                  <polygon points="10,1.8 18,7 10,12.2 2,7" fill="#facc15" />
-                  <circle cx="10" cy="7" r="2.6" fill="#1d4ed8" />
-                </svg>
-                <span>Configurações Regionais</span>
-              </Link>
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item asChild>
-              <Link
-                to="/settings/organization"
-                className="flex w-full cursor-pointer items-center justify-between px-6 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 outline-none"
-              >
-                <span>Conta da Loja</span>
-                <span aria-hidden="true" className="text-[10px] text-slate-700 dark:text-slate-400">
-                  ▶
-                </span>
+                <UserCog aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" />
+                <span>Configuração de Perfil</span>
               </Link>
             </DropdownMenu.Item>
 

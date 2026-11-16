@@ -59,7 +59,7 @@ export function SystemNotificationsAdminPage() {
   const [message, setMessage] = useState('')
   const [notifType, setNotifType] = useState<SystemNotificationType>('warning')
   const [contactWhatsapp, setContactWhatsapp] = useState('5531986848490')
-  const [contactEmail, setContactEmail] = useState('suporte@jbsoftware.com.br')
+  const [contactEmail, setContactEmail] = useState('controlesoft@outlook.com')
   const [isSending, setIsSending] = useState(false)
   const [sendFeedback, setSendFeedback] = useState<string | null>(null)
 
@@ -145,7 +145,7 @@ export function SystemNotificationsAdminPage() {
         </p>
         <button
           type="button"
-          onClick={() => void navigate('/')}
+          onClick={() => void navigate('/dashboard')}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition cursor-pointer"
         >
           Voltar ao Início
@@ -598,7 +598,7 @@ export function SystemNotificationsAdminPage() {
                 type="email"
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
-                placeholder="suporte@jbsoftware.com.br"
+                placeholder="controlesoft@outlook.com"
                 className="w-full px-4 py-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-gray-900 dark:text-white"
               />
             </div>

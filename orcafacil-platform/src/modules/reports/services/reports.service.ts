@@ -555,7 +555,12 @@ export const reportsService = {
     const totalOs = serviceOrders.length
     const closedOs = serviceOrders.filter((os) => os.status === 'closed' || os.status === 'ready')
     const inProgressOs = serviceOrders.filter(
-      (os) => os.status === 'in_maintenance' || os.status === 'queue' || os.status === 'pending',
+      (os) =>
+        os.status === 'in_maintenance' ||
+        os.status === 'queue' ||
+        os.status === 'pending' ||
+        os.status === 'approved' ||
+        os.status === 'pending_approval',
     )
     const totalOsValue = serviceOrders.reduce((acc, os) => acc + (parseFloat(os.total) || 0), 0)
     const closedOsValue = closedOs.reduce((acc, os) => acc + (parseFloat(os.total) || 0), 0)

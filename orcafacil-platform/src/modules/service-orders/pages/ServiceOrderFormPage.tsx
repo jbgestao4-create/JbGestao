@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { customerService, type Customer } from '@modules/customers/services/customer.service'
 import { inventoryService } from '@modules/inventory/services/inventory.service'
 import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
+import { quoteService, type QuoteDetail } from '@modules/orcafacil/services/quote.service'
+import { getStatusBadgeClasses, getStatusLabel } from '@modules/orcafacil/domain/quote-status'
+import { SendQuoteWhatsAppModal } from '@modules/orcafacil/components/SendQuoteWhatsAppModal'
 import type { InventoryItem } from '@shared/types/common'
 import { Card, CardContent, CardHeader } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
@@ -23,7 +26,11 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  FileSpreadsheet,
+  History,
   Laptop,
+  Lock,
+  MessageCircle,
   Package,
   Plus,
   Save,
@@ -46,6 +53,12 @@ import {
   type ServiceOrderPriority,
   type ServiceOrderStatus,
 } from '../domain/service-order'
+import {
+  canGenerateOsFromQuote,
+  compareCommercialScope,
+  mapQuoteItemsToServiceOrderItems,
+  type QuoteOsHistoryEntry,
+} from '../domain/quote-os-integration'
 import { serviceOrderService } from '../services/service-order.service'
 
 async function compressImageFile(file: File): Promise<string> {
@@ -86,6 +99,8 @@ async function compressImageFile(file: File): Promise<string> {
 
 export function ServiceOrderFormPage() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
+  const quoteIdFromUrl = searchParams.get('quoteId')
   const isEditing = Boolean(id)
   const navigate = useNavigate()
   const { user, profile } = useAuth()
@@ -104,9 +119,22 @@ export function ServiceOrderFormPage() {
 
   // Dados principais da O.S.
   const [orderNumber, setOrderNumber] = useState('')
-  const [status, setStatus] = useState<ServiceOrderStatus>('queue')
-  const [initialStatus, setInitialStatus] = useState<ServiceOrderStatus>('queue')
+  const [status, setStatus] = useState<ServiceOrderStatus>(quoteIdFromUrl ? 'approved' : 'queue')
+  const [initialStatus, setInitialStatus] = useState<ServiceOrderStatus>(
+    quoteIdFromUrl ? 'approved' : 'queue',
+  )
   const [priority, setPriority] = useState<ServiceOrderPriority>('normal')
+
+  // Vínculo com Orçamento e Venda
+  const [linkedQuoteId, setLinkedQuoteId] = useState<string | null>(quoteIdFromUrl)
+  const [linkedQuoteNumber, setLinkedQuoteNumber] = useState<string | null>(null)
+  const [linkedQuoteVersion, setLinkedQuoteVersion] = useState<number>(1)
+  const [linkedQuoteDetail, setLinkedQuoteDetail] = useState<QuoteDetail | null>(null)
+  const [statusHistory, setStatusHistory] = useState<QuoteOsHistoryEntry[]>([])
+  const [saleId, setSaleId] = useState<string | null>(null)
+  const [quoteWhatsAppModalOpen, setQuoteWhatsAppModalOpen] = useState(false)
+  const [isApprovingLinkedQuote, setIsApprovingLinkedQuote] = useState(false)
+  const [infoMessage, setInfoMessage] = useState<string | null>(null)
 
   // Cliente
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
@@ -198,7 +226,7 @@ export function ServiceOrderFormPage() {
       !isEditing
         ? serviceOrderService.getNextOrderNumber(currentOrganization.id)
         : Promise.resolve(''),
-    ]).then(([equipmentRes, custRes, invRes, svcRes, nextNum]) => {
+    ]).then(async ([equipmentRes, custRes, invRes, svcRes, nextNum]) => {
       if (!active) return
       if (equipmentRes.success) {
         setEquipmentCatalog(equipmentRes.data)
@@ -215,12 +243,76 @@ export function ServiceOrderFormPage() {
       if (!isEditing && nextNum) {
         setOrderNumber(nextNum)
       }
+
+      // Fluxo 1: Se está abrindo uma Nova O.S. a partir de um Orçamento aprovado (?quoteId=...)
+      if (!isEditing && quoteIdFromUrl) {
+        setIsLoading(true)
+        const quoteRes = await quoteService.getQuote(currentOrganization.id, quoteIdFromUrl)
+        setIsLoading(false)
+        if (!active) return
+
+        if (!quoteRes.success) {
+          setError(quoteRes.error)
+          return
+        }
+
+        const q = quoteRes.data
+        // Se já existe uma O.S. vinculada a este orçamento, redireciona para ela evitando duplicidade
+        if (q.serviceOrderId) {
+          void navigate(`/service-orders/${q.serviceOrderId}/edit`, { replace: true })
+          return
+        }
+
+        const validation = canGenerateOsFromQuote({
+          status: q.status,
+          saleId: q.saleId,
+          serviceOrderId: q.serviceOrderId,
+        })
+        if (!validation.allowed) {
+          setError(validation.reason || 'Não é possível gerar O.S. a partir deste orçamento.')
+          return
+        }
+
+        setLinkedQuoteDetail(q)
+        setLinkedQuoteId(q.id)
+        setLinkedQuoteNumber(q.quoteNumber)
+        setLinkedQuoteVersion(q.version || 1)
+        setStatus('approved')
+        setInitialStatus('approved')
+
+        const matchedCust = custRes.success
+          ? custRes.data.find((c) => c.id === q.customerId)
+          : undefined
+
+        setSelectedCustomerId(q.customerId || '')
+        setCustomerName(q.customerName || matchedCust?.name || '')
+        setCustomerPhone(q.customerPhone || matchedCust?.phone || '')
+        setCustomerDocument(matchedCust?.document || '')
+
+        // Importa todos os materiais e serviços, quantidades, valores unitários e desconto do orçamento
+        const importedItems = mapQuoteItemsToServiceOrderItems(q.items)
+        setItems(importedItems)
+        setDiscount(Number(q.discount || 0).toFixed(2))
+
+        // Preenche sugestões inteligentes de equipamento e serviço solicitado para evitar recadastro
+        const firstItemDesc = q.items[0]?.description?.trim()
+        setEquipmentName((prev) =>
+          prev.trim()
+            ? prev
+            : firstItemDesc || `Serviço / Equipamento (${q.quoteNumber})`,
+        )
+        const defaultProblem =
+          q.notes?.trim() ||
+          q.items.map((it) => `${it.quantity}x ${it.description}`).join('; ') ||
+          `Execução de serviço conforme Orçamento aprovado #${q.quoteNumber}`
+        setReportedProblem((prev) => (prev.trim() ? prev : defaultProblem))
+      }
     })
 
     return () => {
       active = false
     }
-  }, [currentOrganization, isEditing])
+  }, [currentOrganization, isEditing, quoteIdFromUrl, navigate])
 
   useEffect(() => {
     if (!currentOrganization || !id) return
@@ -258,6 +350,21 @@ export function ServiceOrderFormPage() {
         setTechnicianName(operatorName)
         setItems(d.items)
         setDiscount(d.discount || '0.00')
+        setLinkedQuoteId(d.quoteId || null)
+        setLinkedQuoteNumber(d.quoteNumber || null)
+        setLinkedQuoteVersion(d.quoteVersion || 1)
+        setStatusHistory(d.statusHistory || [])
+        setSaleId(d.saleId || null)
+
+        if (d.quoteId) {
+          void quoteService.getQuote(currentOrganization.id, d.quoteId).then((qRes) => {
+            if (active && qRes.success) {
+              setLinkedQuoteDetail(qRes.data)
+              setLinkedQuoteNumber(qRes.data.quoteNumber)
+              setLinkedQuoteVersion(qRes.data.version || d.quoteVersion || 1)
+            }
+          })
+        }
 
         if (id) {
           void appointmentService
@@ -547,12 +654,82 @@ export function ServiceOrderFormPage() {
     [subtotal, discount],
   )
 
+  // Comparação em tempo real entre os itens/valores do orçamento vinculado e os itens atuais da O.S.
+  const commercialComparison = useMemo(() => {
+    if (!linkedQuoteDetail) return null
+    return compareCommercialScope(
+      {
+        items: linkedQuoteDetail.items.map((it) => ({
+          id: it.id,
+          itemType: (it.itemType || (it.serviceId ? 'service' : 'product')) as 'product' | 'service',
+          inventoryItemId: it.inventoryItemId,
+          serviceId: it.serviceId,
+          description: it.description,
+          unit: it.unit || 'UN',
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          total: it.total,
+        })),
+        discount: linkedQuoteDetail.discount,
+        total: linkedQuoteDetail.total,
+      },
+      {
+        items,
+        discount: discount.replace(',', '.') || '0.00',
+        total: grandTotal,
+      },
+    )
+  }, [linkedQuoteDetail, items, discount, grandTotal])
+
+  const isBlockedByPendingApproval =
+    status === 'pending_approval' ||
+    Boolean(linkedQuoteDetail && linkedQuoteDetail.status !== 'approved' && linkedQuoteDetail.status !== 'completed') ||
+    Boolean(commercialComparison?.hasCommercialChange)
+
+  const handleApproveLinkedQuote = async () => {
+    if (!currentOrganization || !linkedQuoteId) return
+    setIsApprovingLinkedQuote(true)
+    setError(null)
+    setInfoMessage(null)
+
+    const res = await quoteService.updateStatus(currentOrganization.id, linkedQuoteId, 'approved')
+    if (!res.success) {
+      setIsApprovingLinkedQuote(false)
+      setError(res.error)
+      return
+    }
+
+    const [updatedQuoteRes, updatedOsRes] = await Promise.all([
+      quoteService.getQuote(currentOrganization.id, linkedQuoteId),
+      id ? serviceOrderService.getById(currentOrganization.id, id) : Promise.resolve(null),
+    ])
+
+    if (updatedQuoteRes.success) {
+      setLinkedQuoteDetail(updatedQuoteRes.data)
+      setLinkedQuoteVersion(updatedQuoteRes.data.version || 1)
+    }
+    if (updatedOsRes && updatedOsRes.success) {
+      setStatus(updatedOsRes.data.status)
+      setInitialStatus(updatedOsRes.data.status)
+      setStatusHistory(updatedOsRes.data.statusHistory || [])
+    } else {
+      setStatus('approved')
+      setInitialStatus('approved')
+    }
+
+    setIsApprovingLinkedQuote(false)
+    setInfoMessage(
+      `Orçamento #${linkedQuoteNumber || ''} aprovado com sucesso! A Ordem de Serviço retornou para o status APROVADA e está liberada para execução e finalização.`,
+    )
+  }
+
   const handleSave = async (options?: {
     overrideStatus?: ServiceOrderStatus
     overridePendingReason?: string
   }) => {
     if (!currentOrganization) return
     setError(null)
+    setInfoMessage(null)
 
     if (!customerName.trim()) {
       setError('Informe o nome do cliente da Ordem de Serviço.')
@@ -571,14 +748,46 @@ export function ServiceOrderFormPage() {
       return
     }
 
+    const defaultNewStatus: ServiceOrderStatus = linkedQuoteId ? 'approved' : 'queue'
     const nextStatus: ServiceOrderStatus = !isEditing
-      ? 'queue'
+      ? (options?.overrideStatus ?? defaultNewStatus)
       : (options?.overrideStatus ?? initialStatus)
     const effectivePendingReason = (options?.overridePendingReason ?? pendingReason).trim()
 
-    // Regra: Não permite concluir para Pronto sem Solução
-    if (nextStatus === 'ready' && !solutionApplied.trim()) {
-      setError('Para fechar a O.S. e marcar como Pronto, é necessário adicionar a solução do problema.')
+    // Regra: Bloqueia tentativa de finalizar O.S. com orçamento pendente de aprovação ou alterações comerciais não aprovadas
+    if (nextStatus === 'ready' || nextStatus === 'closed') {
+      if (status === 'pending_approval') {
+        setError(
+          'Não é possível finalizar a Ordem de Serviço enquanto ela estiver PENDENTE DE APROVAÇÃO do cliente. Aguarde ou registre a aprovação do orçamento vinculado.',
+        )
+        return
+      }
+      if (commercialComparison?.hasCommercialChange) {
+        setError(
+          'Foram identificadas alterações comerciais nos materiais, serviços ou valores. Salve as alterações para atualizar o orçamento (status ENVIADO) e aguarde a aprovação do cliente antes de finalizar a O.S.',
+        )
+        return
+      }
+      if (
+        linkedQuoteDetail &&
+        linkedQuoteDetail.status !== 'approved' &&
+        linkedQuoteDetail.status !== 'completed'
+      ) {
+        setError(
+          'O orçamento vinculado ainda não foi aprovado pelo cliente. A Ordem de Serviço só pode ser finalizada após a aprovação da versão atual do orçamento.',
+        )
+        return
+      }
+    }
+
+    // Regra: Para O.S. avulsa (sem orçamento), exige solução ao marcar como Finalizada; se vinculada a orçamento, preenche solução padrão se vazia
+    const effectiveSolutionApplied =
+      nextStatus === 'ready' && !solutionApplied.trim() && linkedQuoteId
+        ? 'Serviço executado conforme orçamento aprovado.'
+        : solutionApplied
+
+    if (nextStatus === 'ready' && !effectiveSolutionApplied.trim()) {
+      setError('Para finalizar a O.S., é necessário adicionar a solução do problema.')
       return
     }
 
@@ -616,7 +825,7 @@ export function ServiceOrderFormPage() {
       photos,
       reportedProblem,
       technicalDiagnosis,
-      solutionApplied,
+      solutionApplied: effectiveSolutionApplied,
       technicianName: operatorName,
       estimatedDeliveryDate: null,
       warrantyDays: 0,
@@ -624,6 +833,8 @@ export function ServiceOrderFormPage() {
       internalNotes: effectivePendingReason || null,
       pendingReason: effectivePendingReason || null,
       discount: discount.replace(',', '.') || '0.00',
+      quoteId: linkedQuoteId || null,
+      quoteNumber: linkedQuoteNumber || null,
       items,
       createdBy: user?.id || null,
       creatorName: operatorName,
@@ -637,8 +848,9 @@ export function ServiceOrderFormPage() {
     setIsSaving(false)
 
     if (res.success) {
-      const osId = id || res.data.id
-      const osNumber = isEditing ? orderNumber : res.data.orderNumber
+      const savedOs = res.data
+      const osId = id || savedOs.id
+      const osNumber = isEditing ? orderNumber : savedOs.orderNumber
       if (osId) {
         await appointmentService.syncFromEntity(currentOrganization.id, {
           referenceType: 'service_order',
@@ -658,11 +870,11 @@ export function ServiceOrderFormPage() {
       }
 
       if (!isEditing) {
-        void navigate('/service-orders?status=queue')
-      } else if (nextStatus === 'ready' && initialStatus !== 'ready') {
-        void navigate(`/service-orders?status=ready&notifyReady=${res.data.id}`)
+        void navigate(`/service-orders?status=${savedOs.status}`)
+      } else if (savedOs.status === 'ready' && initialStatus !== 'ready') {
+        void navigate(`/service-orders?status=ready&notifyReady=${savedOs.id}`)
       } else {
-        void navigate(`/service-orders?status=${nextStatus}`)
+        void navigate(`/service-orders?status=${savedOs.status}`)
       }
     } else {
       setError(res.error)
@@ -723,7 +935,7 @@ export function ServiceOrderFormPage() {
 
             {/* Ações de Mudar Status no topo da O.S. */}
             {isEditing && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {initialStatus === 'pending' && (
                   <Button
                     type="button"
@@ -736,16 +948,32 @@ export function ServiceOrderFormPage() {
                   </Button>
                 )}
 
-                {initialStatus === 'in_maintenance' && (
+                {(initialStatus === 'approved' || initialStatus === 'in_maintenance') && (
                   <>
+                    {initialStatus === 'approved' && (
+                      <Button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => void handleSave({ overrideStatus: 'in_maintenance' })}
+                        className="gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3"
+                      >
+                        <Wrench className="h-3.5 w-3.5" />
+                        <span>Iniciar Execução</span>
+                      </Button>
+                    )}
                     <Button
                       type="button"
-                      disabled={isSaving}
+                      disabled={isSaving || isBlockedByPendingApproval}
                       onClick={() => void handleSave({ overrideStatus: 'ready' })}
-                      className="gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3"
+                      title={
+                        isBlockedByPendingApproval
+                          ? 'Bloqueado: salve e aguarde a aprovação do cliente para as alterações comerciais antes de finalizar'
+                          : 'Finalizar Ordem de Serviço e liberar envio para venda'
+                      }
+                      className="gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 disabled:opacity-50"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span>Marcar como Pronto</span>
+                      <span>Finalizar O.S.</span>
                     </Button>
                     <Button
                       type="button"
@@ -758,6 +986,16 @@ export function ServiceOrderFormPage() {
                       <span>Pendente</span>
                     </Button>
                   </>
+                )}
+
+                {initialStatus === 'ready' && !saleId && !isBlockedByPendingApproval && id && (
+                  <Link
+                    to="/orcafacil/quotes?status=approved"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3.5 shadow-xs transition-colors"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    <span>Visualizar Orçamento</span>
+                  </Link>
                 )}
 
                 {initialStatus === 'queue' && (
@@ -776,6 +1014,117 @@ export function ServiceOrderFormPage() {
           </div>
         </div>
       </div>
+
+      {/* Banner de Vínculo com Orçamento e Controle de Aprovação */}
+      {(linkedQuoteId || linkedQuoteDetail) && (
+        <div
+          className={`rounded-2xl border p-4 shadow-xs space-y-3 ${
+            status === 'pending_approval' ||
+            (linkedQuoteDetail && linkedQuoteDetail.status === 'sent')
+              ? 'border-orange-300 bg-orange-50/80 dark:border-orange-800 dark:bg-orange-950/30 text-orange-950 dark:text-orange-100'
+              : 'border-teal-200 bg-teal-50/60 dark:border-teal-800/80 dark:bg-teal-950/30 text-teal-950 dark:text-teal-100'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div
+                className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-xs ${
+                  status === 'pending_approval' || linkedQuoteDetail?.status === 'sent'
+                    ? 'bg-orange-600'
+                    : 'bg-teal-600'
+                }`}
+              >
+                {status === 'pending_approval' || linkedQuoteDetail?.status === 'sent' ? (
+                  <Lock className="h-5 w-5" />
+                ) : (
+                  <FileSpreadsheet className="h-5 w-5" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-bold">
+                    Vinculada ao Orçamento #{linkedQuoteNumber || linkedQuoteDetail?.quoteNumber}
+                  </span>
+                  <span className="rounded bg-white/80 dark:bg-slate-900/70 px-2 py-0.5 text-[11px] font-bold border border-current/20">
+                    Versão v{linkedQuoteVersion}
+                  </span>
+                  {linkedQuoteDetail && (
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getStatusBadgeClasses(
+                        linkedQuoteDetail.status,
+                        linkedQuoteDetail.approvedBy ||
+                          (linkedQuoteDetail.status === 'approved' ? 'user' : undefined),
+                      )}`}
+                    >
+                      Orçamento:{' '}
+                      {getStatusLabel(
+                        linkedQuoteDetail.status,
+                        linkedQuoteDetail.approvedBy ||
+                          (linkedQuoteDetail.status === 'approved' ? 'user' : undefined),
+                      )}
+                    </span>
+                  )}
+                </div>
+                {status === 'pending_approval' || linkedQuoteDetail?.status === 'sent' ? (
+                  <p className="text-xs leading-relaxed font-medium text-orange-900 dark:text-orange-200">
+                    <strong>Aguardando Nova Aprovação do Cliente:</strong> Foram realizadas alterações comerciais (materiais, serviços, quantidades ou valores) nesta O.S. O orçamento retornou para o status <strong>ENVIADO</strong> e esta O.S. está <strong>bloqueada para finalização</strong> até que o cliente aprove os novos valores ({formatCurrency(linkedQuoteDetail?.total || grandTotal)}).
+                  </p>
+                ) : (
+                  <p className="text-xs opacity-90">
+                    Dados do cliente, materiais, serviços e valores importados automaticamente do orçamento aprovado ({formatCurrency(linkedQuoteDetail?.total || grandTotal)}).
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {linkedQuoteDetail && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setQuoteWhatsAppModalOpen(true)}
+                  className="gap-1.5 rounded-xl border-emerald-300 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 text-xs font-bold"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Enviar Orçamento ao Cliente
+                </Button>
+              )}
+
+              {(status === 'pending_approval' || linkedQuoteDetail?.status === 'sent') && (
+                <Button
+                  type="button"
+                  size="sm"
+                  isLoading={isApprovingLinkedQuote}
+                  onClick={() => void handleApproveLinkedQuote()}
+                  className="gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Confirmar Aprovação do Cliente
+                </Button>
+              )}
+
+              <Link
+                to={
+                  linkedQuoteDetail?.status === 'sent'
+                    ? '/orcafacil/quotes?status=sent'
+                    : '/orcafacil/quotes?status=approved'
+                }
+                className="inline-flex items-center gap-1 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 transition"
+              >
+                Visualizar Orçamento →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {infoMessage && (
+        <div className="p-4 bg-emerald-50 text-emerald-800 text-sm rounded-xl border border-emerald-200 flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span>{infoMessage}</span>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-rose-50 text-rose-700 text-sm rounded-xl border border-rose-200 flex items-center gap-2">
@@ -1337,7 +1686,6 @@ export function ServiceOrderFormPage() {
       </Card>
 
       {/* 4. ADICIONAR PRODUTOS (PEÇAS) E SERVIÇOS NA O.S. */}
-      {isEditing && (
       <Card>
         <CardHeader className="border-b border-gray-100 dark:border-slate-800 pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -1387,6 +1735,37 @@ export function ServiceOrderFormPage() {
           </div>
         </CardHeader>
         <CardContent className="p-5 space-y-4">
+          {/* Alerta em Tempo Real quando há Alteração Comercial em relação ao Orçamento Vinculado */}
+          {commercialComparison?.hasCommercialChange && (
+            <div className="rounded-xl border border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/40 p-4 text-xs text-orange-950 dark:text-orange-200 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-orange-800 dark:text-orange-300">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-600" />
+                <span>
+                  Alteração Comercial Identificada no Escopo do Orçamento #{linkedQuoteNumber || linkedQuoteDetail?.quoteNumber}
+                </span>
+              </div>
+              <p className="leading-relaxed">
+                Ao salvar esta Ordem de Serviço, os novos itens/quantidades/valores serão incorporados ao orçamento vinculado, o orçamento retornará para o status <strong>ENVIADO</strong> e esta O.S. mudará para <strong>PENDENTE DE APROVAÇÃO</strong> (bloqueada para finalização até que o cliente aprove a nova versão).
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] font-semibold text-orange-900 dark:text-orange-300">
+                {commercialComparison.changes.map((chg, idx) => (
+                  <li key={`${chg.type}-${String(idx)}`}>{chg.summary}</li>
+                ))}
+              </ul>
+              <div className="pt-1 flex flex-wrap items-center gap-4 text-[11px] border-t border-orange-200 dark:border-orange-800/60">
+                <span>
+                  Valor anterior no orçamento:{' '}
+                  <strong>{formatCurrency(commercialComparison.previousTotal)}</strong>
+                </span>
+                <span>
+                  Novo valor atualizado:{' '}
+                  <strong className="text-orange-700 dark:text-orange-300">
+                    {formatCurrency(commercialComparison.newTotal)}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          )}
           {/* Barra de Inserção de Produto (Estoque) ou Serviço (Serviços) */}
           <div className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-800/40 p-4">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -1595,6 +1974,53 @@ export function ServiceOrderFormPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 5. HISTÓRICO DE APROVAÇÕES E ALTERAÇÕES COMERCIAIS */}
+      {statusHistory.length > 0 && (
+        <Card>
+          <CardHeader className="border-b border-gray-100 dark:border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-indigo-600" />
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                5. Histórico de Aprovações, Alterações Comerciais e Etapas
+              </h2>
+            </div>
+          </CardHeader>
+          <CardContent className="p-5">
+            <div className="space-y-3">
+              {statusHistory.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/50 p-3.5 text-xs space-y-1.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-900 dark:text-white">
+                        {entry.description}
+                      </span>
+                      {entry.quoteVersion > 0 && (
+                        <span className="rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+                          Orçamento v{entry.quoteVersion}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-gray-500 dark:text-slate-400">
+                      {new Date(entry.timestamp).toLocaleString('pt-BR')}
+                      {entry.actorName ? ` • Por: ${entry.actorName}` : ''}
+                    </span>
+                  </div>
+                  {entry.changes && entry.changes.length > 0 && (
+                    <ul className="list-disc list-inside text-[11px] text-gray-600 dark:text-slate-300 space-y-0.5 pt-1">
+                      {entry.changes.map((c, idx) => (
+                        <li key={`${entry.id}-chg-${String(idx)}`}>{c.summary}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ENCAMINHAR PARA AGENDA */}
@@ -1622,6 +2048,16 @@ export function ServiceOrderFormPage() {
         </Link>
 
         <div className="flex flex-wrap items-center gap-3">
+          {isEditing && initialStatus === 'ready' && !saleId && !isBlockedByPendingApproval && id && (
+            <Link
+              to="/orcafacil/quotes?status=approved"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-sm font-bold shadow-xs transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span>Visualizar Orçamento</span>
+            </Link>
+          )}
+
           {isEditing && initialStatus === 'pending' && (
             <Button
               type="button"
@@ -1634,17 +2070,19 @@ export function ServiceOrderFormPage() {
             </Button>
           )}
 
-          {isEditing && initialStatus === 'in_maintenance' && (
-            <Button
-              type="button"
-              disabled={isSaving}
-              onClick={() => void handleSave({ overrideStatus: 'ready' })}
-              className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              <span>Salvar e Marcar como Pronto</span>
-            </Button>
-          )}
+          {isEditing &&
+            (initialStatus === 'in_maintenance' || initialStatus === 'approved') &&
+            !isBlockedByPendingApproval && (
+              <Button
+                type="button"
+                disabled={isSaving}
+                onClick={() => void handleSave({ overrideStatus: 'ready' })}
+                className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Salvar e Finalizar O.S.</span>
+              </Button>
+            )}
 
           <Button
             type="button"
@@ -1654,18 +2092,33 @@ export function ServiceOrderFormPage() {
             className={`gap-2 rounded-xl ${
               isEditing && (initialStatus === 'pending' || initialStatus === 'ready')
                 ? ''
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                : commercialComparison?.hasCommercialChange
+                  ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}
           >
             <Save className="h-4 w-4" />
             {isSaving
               ? 'Salvando...'
-              : isEditing
-                ? `Salvar (Manter em ${SERVICE_ORDER_STATUS_LABELS[initialStatus]})`
-                : 'Salvar Ordem de Serviço'}
+              : commercialComparison?.hasCommercialChange
+                ? 'Salvar Alterações e Solicitar Nova Aprovação'
+                : isEditing
+                  ? `Salvar (Manter em ${SERVICE_ORDER_STATUS_LABELS[initialStatus]})`
+                  : linkedQuoteId
+                    ? 'Gerar O.S. Aprovada'
+                    : 'Salvar Ordem de Serviço'}
           </Button>
         </div>
       </div>
+
+      <SendQuoteWhatsAppModal
+        open={quoteWhatsAppModalOpen}
+        quote={linkedQuoteDetail}
+        quoteDetail={linkedQuoteDetail}
+        organizationName={currentOrganization?.name}
+        organizationId={currentOrganization?.id}
+        onClose={() => setQuoteWhatsAppModalOpen(false)}
+      />
 
       {/* Modal para Cadastrar Equipamento / Aparelho */}
       {showEquipmentModal && (

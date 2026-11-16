@@ -6,6 +6,15 @@ export interface TermsAcceptanceRecord {
   ip: string
   userAgent: string
   email?: string
+  selectedPlanId?: string
+  selectedPlanName?: string
+  agreedToTrialAndAutoSuspension?: boolean
+}
+
+export interface RecordTermsAcceptanceOptions {
+  selectedPlanId?: string
+  selectedPlanName?: string
+  agreedToTrialAndAutoSuspension?: boolean
 }
 
 const TERMS_VERSION = '2.0'
@@ -50,7 +59,11 @@ export const termsAcceptanceService = {
     }
   },
 
-  async recordAcceptance(email?: string | null, persistToAuthUser = true): Promise<TermsAcceptanceRecord> {
+  async recordAcceptance(
+    email?: string | null,
+    persistToAuthUser = true,
+    options?: RecordTermsAcceptanceOptions,
+  ): Promise<TermsAcceptanceRecord> {
     const ip = await resolvePublicIp()
     const record: TermsAcceptanceRecord = {
       version: TERMS_VERSION,
@@ -58,6 +71,9 @@ export const termsAcceptanceService = {
       ip,
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
       email: email?.trim().toLowerCase() || undefined,
+      selectedPlanId: options?.selectedPlanId,
+      selectedPlanName: options?.selectedPlanName,
+      agreedToTrialAndAutoSuspension: options?.agreedToTrialAndAutoSuspension ?? true,
     }
 
     if (typeof window !== 'undefined') {

@@ -301,7 +301,7 @@ export const contractService = {
       licensorTradeName: contract.licensorTradeName?.trim() || 'JB Software Gestão Inteligente',
       licensorDocument: contract.licensorDocument?.trim() || '00.000.000/0001-00',
       licensorResponsible: contract.licensorResponsible?.trim() || 'Bryan Mendes - Administrador Geral',
-      licensorEmail: contract.licensorEmail?.trim() || 'contato@jbsoftware.com.br',
+      licensorEmail: contract.licensorEmail?.trim() || 'controlesoft@outlook.com',
       licensorPhone: contract.licensorPhone?.trim() || '(00) 00000-0000',
       licensorAddress: contract.licensorAddress?.trim() || 'Brasil',
       includedModules: contract.includedModules || [],

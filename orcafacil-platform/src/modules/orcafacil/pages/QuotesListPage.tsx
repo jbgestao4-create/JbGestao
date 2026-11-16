@@ -32,7 +32,9 @@ import {
   Send,
   ShoppingCart,
   Trash2,
+  Wrench,
 } from 'lucide-react'
+import { SERVICE_ORDER_STATUS_LABELS } from '@modules/service-orders/domain/service-order'
 import { SendQuoteWhatsAppModal } from '../components/SendQuoteWhatsAppModal'
 import { downloadQuotePdf } from '../utils/quote-pdf'
 import type { QuoteStatus } from '@shared/types/database'
@@ -658,10 +660,37 @@ export function QuotesListPage() {
                     return (
                       <tr key={q.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="break-all px-3 py-2.5 font-semibold text-gray-900 dark:text-white">
-                          <div className="font-bold">{q.quoteNumber}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold">{q.quoteNumber}</span>
+                            {q.version && q.version > 1 && (
+                              <span
+                                className="rounded bg-amber-100 dark:bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                title={`Versão ${String(q.version)} do orçamento (revisado após alterações na O.S.)`}
+                              >
+                                v{q.version}
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] font-normal text-gray-500 dark:text-slate-400">
                             Por: <span className="font-medium text-gray-700 dark:text-slate-300">{q.creatorName || 'Sistema'}</span>
                           </div>
+                          {q.serviceOrderId && (
+                            <div className="mt-1">
+                              <Link
+                                to={`/service-orders/${q.serviceOrderId}/edit`}
+                                className="inline-flex items-center gap-1 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition"
+                                title={`Abrir Ordem de Serviço vinculada (${q.serviceOrderNumber || 'O.S.'})`}
+                              >
+                                <Wrench className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                                {q.serviceOrderNumber || 'Ver O.S.'}
+                                {q.serviceOrderStatus && (
+                                  <span className="opacity-80">
+                                    • {SERVICE_ORDER_STATUS_LABELS[q.serviceOrderStatus]}
+                                  </span>
+                                )}
+                              </Link>
+                            </div>
+                          )}
                           {q.saleId && (
                             <div className="mt-1">
                               <button
@@ -700,39 +729,74 @@ export function QuotesListPage() {
                           {q.validUntil ? new Date(q.validUntil).toLocaleDateString('pt-BR') : '—'}
                         </td>
                         <td className="px-3 py-2.5">
-                          <span
-                            className={`inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeClasses(
-                              q.status,
-                              q.approvedBy || (q.status === 'approved' ? 'user' : undefined),
-                            )}`}
-                          >
-                            {getStatusLabel(
-                              q.status,
-                              q.approvedBy || (q.status === 'approved' ? 'user' : undefined),
+                          <div className="flex flex-col items-start gap-1">
+                            <span
+                              className={`inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeClasses(
+                                q.status,
+                                q.approvedBy || (q.status === 'approved' ? 'user' : undefined),
+                              )}`}
+                            >
+                              {getStatusLabel(
+                                q.status,
+                                q.approvedBy || (q.status === 'approved' ? 'user' : undefined),
+                              )}
+                            </span>
+                            {q.status === 'sent' && q.serviceOrderId && (
+                              <span className="inline-flex items-center gap-1 rounded bg-orange-50 dark:bg-orange-950/60 border border-orange-200 dark:border-orange-800 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800 dark:text-orange-300">
+                                Alteração comercial na O.S. • Aguardando aprovação
+                              </span>
                             )}
-                          </span>
+                          </div>
                         </td>
                         <td className="px-3 py-2.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
                             {q.status === 'approved' ? (
                               <>
-                                <Link
-                                  to={`/orcafacil/sales/new?quoteId=${q.id}`}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
-                                  title="Abrir tela de venda com as informações deste orçamento preenchidas automaticamente"
-                                >
-                                  <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
-                                  Enviar para Venda
-                                </Link>
-                                <button
-                                  type="button"
-                                  onClick={() => setQuoteToCancel(q)}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 px-2 py-1.5 text-xs font-semibold shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
-                                  title="Cancelar orçamento aprovado"
-                                >
-                                  <Ban className="w-3.5 h-3.5 shrink-0" />
-                                  Cancelar
-                                </button>
+                                {!q.saleId && (!q.serviceOrderId || q.serviceOrderStatus === 'ready') && (
+                                  <Link
+                                    to={
+                                      q.serviceOrderId
+                                        ? `/orcafacil/sales/new?serviceOrderId=${q.serviceOrderId}&quoteId=${q.id}`
+                                        : `/orcafacil/sales/new?quoteId=${q.id}`
+                                    }
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+                                    title="Abrir tela de venda com as informações deste orçamento preenchidas automaticamente"
+                                  >
+                                    <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
+                                    Enviar para Venda
+                                  </Link>
+                                )}
+                                {!q.saleId && !q.serviceOrderId && (
+                                  <Link
+                                    to={`/service-orders/new?quoteId=${q.id}`}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+                                    title="Gerar uma Ordem de Serviço (O.S.) a partir deste orçamento aprovado"
+                                  >
+                                    <Wrench className="w-3.5 h-3.5 shrink-0" />
+                                    Gerar OS
+                                  </Link>
+                                )}
+                                {!q.saleId && q.serviceOrderId && (
+                                  <Link
+                                    to={`/service-orders/${q.serviceOrderId}/edit`}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 px-2.5 py-1.5 text-xs font-bold shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
+                                    title={`Acessar a Ordem de Serviço vinculada (${q.serviceOrderNumber || 'O.S.'})`}
+                                  >
+                                    <Wrench className="w-3.5 h-3.5 shrink-0" />
+                                    {q.serviceOrderNumber ? `O.S. ${q.serviceOrderNumber}` : 'Ver O.S.'}
+                                  </Link>
+                                )}
+                                {!q.saleId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setQuoteToCancel(q)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 px-2 py-1.5 text-xs font-semibold shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
+                                    title="Cancelar orçamento aprovado"
+                                  >
+                                    <Ban className="w-3.5 h-3.5 shrink-0" />
+                                    Cancelar
+                                  </button>
+                                )}
                               </>
                             ) : q.status === 'rejected' ? (
                               <button
@@ -749,26 +813,41 @@ export function QuotesListPage() {
                                 Restaurar orçamento
                               </button>
                             ) : allowedNext.length > 0 ? (
-                              <div className="w-36 text-left">
-                                <ListBox
-                                  placeholder="Mudar status..."
-                                  searchable={false}
-                                  value=""
-                                  onChange={(val) => {
-                                    if (val) {
-                                      void handleStatusChange(
-                                        q.id,
-                                        q.status,
-                                        val as QuoteStatus,
-                                      )
+                              <>
+                                {q.status === 'sent' && q.serviceOrderId && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleStatusChange(q.id, q.status, 'approved')
                                     }
-                                  }}
-                                  options={allowedNext.map((st) => ({
-                                    value: st,
-                                    label: `→ ${getStatusLabel(st)}`,
-                                  }))}
-                                />
-                              </div>
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+                                    title="Confirmar nova aprovação do cliente e liberar automaticamente a Ordem de Serviço vinculada"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                    Aprovar Alteração
+                                  </button>
+                                )}
+                                <div className="w-36 text-left">
+                                  <ListBox
+                                    placeholder="Mudar status..."
+                                    searchable={false}
+                                    value=""
+                                    onChange={(val) => {
+                                      if (val) {
+                                        void handleStatusChange(
+                                          q.id,
+                                          q.status,
+                                          val as QuoteStatus,
+                                        )
+                                      }
+                                    }}
+                                    options={allowedNext.map((st) => ({
+                                      value: st,
+                                      label: `→ ${getStatusLabel(st)}`,
+                                    }))}
+                                  />
+                                </div>
+                              </>
                             ) : null}
                             {canEditQuote(q.status, userRole) && (
                               <Link

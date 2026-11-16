@@ -82,9 +82,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           active = ownerTestOrganization ?? bryanOrg ?? orgs[0]
         }
 
-        setCurrentOrganizationState((prev) =>
-          prev && prev.id === active.id && prev.name === active.name ? prev : active,
-        )
+        setCurrentOrganizationState(active)
         if (active) {
           localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, active.id)
         }
@@ -129,11 +127,13 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     const result = await organizationService.updatePdvBackground(currentOrganization.id, backgroundUrl)
     if (result.success) {
       setCurrentOrganizationState((prev) =>
-        prev ? { ...prev, pdvBackgroundUrl: backgroundUrl } : prev,
+        prev ? { ...prev, pdvBackgroundUrl: backgroundUrl, logoUrl: backgroundUrl } : prev,
       )
       setOrganizations((prev) =>
         prev.map((o) =>
-          o.id === currentOrganization.id ? { ...o, pdvBackgroundUrl: backgroundUrl } : o,
+          o.id === currentOrganization.id
+            ? { ...o, pdvBackgroundUrl: backgroundUrl, logoUrl: backgroundUrl }
+            : o,
         ),
       )
     }

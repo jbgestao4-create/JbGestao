@@ -716,6 +716,12 @@ export function CustomerQuotesPortalPage() {
                           #{q.quoteNumber}
                         </span>
 
+                        {q.version && q.version > 1 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            Versão Revisada v{q.version}
+                          </span>
+                        )}
+
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
                         >

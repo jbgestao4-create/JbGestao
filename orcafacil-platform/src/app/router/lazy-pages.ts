@@ -3,6 +3,11 @@ import { lazy } from 'react'
 export const LoginPage = lazy(() =>
   import('@modules/auth/pages/LoginPage').then((module) => ({ default: module.LoginPage })),
 )
+export const PresentationPage = lazy(() =>
+  import('@modules/auth/pages/PresentationPage').then((module) => ({
+    default: module.PresentationPage,
+  })),
+)
 export const RegisterPage = lazy(() =>
   import('@modules/auth/pages/RegisterPage').then((module) => ({ default: module.RegisterPage })),
 )

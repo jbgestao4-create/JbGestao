@@ -87,7 +87,7 @@ export function SystemUpdatesAdminPage() {
         </p>
         <button
           type="button"
-          onClick={() => void navigate('/')}
+          onClick={() => void navigate('/dashboard')}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition cursor-pointer"
         >
           Voltar ao Início
@@ -103,7 +103,7 @@ export function SystemUpdatesAdminPage() {
     setDescription('')
     setType('feature')
     setAuthorName(profile?.displayName || user?.email?.split('@')[0] || 'Bryan Mendes')
-    setAuthorEmail(user?.email || 'bryanmendes968@gmail.com')
+    setAuthorEmail(user?.email || 'controlesoft@outlook.com')
     setModulesInput('')
     setIsCurrent(true)
 
@@ -715,7 +715,7 @@ export function SystemUpdatesAdminPage() {
                     type="email"
                     value={authorEmail}
                     onChange={(e) => setAuthorEmail(e.target.value)}
-                    placeholder="dev@jbsoftware.com.br"
+                    placeholder="controlesoft@outlook.com"
                     className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-gray-900 dark:text-white"
                   />
                 </div>

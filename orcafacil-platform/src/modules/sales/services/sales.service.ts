@@ -4,6 +4,13 @@ import type { ServiceResult, UUID } from '@shared/types/common'
 import type { QuoteStatus } from '@shared/types/database'
 import { cashService } from '@modules/cash/services/cash.service'
 import { cashSessionService } from '@modules/cash/services/cash-session.service'
+import { quoteService } from '@modules/orcafacil/services/quote.service'
+import { serviceOrderService } from '@modules/service-orders/services/service-order.service'
+import {
+  canSendQuoteDirectlyToSale,
+  canSendServiceOrderToSale,
+  compareCommercialScope,
+} from '@modules/service-orders/domain/quote-os-integration'
 import {
   calculateItemTotal,
   calculateSubtotal,
@@ -150,6 +157,8 @@ export interface SaleDetail {
   originQuoteId?: string | null
   originQuoteNumber?: string | null
   originQuoteCreatorName?: string | null
+  originServiceOrderId?: string | null
+  originServiceOrderNumber?: string | null
   status: QuoteStatus
   subtotal: string
   discount: string
@@ -452,6 +461,8 @@ export const salesService = {
           originQuoteId: quote.origin_quote_id || metadata.originQuoteId || origin?.id || null,
           originQuoteNumber: origin?.quote_number || metadata.originQuoteNumber || null,
           originQuoteCreatorName: origin?.creator_name || metadata.originQuoteCreatorName || null,
+          originServiceOrderId: metadata.originServiceOrderId || null,
+          originServiceOrderNumber: metadata.originServiceOrderNumber || null,
           status: quote.status as QuoteStatus,
           subtotal: quote.subtotal,
           discount: quote.discount,
@@ -485,8 +496,138 @@ export const salesService = {
         return { success: false, error: 'Adicione pelo menos um item à venda.' }
       }
 
+      // Fluxo 4: Validação de integridade entre Orçamento, Ordem de Serviço e Venda
+      let resolvedOriginQuoteId = params.originQuoteId
+      let resolvedOriginQuoteNumber = params.originQuoteNumber
+      let resolvedOriginQuoteCreatorName = params.originQuoteCreatorName
+      let resolvedOriginServiceOrderId = params.originServiceOrderId
+      let resolvedOriginServiceOrderNumber = params.originServiceOrderNumber
+      let effectiveItems = params.items
+      let effectiveDiscount = params.discount || '0.00'
+
+      if (resolvedOriginServiceOrderId) {
+        const osRes = await serviceOrderService.getById(organizationId, resolvedOriginServiceOrderId)
+        if (!osRes.success) {
+          return { success: false, error: osRes.error }
+        }
+        const os = osRes.data
+        resolvedOriginServiceOrderNumber = os.orderNumber
+
+        if (os.quoteId && !resolvedOriginQuoteId) {
+          resolvedOriginQuoteId = os.quoteId
+          resolvedOriginQuoteNumber = os.quoteNumber || undefined
+        }
+
+        let linkedQuoteStatus: QuoteStatus | null = null
+        let linkedQuoteSaleId: string | null = null
+        let hasCommercialDivergence = false
+
+        if (resolvedOriginQuoteId) {
+          const quoteRes = await quoteService.getQuote(organizationId, resolvedOriginQuoteId)
+          if (quoteRes.success) {
+            const linkedQuote = quoteRes.data
+            linkedQuoteStatus = linkedQuote.status
+            linkedQuoteSaleId = linkedQuote.saleId || null
+            resolvedOriginQuoteNumber = linkedQuote.quoteNumber
+            resolvedOriginQuoteCreatorName = linkedQuote.creatorName || undefined
+
+            const comparison = compareCommercialScope(
+              {
+                items: linkedQuote.items.map((it) => ({
+                  itemType: (it.itemType || (it.serviceId ? 'service' : 'product')) as 'product' | 'service',
+                  inventoryItemId: it.inventoryItemId,
+                  serviceId: it.serviceId,
+                  description: it.description,
+                  unit: it.unit || 'UN',
+                  quantity: it.quantity,
+                  unitPrice: it.unitPrice,
+                  total: it.total,
+                })),
+                discount: linkedQuote.discount,
+                total: linkedQuote.total,
+              },
+              {
+                items: os.items,
+                discount: os.discount,
+                total: os.total,
+              },
+            )
+            hasCommercialDivergence = comparison.hasCommercialChange
+
+            // Garante que a venda considere os itens e valores da última versão aprovada do orçamento
+            if (linkedQuote.status === 'approved' && !hasCommercialDivergence && linkedQuote.items.length > 0) {
+              effectiveItems = linkedQuote.items.map((it) => ({
+                inventoryItemId: it.itemType === 'service' ? null : it.inventoryItemId,
+                serviceId: it.serviceId,
+                itemType: it.itemType || (it.serviceId ? 'service' : 'product'),
+                description: it.description,
+                unit: it.unit || 'UN',
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
+              }))
+              effectiveDiscount = linkedQuote.discount || '0.00'
+            }
+          }
+        }
+
+        const osSaleCheck = canSendServiceOrderToSale({
+          osStatus: os.status,
+          saleId: os.saleId,
+          quoteId: resolvedOriginQuoteId,
+          quoteStatus: linkedQuoteStatus,
+          quoteSaleId: linkedQuoteSaleId,
+          hasUnapprovedCommercialChanges: hasCommercialDivergence,
+        })
+        if (!osSaleCheck.allowed) {
+          return {
+            success: false,
+            error: osSaleCheck.reason || 'Não é permitido enviar esta Ordem de Serviço para venda.',
+          }
+        }
+      } else if (resolvedOriginQuoteId) {
+        const quoteRes = await quoteService.getQuote(organizationId, resolvedOriginQuoteId)
+        if (!quoteRes.success) {
+          return { success: false, error: quoteRes.error }
+        }
+        const originQuote = quoteRes.data
+        resolvedOriginQuoteNumber = originQuote.quoteNumber
+        resolvedOriginQuoteCreatorName = originQuote.creatorName || undefined
+
+        if (originQuote.serviceOrderId) {
+          resolvedOriginServiceOrderId = originQuote.serviceOrderId
+          resolvedOriginServiceOrderNumber = originQuote.serviceOrderNumber || undefined
+        }
+
+        const directSaleCheck = canSendQuoteDirectlyToSale({
+          quoteStatus: originQuote.status,
+          saleId: originQuote.saleId,
+          serviceOrderId: originQuote.serviceOrderId,
+          serviceOrderStatus: originQuote.serviceOrderStatus,
+        })
+        if (!directSaleCheck.allowed) {
+          return {
+            success: false,
+            error: directSaleCheck.reason || 'Não é permitido enviar este orçamento para venda.',
+          }
+        }
+
+        // Garante que a venda utilize os itens e valores da última versão aprovada do orçamento
+        if (originQuote.items.length > 0) {
+          effectiveItems = originQuote.items.map((it) => ({
+            inventoryItemId: it.itemType === 'service' ? null : it.inventoryItemId,
+            serviceId: it.serviceId,
+            itemType: it.itemType || (it.serviceId ? 'service' : 'product'),
+            description: it.description,
+            unit: it.unit || 'UN',
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+          }))
+          effectiveDiscount = originQuote.discount || '0.00'
+        }
+      }
+
       // Validação de quantidade dos itens
-      for (const item of params.items) {
+      for (const item of effectiveItems) {
         const qty = Number(item.quantity)
         if (!Number.isFinite(qty) || qty <= 0) {
           return { success: false, error: `Quantidade inválida para o item "${item.description}".` }
@@ -532,7 +673,7 @@ export const salesService = {
       }
 
       // Recalcula totais
-      const itemsWithTotals = params.items.map((item, index) => {
+      const itemsWithTotals = effectiveItems.map((item, index) => {
         const itemTotal = calculateItemTotal(item.quantity, item.unitPrice)
         return {
           ...item,
@@ -542,7 +683,7 @@ export const salesService = {
       })
 
       const subtotal = calculateSubtotal(itemsWithTotals.map((item) => item.total))
-      const discount = params.discount || '0.00'
+      const discount = effectiveDiscount || '0.00'
       const total = calculateTotal(subtotal, discount)
 
       // Gera número da venda
@@ -611,17 +752,17 @@ export const salesService = {
         operatorId: params.operatorId,
         operatorName: params.operatorName,
         sellerName: params.sellerName || params.operatorName,
-        originQuoteId: params.originQuoteId,
-        originQuoteNumber: params.originQuoteNumber,
-        originQuoteCreatorName: params.originQuoteCreatorName,
-        originServiceOrderId: params.originServiceOrderId,
-        originServiceOrderNumber: params.originServiceOrderNumber,
+        originQuoteId: resolvedOriginQuoteId,
+        originQuoteNumber: resolvedOriginQuoteNumber,
+        originQuoteCreatorName: resolvedOriginQuoteCreatorName,
+        originServiceOrderId: resolvedOriginServiceOrderId,
+        originServiceOrderNumber: resolvedOriginServiceOrderNumber,
       }
 
       const fullNotes = encodeSaleNotes(metadata, params.notes)
 
       // Validação de integridade do estoque: não permitir itens com cadastro pendente
-      const invIds = [...new Set(params.items.map((i) => i.inventoryItemId).filter(Boolean))] as string[]
+      const invIds = [...new Set(effectiveItems.map((i) => i.inventoryItemId).filter(Boolean))] as string[]
       if (invIds.length > 0) {
         const { data: invItems } = await supabase
           .from('inventory_items')
@@ -654,7 +795,7 @@ export const salesService = {
           discount,
           total,
           notes: fullNotes,
-          origin_quote_id: params.originQuoteId || null,
+          origin_quote_id: resolvedOriginQuoteId || null,
           seller_name: params.sellerName || params.operatorName || null,
         })
         .select('id, creator_name')
@@ -784,7 +925,7 @@ export const salesService = {
       }
 
       // Se originou de um orçamento, atualiza o orçamento com o ID da venda, status completed e vendedor
-      if (params.originQuoteId) {
+      if (resolvedOriginQuoteId) {
         await supabase
           .from('quotes')
           .update({
@@ -793,7 +934,36 @@ export const salesService = {
             seller_name: params.sellerName || params.operatorName || quote.creator_name || null,
           })
           .eq('organization_id', organizationId)
-          .eq('id', params.originQuoteId)
+          .eq('id', resolvedOriginQuoteId)
+      }
+
+      // Se originou de uma Ordem de Serviço (ou orçamento vinculado a O.S.), encerra a O.S. com o vínculo da venda
+      if (resolvedOriginServiceOrderId) {
+        await serviceOrderService.markClosedWithSale(
+          organizationId,
+          resolvedOriginServiceOrderId,
+          saleId,
+          saleNumber,
+        )
+      }
+
+      if (resolvedOriginQuoteId || resolvedOriginServiceOrderId) {
+        await supabase
+          .from('quote_service_order_history' as any)
+          .insert({
+            organization_id: organizationId,
+            quote_id: resolvedOriginQuoteId || null,
+            service_order_id: resolvedOriginServiceOrderId || null,
+            sale_id: saleId,
+            event_type: 'sent_to_sale',
+            quote_version: 1,
+            new_quote_status: resolvedOriginQuoteId ? 'completed' : null,
+            new_os_status: resolvedOriginServiceOrderId ? 'closed' : null,
+            new_total: total,
+            description: `Venda #${saleNumber} gerada e faturada (${ total }) mantendo vínculo com ${[resolvedOriginQuoteNumber && `Orçamento #${resolvedOriginQuoteNumber}`, resolvedOriginServiceOrderNumber && `O.S. #${resolvedOriginServiceOrderNumber}`].filter(Boolean).join(' e ')}.`,
+            actor_name: params.sellerName || params.operatorName || 'Vendedor',
+          })
+          .then(() => {})
       }
 
       // 5. Integra com o Caixa (Recebível / Cash Entry)

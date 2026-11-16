@@ -126,7 +126,7 @@ export function LoginPage() {
           }
         }
       }
-      navigate('/')
+      navigate('/dashboard')
     } else {
       setError(res.error)
     }
@@ -155,7 +155,13 @@ export function LoginPage() {
         <div className="absolute -right-20 -top-16 h-[22rem] w-[22rem] rounded-full border border-white/10" />
 
         <div className="relative">
-          <BrandLogo dark />
+          <Link
+            to="/apresentacao"
+            title="Voltar para a apresentação do sistema"
+            className="group inline-flex items-center gap-2 rounded-xl transition-transform hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+          >
+            <BrandLogo dark />
+          </Link>
 
           <div className="mt-16 max-w-lg">
             <p className="mb-5 text-sm font-semibold uppercase text-blue-300">Gestão empresarial</p>
@@ -245,11 +251,17 @@ export function LoginPage() {
         <div className="flex w-full flex-1 items-center justify-center py-8">
           <div className="w-full max-w-[440px]">
             <header className="mb-8 text-center flex flex-col items-center">
-              <img
-                src="/controlesoft-logo.png"
-                alt="ControleSoft"
-                className="h-16 sm:h-20 w-auto object-contain mx-auto mb-5 drop-shadow-xs"
-              />
+              <Link
+                to="/apresentacao"
+                title="Voltar para a apresentação do sistema"
+                className="group mb-5 inline-block transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 rounded-2xl"
+              >
+                <img
+                  src="/controlesoft-logo.png"
+                  alt="ControleSoft"
+                  className="h-16 sm:h-20 w-auto object-contain mx-auto drop-shadow-xs"
+                />
+              </Link>
               <h2 className="text-3xl font-semibold text-slate-900">Acesse sua conta</h2>
               <p className="mt-3 text-sm leading-6 text-slate-500">
                 ControleSoft — Potencialize a administração da sua empresa
@@ -335,10 +347,10 @@ export function LoginPage() {
                           Regularizar via WhatsApp
                         </a>
                         <a
-                          href="mailto:privacidade@controlesoft.com.br"
+                          href="mailto:controlesoft@outlook.com"
                           className="text-[11px] font-semibold text-rose-900 underline hover:text-rose-700"
                         >
-                          privacidade@controlesoft.com.br
+                          controlesoft@outlook.com
                         </a>
                       </div>
                     </div>
@@ -378,10 +390,10 @@ export function LoginPage() {
                           Ativar Plano no WhatsApp
                         </a>
                         <a
-                          href="mailto:privacidade@controlesoft.com.br"
+                          href="mailto:controlesoft@outlook.com"
                           className="text-[11px] font-semibold text-amber-900 underline hover:text-amber-700"
                         >
-                          privacidade@controlesoft.com.br
+                          controlesoft@outlook.com
                         </a>
                       </div>
                     </div>

@@ -174,10 +174,10 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
             <div className="text-xs text-gray-500 dark:text-slate-400">
               E-mail DPO / Suporte:{' '}
               <a
-                href="mailto:privacidade@controlesoft.com.br"
+                href="mailto:controlesoft@outlook.com"
                 className="font-semibold text-blue-600 dark:text-blue-400 underline"
               >
-                privacidade@controlesoft.com.br
+                controlesoft@outlook.com
               </a>
             </div>
             <Link
@@ -239,10 +239,10 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
             <div className="text-xs text-gray-500 dark:text-slate-400">
               E-mail DPO / Suporte:{' '}
               <a
-                href="mailto:privacidade@controlesoft.com.br"
+                href="mailto:controlesoft@outlook.com"
                 className="font-semibold text-blue-600 dark:text-blue-400 underline"
               >
-                privacidade@controlesoft.com.br
+                controlesoft@outlook.com
               </a>
             </div>
             <Link

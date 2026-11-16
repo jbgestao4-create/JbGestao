@@ -13,6 +13,7 @@
 export const SYSTEM_OWNER_EMAILS = [
   'adm@adm.com',
   'admin@adm.com',
+  'controlesoft@outlook.com',
   'proprietario@jbsoftware.com.br',
   'owner@jbsoftware.com.br',
   'bryan@administrador.com',

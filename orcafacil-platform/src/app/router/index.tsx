@@ -49,13 +49,34 @@ import {
   SystemUpdatesAdminPage,
   PrivacyPolicyPage,
   ContractsAdminPage,
+  PresentationPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
   {
     errorElement: <RouteErrorBoundary />,
     children: [
-      // Rotas públicas de autenticação
+      // Tela principal pública de apresentação e landing page oficial
+      {
+        path: '/',
+        element: <PresentationPage />,
+      },
+      {
+        path: '/apresentacao',
+        element: <PresentationPage />,
+      },
+  {
+    path: '/planos',
+    element: <PresentationPage />,
+  },
+  {
+    path: '/modulos',
+    element: <PresentationPage />,
+  },
+  {
+    path: '/site',
+    element: <PresentationPage />,
+  },
   {
     path: '/login',
     element: <LoginPage />,
@@ -74,7 +95,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/register',
-    element: <Navigate to="/login" replace />,
+    element: <PresentationPage />,
   },
   {
     path: '/forgot-password',
@@ -199,7 +220,7 @@ export const router = createBrowserRouter([
 
   // Rotas autenticadas protegidas
   {
-    path: '/',
+    path: '/dashboard',
     element: (
       <ProtectedRoute>
         <DashboardPage />

@@ -146,19 +146,12 @@ export function PrivacyPolicyPage() {
                 <span className="text-slate-400 block print:text-slate-500">
                   Encarregado de Dados (DPO) e Canal Jurídico:
                 </span>
-                <div className="font-semibold text-white print:text-slate-900 space-x-2">
+                <div className="font-semibold text-white print:text-slate-900">
                   <a
-                    href="mailto:dpo@controlesoft.com.br"
+                    href="mailto:controlesoft@outlook.com"
                     className="underline decoration-blue-400/60 hover:text-blue-300"
                   >
-                    dpo@controlesoft.com.br
-                  </a>
-                  <span>/</span>
-                  <a
-                    href="mailto:privacidade@controlesoft.com.br"
-                    className="underline decoration-blue-400/60 hover:text-blue-300"
-                  >
-                    privacidade@controlesoft.com.br
+                    controlesoft@outlook.com
                   </a>
                 </div>
               </div>
@@ -852,19 +845,12 @@ export function PrivacyPolicyPage() {
                   </li>
                   <li>
                     • <strong>Contato Oficial:</strong> Para dúvidas, suporte ou assuntos jurídicos,
-                    utilize os canais oficiais:{' '}
+                    utilize o canal oficial:{' '}
                     <a
-                      href="mailto:privacidade@controlesoft.com.br"
+                      href="mailto:controlesoft@outlook.com"
                       className="font-semibold text-blue-600 underline"
                     >
-                      privacidade@controlesoft.com.br
-                    </a>{' '}
-                    /{' '}
-                    <a
-                      href="mailto:dpo@controlesoft.com.br"
-                      className="font-semibold text-blue-600 underline"
-                    >
-                      dpo@controlesoft.com.br
+                      controlesoft@outlook.com
                     </a>
                     .
                   </li>

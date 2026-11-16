@@ -29,6 +29,13 @@ export interface AddMemberParams {
   inventoryAccessLevel?: InventoryAccessLevel
 }
 
+export const SYSTEM_ACCESS_PLAN_NAMES: Record<string, string> = {
+  '00000000-0000-4000-8000-000000000001': 'Básico',
+  '00000000-0000-4000-8000-000000000002': 'Básico + PDV sem NF-e',
+  '00000000-0000-4000-8000-000000000003': 'Completo sem emissão de NF-e e NFC-e',
+  '00000000-0000-4000-8000-000000000004': 'Completo com emissão de NF-e e NFC-e',
+}
+
 export const organizationService = {
   /**
    * Lista todas as organizações das quais o usuário é membro.
@@ -42,11 +49,11 @@ export const organizationService = {
         // Ignora silenciosamente se a RPC ainda não estiver criada no banco remoto
       }
 
-      // 2. Sempre consulta a tabela organizations para obter todos os campos atualizados, incluindo pdv_background_url, logo_url e access_plan_id
+      // 2. Sempre consulta a tabela organizations para obter todos os campos atualizados, incluindo pdv_background_url e access_plan_id
       let data: any[] | null = null
       const resWithTrial = await supabase
         .from('organizations')
-        .select('id, name, slug, is_active, trial_ends_at, pdv_background_url, logo_url, access_plan_id, created_at')
+        .select('id, name, slug, is_active, trial_ends_at, pdv_background_url, access_plan_id, created_at')
         .order('created_at', { ascending: true })
 
       if (!resWithTrial.error && resWithTrial.data && resWithTrial.data.length > 0) {
@@ -55,7 +62,7 @@ export const organizationService = {
         // Fallback resiliente se a consulta com trial_ends_at/access_plan_id falhar
         const fallbackWithStatus = await supabase
           .from('organizations')
-          .select('id, name, slug, is_active, pdv_background_url, logo_url, created_at')
+          .select('id, name, slug, is_active, pdv_background_url, created_at')
           .order('created_at', { ascending: true })
 
         if (!fallbackWithStatus.error && fallbackWithStatus.data && fallbackWithStatus.data.length > 0) {
@@ -94,6 +101,11 @@ export const organizationService = {
                 localStorage.getItem('pdv_background_url')
               : null) || null
 
+          const planId = org.access_plan_id ?? null
+          const planName =
+            org.access_plan_name ??
+            (planId ? SYSTEM_ACCESS_PLAN_NAMES[planId] ?? null : null)
+
           return {
             id: org.id,
             name: org.name,
@@ -101,9 +113,9 @@ export const organizationService = {
             isActive: org.is_active !== false,
             trialEndsAt: org.trial_ends_at ?? null,
             pdvBackgroundUrl: org.pdv_background_url || localBg,
-            logoUrl: org.logo_url ?? null,
-            accessPlanId: org.access_plan_id ?? null,
-            accessPlanName: org.access_plan_name ?? null,
+            logoUrl: org.logo_url || org.pdv_background_url || localBg,
+            accessPlanId: planId,
+            accessPlanName: planName,
             createdAt: org.created_at,
           }
         }),

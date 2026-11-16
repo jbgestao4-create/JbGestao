@@ -413,7 +413,7 @@ export function ContractPrintModal({ contract, isOpen, onClose }: ContractPrintM
                 CLÁUSULA 4ª – DO SUPORTE TÉCNICO, ATUALIZAÇÕES E SEGURANÇA
               </h3>
               <p>
-                4.1. A <strong>LICENCIANTE</strong> prestará atendimento de suporte técnico para esclarecimento de dúvidas e diagnóstico operacional em dias úteis e horário comercial, realizado exclusivamente via <strong>E-mail</strong> ({contract.licensorEmail || 'contato@jbsoftware.com.br'}) e pelo <strong>Chat de Suporte</strong> disponibilizado internamente dentro da própria plataforma do sistema.
+                4.1. A <strong>LICENCIANTE</strong> prestará atendimento de suporte técnico para esclarecimento de dúvidas e diagnóstico operacional em dias úteis e horário comercial, realizado exclusivamente via <strong>E-mail</strong> ({contract.licensorEmail || 'controlesoft@outlook.com'}) e pelo <strong>Chat de Suporte</strong> disponibilizado internamente dentro da própria plataforma do sistema.
               </p>
               <p>
                 4.2. A LICENCIANTE manterá rotinas automáticas de backup diário de dados, proteção de integridade e servidores de alta disponibilidade para operação segura do sistema.

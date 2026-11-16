@@ -385,7 +385,7 @@ export function ContractInvoicePrintModal({
 
             {/* Rodapé e Carimbo */}
             <div className="pt-4 border-t border-gray-200 dark:border-slate-800 text-center text-[11px] text-gray-400 space-y-1">
-              <p>JB Software & Tecnologia • CNPJ: 00.000.000/0001-00 • contato@jbsoftware.com.br</p>
+              <p>JB Software & Tecnologia • CNPJ: 00.000.000/0001-00 • controlesoft@outlook.com</p>
               <p>Documento gerado eletronicamente pela Plataforma JB Gestão em {new Date().toLocaleDateString('pt-BR')}</p>
             </div>
           </div>

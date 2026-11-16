@@ -380,7 +380,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div className={`min-h-screen bg-gray-50 dark:bg-[#0b0f19] ${isDashboard ? '' : 'flex'}`}>
+    <div
+      className={`min-h-screen bg-gray-50 dark:bg-[#0b0f19] print:h-auto print:overflow-visible ${
+        isDashboard ? '' : 'flex md:h-screen md:overflow-hidden'
+      }`}
+    >
       {!isDashboard && (
         <>
           {isMobileMenuOpen && (
@@ -403,7 +407,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               setSidebarCollapsed(true)
             }
           }}
-          className={`relative shrink-0 flex-col ${
+          className={`relative shrink-0 flex-col md:sticky md:top-0 md:h-screen ${
             isBrandDraggingToSidebar ? 'overflow-visible z-30' : 'overflow-hidden'
           } border-r border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] transition-all duration-300 print:hidden ${
             isMobileMenuOpen
@@ -442,7 +446,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </span>
               )}
               <div className="mt-1 space-y-0.5">
-                {navItem('/', 'Página Inicial', <LayoutDashboard className="w-4 h-4" />)}
+                {navItem('/dashboard', 'Página Inicial', <LayoutDashboard className="w-4 h-4" />)}
               </div>
             </div>
 
@@ -571,7 +575,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         className={
           isDashboard
             ? 'min-h-screen bg-slate-50 dark:bg-[#0b0f19] print:bg-white print:p-0 print:m-0 print:min-h-0'
-            : 'flex-1 flex flex-col min-w-0 overflow-y-auto print:bg-white print:p-0 print:m-0 print:overflow-visible'
+            : 'flex-1 flex flex-col min-w-0 md:h-screen md:overflow-hidden print:bg-white print:p-0 print:m-0 print:h-auto print:overflow-visible'
         }
       >
         {/* BANNER DE MANUTENÇÃO ATIVA PARA O DESENVOLVEDOR */}
@@ -594,7 +598,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         {/* BANNER DE COBRANÇA E VENCIMENTO DE ASSINATURA (APENAS ADMINISTRADOR) */}
         <OrganizationBillingBanner />
 
-        <header className="shrink-0 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] print:hidden">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-sky-200/70 dark:border-slate-800 bg-[var(--theme-primary-subtle,#e6f1fa)] dark:bg-[#111827] print:hidden">
           <div
             className={
               isDashboard
@@ -685,15 +689,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
           className={
             isDashboard
               ? 'w-full print:p-0 print:m-0 print:w-full print:max-w-none'
-              : 'container-fluid mx-auto flex-1 min-w-0 w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 sm:py-4 print:p-0 print:m-0 print:w-full print:max-w-none'
+              : 'flex-1 min-w-0 w-full overflow-y-auto print:p-0 print:m-0 print:w-full print:max-w-none print:overflow-visible'
           }
         >
-          {children}
-          <div className="print:hidden">
-            <UpcomingBillsAlertModal />
-            <FeedbackWidget />
-            <SystemNotificationModal />
-            <OrganizationSuspensionGuard />
+          <div
+            className={
+              isDashboard
+                ? 'w-full'
+                : 'container-fluid mx-auto w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 sm:py-4 print:p-0 print:m-0 print:w-full print:max-w-none'
+            }
+          >
+            {children}
+            <div className="print:hidden">
+              <UpcomingBillsAlertModal />
+              <FeedbackWidget />
+              <SystemNotificationModal />
+              <OrganizationSuspensionGuard />
+            </div>
           </div>
         </div>
       </main>

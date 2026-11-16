@@ -46,6 +46,10 @@ import { SaleReceiptModal } from '../components/SaleReceiptModal'
 import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
 import { serviceOrderService } from '@modules/service-orders/services/service-order.service'
 import type { ServiceOrderDetail } from '@modules/service-orders/domain/service-order'
+import {
+  canSendQuoteDirectlyToSale,
+  canSendServiceOrderToSale,
+} from '@modules/service-orders/domain/quote-os-integration'
 import { cashSessionService } from '@modules/cash/services/cash-session.service'
 
 interface CartItem {
@@ -195,6 +199,26 @@ export function SaleFormPage() {
         const q = res.data
         setOriginQuote(q)
 
+        if (!serviceOrderId) {
+          const check = canSendQuoteDirectlyToSale({
+            quoteStatus: q.status,
+            saleId: q.saleId,
+            serviceOrderId: q.serviceOrderId,
+            serviceOrderStatus: q.serviceOrderStatus,
+          })
+          if (!check.allowed) {
+            setError(check.reason || 'Não é permitido enviar este orçamento para venda.')
+          }
+        }
+
+        if (q.serviceOrderId && !serviceOrderId) {
+          void serviceOrderService.getById(currentOrganization.id, q.serviceOrderId).then((osRes) => {
+            if (isCurrent && osRes.success) {
+              setOriginServiceOrder(osRes.data)
+            }
+          })
+        }
+
         // Preenche cliente do orçamento
         if (q.customerId) {
           setIsConsumidorFinal(false)
@@ -259,6 +283,29 @@ export function SaleFormPage() {
       if (res.success) {
         const os = res.data
         setOriginServiceOrder(os)
+
+        const osCheck = canSendServiceOrderToSale({
+          osStatus: os.status,
+          saleId: os.saleId,
+          quoteId: os.quoteId,
+        })
+        if (!osCheck.allowed) {
+          setError(osCheck.reason || 'Não é permitido enviar esta Ordem de Serviço para venda.')
+        }
+
+        // Se a O.S. veio de um orçamento e o quoteId não estava na URL, carrega o orçamento vinculado também
+        if (os.quoteId && !quoteId) {
+          void quoteService.getQuote(currentOrganization.id, os.quoteId).then((qRes) => {
+            if (isCurrent && qRes.success) {
+              setOriginQuote(qRes.data)
+              if (qRes.data.status !== 'approved') {
+                setError(
+                  'O orçamento vinculado a esta O.S. não está com status APROVADO. Aguarde a aprovação do cliente antes de realizar a venda.',
+                )
+              }
+            }
+          })
+        }
 
         // Preenche cliente da O.S.
         if (os.customerId) {

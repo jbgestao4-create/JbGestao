@@ -121,7 +121,7 @@ export function DeveloperSettingsPage() {
         </p>
         <button
           type="button"
-          onClick={() => void navigate('/')}
+          onClick={() => void navigate('/dashboard')}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition cursor-pointer"
         >
           Voltar ao Início
@@ -274,7 +274,7 @@ export function DeveloperSettingsPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => void navigate('/')}
+              onClick={() => void navigate('/dashboard')}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
             >
               Ir para Tela Inicial

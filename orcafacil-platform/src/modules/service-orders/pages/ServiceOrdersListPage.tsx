@@ -42,6 +42,8 @@ import { SendServiceOrderWhatsAppModal } from '../components/SendServiceOrderWha
 
 const STATUS_TABS: readonly ('all' | ServiceOrderStatus)[] = [
   'all',
+  'approved',
+  'pending_approval',
   'queue',
   'in_maintenance',
   'pending',
@@ -50,11 +52,13 @@ const STATUS_TABS: readonly ('all' | ServiceOrderStatus)[] = [
 ]
 
 const STATUS_SORT_ORDER: Record<ServiceOrderStatus, number> = {
-  queue: 1,
-  in_maintenance: 2,
-  pending: 3,
-  ready: 4,
-  closed: 5,
+  pending_approval: 1,
+  approved: 2,
+  queue: 3,
+  in_maintenance: 4,
+  pending: 5,
+  ready: 6,
+  closed: 7,
 }
 
 export function ServiceOrdersListPage() {
@@ -147,6 +151,14 @@ export function ServiceOrdersListPage() {
     setErrorMsg(null)
     const currentOrder = orders.find((o) => o.id === orderId)
 
+    // Bloqueia tentativa de finalizar O.S. que está Pendente de Aprovação do cliente
+    if (currentOrder?.status === 'pending_approval' && (newStatus === 'ready' || newStatus === 'closed')) {
+      setErrorMsg(
+        'A Ordem de Serviço está PENDENTE DE APROVAÇÃO do cliente. Aguarde a aprovação da nova versão do orçamento antes de finalizar a O.S.',
+      )
+      return
+    }
+
     // Ao encaminhar para Pendente, abre a janela pedindo o motivo da pendência
     if (newStatus === 'pending') {
       if (currentOrder) {
@@ -157,9 +169,11 @@ export function ServiceOrdersListPage() {
       return
     }
 
-        // Ao tentar movimentar para Pronto: confirma se foi adicionada informação no campo solução!
+    // Ao tentar movimentar para Finalizada ('ready'): confirma se foi adicionada informação no campo solução (ou se é originada de orçamento aprovado)
     if (newStatus === 'ready') {
-      const hasSolution = Boolean(currentOrder?.solutionApplied && currentOrder.solutionApplied.trim().length > 0)
+      const hasSolution =
+        Boolean(currentOrder?.solutionApplied && currentOrder.solutionApplied.trim().length > 0) ||
+        Boolean(currentOrder?.quoteId)
       if (!hasSolution) {
         if (currentOrder) {
           setErrorMsg('Para fechar a O.S. é necessário adicionar a solução do problema.')
@@ -619,6 +633,19 @@ export function ServiceOrdersListPage() {
                         >
                           Prioridade: {SERVICE_ORDER_PRIORITY_LABELS[o.priority]}
                         </span>
+                        {o.quoteId && (
+                          <div className="mt-1">
+                            <Link
+                              to="/orcafacil/quotes?status=approved"
+                              className="inline-flex items-center gap-1 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-100"
+                              title={`Visualizar Orçamento ${o.quoteNumber || ''}`}
+                            >
+                              <FileText className="w-3 h-3" />
+                              {o.quoteNumber || 'Visualizar Orçamento'}
+                              {o.quoteVersion > 1 && ` (v${o.quoteVersion})`}
+                            </Link>
+                          </div>
+                        )}
                         {o.saleId && (
                           <div className="mt-1">
                             <button
@@ -702,6 +729,12 @@ export function ServiceOrdersListPage() {
                           <span className="font-bold text-rose-600 dark:text-rose-400">Problema: </span>
                           {o.reportedProblem}
                         </div>
+                        {o.status === 'pending_approval' && (
+                          <div className="mt-1 rounded-md border border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/50 px-2 py-1 text-xs font-semibold text-orange-800 dark:text-orange-300">
+                            Bloqueada: Aguardando aprovação do cliente no Orçamento{' '}
+                            {o.quoteNumber ? `#${o.quoteNumber}` : 'vinculado'}
+                          </div>
+                        )}
                         {o.status === 'pending' && o.pendingReason && (
                           <div className="mt-1 rounded-md border border-amber-200 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-950/50 px-2 py-1 text-xs text-amber-800 dark:text-amber-300">
                             <span className="font-bold">Pendência: </span>
@@ -745,7 +778,18 @@ export function ServiceOrdersListPage() {
                       {/* Ações */}
                       <td className="px-3 py-3 align-top text-right">
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
-                          {!o.saleId && o.status !== 'closed' && (
+                          {o.status === 'pending_approval' && (
+                            <Link
+                              to="/orcafacil/quotes?status=sent"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800 dark:border-orange-800 dark:bg-orange-950/50 dark:text-orange-300 px-2.5 py-1.5 text-xs font-bold shadow-2xs transition-colors whitespace-nowrap"
+                              title="Acessar orçamento enviado para aprovação do cliente"
+                            >
+                              <FileText className="w-3.5 h-3.5 shrink-0" />
+                              Aprovar Orçamento
+                            </Link>
+                          )}
+
+                          {!o.saleId && o.status !== 'closed' && o.status !== 'pending_approval' && (
                             <div className="w-40 text-left">
                               <ListBox
                                 placeholder="Mudar status..."
@@ -757,41 +801,56 @@ export function ServiceOrdersListPage() {
                                   }
                                 }}
                                 options={
-                                  o.status === 'queue'
+                                  o.status === 'approved'
                                     ? [
                                         {
                                           value: 'in_maintenance',
                                           label: `→ ${SERVICE_ORDER_STATUS_LABELS.in_maintenance}`,
                                         },
                                         {
+                                          value: 'ready',
+                                          label: `→ ${SERVICE_ORDER_STATUS_LABELS.ready}`,
+                                        },
+                                        {
                                           value: 'pending',
                                           label: `→ ${SERVICE_ORDER_STATUS_LABELS.pending}`,
                                         },
                                       ]
-                                    : o.status === 'in_maintenance'
+                                    : o.status === 'queue'
                                       ? [
                                           {
-                                            value: 'ready',
-                                            label: `→ ${SERVICE_ORDER_STATUS_LABELS.ready}`,
+                                            value: 'in_maintenance',
+                                            label: `→ ${SERVICE_ORDER_STATUS_LABELS.in_maintenance}`,
                                           },
                                           {
                                             value: 'pending',
                                             label: `→ ${SERVICE_ORDER_STATUS_LABELS.pending}`,
                                           },
                                         ]
-                                      : o.status === 'pending'
+                                      : o.status === 'in_maintenance'
                                         ? [
                                             {
-                                              value: 'in_maintenance',
-                                              label: '→ Voltar para Manutenção',
+                                              value: 'ready',
+                                              label: `→ ${SERVICE_ORDER_STATUS_LABELS.ready}`,
                                             },
-                                          ]
-                                        : [
                                             {
-                                              value: 'in_maintenance',
-                                              label: '→ Voltar para Manutenção',
+                                              value: 'pending',
+                                              label: `→ ${SERVICE_ORDER_STATUS_LABELS.pending}`,
                                             },
                                           ]
+                                        : o.status === 'pending'
+                                          ? [
+                                              {
+                                                value: 'in_maintenance',
+                                                label: '→ Voltar para Manutenção',
+                                              },
+                                            ]
+                                          : [
+                                              {
+                                                value: 'in_maintenance',
+                                                label: '→ Voltar para Manutenção',
+                                              },
+                                            ]
                                 }
                               />
                             </div>
@@ -802,7 +861,7 @@ export function ServiceOrdersListPage() {
                               type="button"
                               onClick={() => setOrderForWhatsApp(o)}
                               className="inline-flex items-center rounded p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
-                              title="Enviar aviso no WhatsApp informando que o equipamento está pronto"
+                              title="Enviar aviso no WhatsApp informando que o serviço está finalizado"
                             >
                               <MessageCircle className="w-4 h-4" />
                             </button>
@@ -810,12 +869,12 @@ export function ServiceOrdersListPage() {
 
                           {!o.saleId && o.status === 'ready' && (
                             <Link
-                              to={`/orcafacil/sales/new?serviceOrderId=${o.id}`}
+                              to="/orcafacil/quotes?status=approved"
                               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition-colors whitespace-nowrap"
-                              title="Enviar esta Ordem de Serviço com peças e serviços para o fechamento de venda"
+                              title="Visualizar orçamento aprovado na tela de orçamentos"
                             >
-                              <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
-                              Fechar Venda
+                              <FileText className="w-3.5 h-3.5 shrink-0" />
+                              Visualizar Orçamento
                             </Link>
                           )}
 

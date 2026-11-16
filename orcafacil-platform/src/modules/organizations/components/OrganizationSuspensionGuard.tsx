@@ -67,7 +67,7 @@ export function OrganizationSuspensionGuard() {
   const pixKey =
     overdueInvoice?.pixKey ||
     billingInfo.contract?.licensorEmail ||
-    'contato@jbsoftware.com.br'
+    'controlesoft@outlook.com'
 
   const handleCopyPix = () => {
     void navigator.clipboard.writeText(pixKey)
@@ -195,7 +195,7 @@ export function OrganizationSuspensionGuard() {
           {/* Rodapé com botão de Sair */}
           <div className="pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">
             <span className="text-xs text-gray-400">
-              Suporte: contato@jbsoftware.com.br
+              Suporte: controlesoft@outlook.com
             </span>
             <Button
               type="button"

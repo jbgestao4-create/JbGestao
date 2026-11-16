@@ -44,7 +44,7 @@ export function InvoicePixModal({
   const pixKey =
     invoice.pixKey ||
     contract?.licensorEmail ||
-    'contato@jbsoftware.com.br'
+    'controlesoft@outlook.com'
 
   const receiverName =
     contract?.licensorName || 'JB SOFTWARE & TECNOLOGIA LTDA'

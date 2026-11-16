@@ -359,6 +359,10 @@ export interface Database {
           status: QuoteStatus
           approved_by?: 'client' | 'user' | string | null
           approved_at?: string | null
+          service_order_id?: string | null
+          service_order_number?: string | null
+          version?: number
+          approval_history?: Json
           subtotal: string
           discount: string
           total: string

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useRouteError, useNavigate } from 'react-router-dom'
 import { AlertCircle, RefreshCw, Home } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
@@ -13,6 +14,29 @@ export function RouteErrorBoundary() {
       : typeof error === 'string'
       ? error
       : 'Ocorreu um erro inesperado ao carregar esta página.'
+
+  // Se o erro for um desalinhamento transitório de hooks provocado por Hot Module Replacement (HMR) em desenvolvimento,
+  // recarrega automaticamente uma única vez para auto-recuperar a tela de imediato sem travar o usuário
+  useEffect(() => {
+    const isHooksMismatch =
+      typeof errorMessage === 'string' &&
+      (errorMessage.includes('Rendered more hooks') ||
+        errorMessage.includes('Rendered fewer hooks') ||
+        errorMessage.includes('rendered more hooks') ||
+        errorMessage.includes('rendered fewer hooks'))
+
+    if (isHooksMismatch) {
+      const reloadKey = 'cs_hmr_hook_autoreload'
+      const lastReload = sessionStorage.getItem(reloadKey)
+      const now = Date.now()
+
+      // Evita loop caso não seja HMR transitório (limite de 1 reload automático a cada 10 segundos)
+      if (!lastReload || now - Number(lastReload) > 10000) {
+        sessionStorage.setItem(reloadKey, String(now))
+        window.location.reload()
+      }
+    }
+  }, [errorMessage])
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-12">

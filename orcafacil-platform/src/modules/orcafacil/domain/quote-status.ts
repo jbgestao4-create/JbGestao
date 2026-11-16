@@ -15,7 +15,7 @@ import type { OrganizationRole } from '@shared/types/common'
 export const ALLOWED_STATUS_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
   draft: ['sent', 'rejected'],
   sent: ['approved', 'rejected', 'expired', 'draft'],
-  approved: ['completed', 'rejected'],
+  approved: ['completed', 'rejected', 'sent'],
   completed: [],
   rejected: ['draft'],
   expired: ['draft'],
