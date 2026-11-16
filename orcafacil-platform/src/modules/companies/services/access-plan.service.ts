@@ -360,6 +360,10 @@ export const accessPlanService = {
         p_description: params.description.trim(),
         p_module_codes: params.modules,
         p_is_active: params.isActive,
+        p_monthly_price:
+          typeof params.monthlyPrice === 'number' && params.monthlyPrice >= 0
+            ? params.monthlyPrice
+            : null,
       }))
 
       if (response.error) {
@@ -371,7 +375,7 @@ export const accessPlanService = {
       }
 
       const saved = mapAccessPlan(response.data)
-      if (params.monthlyPrice && params.monthlyPrice > 0) {
+      if (typeof params.monthlyPrice === 'number' && params.monthlyPrice > 0) {
         saved.monthlyPrice = params.monthlyPrice
       }
       const currentCached = getCachedPlans() ?? [...SYSTEM_DEFAULT_ACCESS_PLANS]

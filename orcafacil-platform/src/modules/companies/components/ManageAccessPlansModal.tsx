@@ -35,6 +35,7 @@ export function ManageAccessPlansModal({
   const [description, setDescription] = useState('')
   const [modules, setModules] = useState<DashboardModuleCode[]>([])
   const [isActive, setIsActive] = useState(true)
+  const [monthlyPrice, setMonthlyPrice] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId)
@@ -62,6 +63,7 @@ export function ManageAccessPlansModal({
     setDescription('')
     setModules([])
     setIsActive(true)
+    setMonthlyPrice('')
     setError('')
   }
 
@@ -72,6 +74,7 @@ export function ManageAccessPlansModal({
     setDescription(plan?.description ?? '')
     setModules(plan?.modules ?? [])
     setIsActive(plan?.isActive ?? true)
+    setMonthlyPrice(plan?.monthlyPrice !== undefined ? plan.monthlyPrice.toFixed(2) : '149.90')
     setError('')
   }
 
@@ -83,12 +86,20 @@ export function ManageAccessPlansModal({
     }
     setIsLoading(true)
     setError('')
+    const parsedPrice = Number(monthlyPrice.replace(/\./g, '').replace(',', '.'))
+    const normalizedPrice = monthlyPrice.includes(',') ? parsedPrice : Number(monthlyPrice)
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
+      setError('Informe um valor mensal válido para o plano.')
+      setIsLoading(false)
+      return
+    }
     const result = await accessPlanService.save({
       id: editingPlan?.id,
       name,
       description,
       modules,
       isActive,
+      monthlyPrice: normalizedPrice,
     })
     if (result.success) {
       await loadPlans()
@@ -195,6 +206,21 @@ export function ManageAccessPlansModal({
                   className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </label>
+              <label className="block text-xs font-semibold">
+                Valor mensal do plano (R$)
+                <input
+                  value={monthlyPrice}
+                  onChange={(event) => {
+                    setMonthlyPrice(event.currentTarget.value)
+                  }}
+                  inputMode="decimal"
+                  placeholder="Ex: 149,90"
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                />
+                <span className="mt-1 block text-[11px] font-normal text-gray-500">
+                  Este valor é exibido automaticamente nos planos da tela inicial do software.
+                </span>
+              </label>
               <label className="flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"
@@ -261,6 +287,7 @@ export function ManageAccessPlansModal({
                     <p className="text-sm font-semibold text-gray-900">{plan.name}</p>
                     <p className="text-xs text-gray-500">
                       {plan.isActive ? 'Ativo' : 'Desativado'}{plan.isSystem ? ' • Padrão' : ''}
+                      {plan.monthlyPrice !== undefined ? ` • R$ ${plan.monthlyPrice.toFixed(2).replace('.', ',')}/mês` : ''}
                     </p>
                     {plan.id === assignedPlanId && (
                       <p className="mt-1 text-[11px] font-semibold text-emerald-700">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -268,8 +268,25 @@ export function PresentationPage() {
     },
   ]
 
+  // Rolagem suave automática para a seção indicada em qualquer link interno (#modulos, #planos, #faq...)
+  const handleInternalAnchorClick = (event: ReactMouseEvent<HTMLElement>) => {
+    const anchor = (event.target as HTMLElement).closest('a')
+    const href = anchor?.getAttribute('href')
+    if (!anchor || !href || !href.startsWith('#') || href.length < 2) return
+    const target = document.getElementById(href.slice(1))
+    if (!target) return
+    event.preventDefault()
+    const headerOffset = 64
+    const top = target.getBoundingClientRect().top + window.scrollY - headerOffset
+    window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' })
+    window.history.replaceState(null, '', href)
+  }
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-blue-600 selection:text-white">
+    <div
+      onClick={handleInternalAnchorClick}
+      className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-blue-600 selection:text-white"
+    >
       {/* ===================================================================== */}
       {/* BARRA DE NAVEGAÇÃO FLUTUANTE (ESTILO MODERNO SAAS)                     */}
       {/* ===================================================================== */}
@@ -291,7 +308,7 @@ export function PresentationPage() {
                 href="#modulos"
                 className="rounded-lg px-3 py-2 transition-colors hover:bg-slate-800 hover:text-white"
               >
-                Módulos (11)
+                Módulos
               </a>
               <a
                 href="#planos"
@@ -406,6 +423,31 @@ export function PresentationPage() {
                 <ShieldCheck className="h-4 w-4 text-blue-600" />
                 Termos e LGPD transparentes
               </span>
+            </div>
+
+            {/* Anúncio: sem taxa de implantação e sem taxa de cancelamento */}
+            <div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-blue-50 p-5 text-left shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-extrabold text-slate-900">
+                    Sem taxa de implantação. Sem taxa de cancelamento.
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+                    Comece pelo período de teste gratuito e, se gostar, escolha um plano e assine.
+                    Sem burocracia e sem multa para cancelar quando quiser.
+                  </p>
+                </div>
+                <a
+                  href="#planos"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
+                >
+                  <span>Ver planos</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </a>
+              </div>
             </div>
           </div>
 
