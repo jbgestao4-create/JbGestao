@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   Clock,
   ShieldAlert,
+  X,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { cashBillsService } from '@modules/cash/services/cash-bills.service'
@@ -139,6 +140,16 @@ export function LoginPage() {
 
   return (
     <main className="relative min-h-screen w-full flex flex-col justify-between items-center bg-gradient-to-br from-[#0B132B] via-[#0F172A] to-[#1E293B] text-slate-100 px-4 py-8 sm:px-6 lg:px-8 overflow-x-hidden selection:bg-blue-600 selection:text-white">
+      {/* Botão de Fechar / Voltar para a Página Inicial (ControleSoft) */}
+      <Link
+        to="/"
+        title="Voltar para a página inicial"
+        aria-label="Voltar para a página inicial"
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30 flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-slate-800/80 text-slate-300 backdrop-blur-md transition-all hover:bg-slate-700 hover:text-white hover:scale-105 active:scale-95 border border-slate-700/80 shadow-lg cursor-pointer group"
+      >
+        <X className="h-5 w-5 sm:h-6 sm:w-6 transition-transform group-hover:rotate-90 duration-200" />
+      </Link>
+
       {/* Elementos visuais de fundo combinando com a identidade visual da ControleSoft */}
       <div
         aria-hidden="true"

@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -449,15 +449,35 @@ export function PresentationPage() {
               </a>
             </div>
 
-            {/* Selos de Confiança */}
-            <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-medium text-slate-500">
+            {/* Diferenciais Principais em Destaque (Sem Taxas / Sem Fidelidade) */}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+              <div className="inline-flex items-center gap-2 rounded-2xl border-2 border-rose-200/90 bg-rose-50/90 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-rose-900 shadow-sm transition-all hover:border-rose-300 hover:shadow-md">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs">
+                  <X className="h-3.5 w-3.5 stroke-[3.5]" />
+                </span>
+                <span>Sem taxa de implantação</span>
+              </div>
+
+              <div className="inline-flex items-center gap-2 rounded-2xl border-2 border-rose-200/90 bg-rose-50/90 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-rose-900 shadow-sm transition-all hover:border-rose-300 hover:shadow-md">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs">
+                  <X className="h-3.5 w-3.5 stroke-[3.5]" />
+                </span>
+                <span>Sem taxa de Cancelamento</span>
+              </div>
+
+              <div className="inline-flex items-center gap-2 rounded-2xl border-2 border-rose-200/90 bg-rose-50/90 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-rose-900 shadow-sm transition-all hover:border-rose-300 hover:shadow-md">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs">
+                  <X className="h-3.5 w-3.5 stroke-[3.5]" />
+                </span>
+                <span>Sem contrato de Fidelidade, podendo ser cancelado a qualquer momento</span>
+              </div>
+            </div>
+
+            {/* Selos de Confiança Complementares */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-semibold text-slate-500">
               <span className="inline-flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 30 dias grátis no 1º mês
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                Sem taxa de implantação
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-blue-600" />
@@ -467,31 +487,6 @@ export function PresentationPage() {
                 <ShieldCheck className="h-4 w-4 text-blue-600" />
                 Termos e LGPD transparentes
               </span>
-            </div>
-
-            {/* Anúncio: sem taxa de implantação e sem taxa de cancelamento */}
-            <div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-blue-50 p-5 text-left shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
-                  <ShieldCheck className="h-6 w-6" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-extrabold text-slate-900">
-                    Sem taxa de implantação. Sem taxa de cancelamento.
-                  </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
-                    Comece pelo período de teste gratuito e, se gostar, escolha um plano e assine.
-                    Sem burocracia e sem multa para cancelar quando quiser.
-                  </p>
-                </div>
-                <a
-                  href="#planos"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
-                >
-                  <span>Ver planos</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </a>
-              </div>
             </div>
           </div>
 
