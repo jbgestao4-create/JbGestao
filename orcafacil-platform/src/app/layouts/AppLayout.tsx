@@ -17,6 +17,8 @@ import { OrganizationSuspensionGuard } from '@modules/organizations/components/O
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
+import { siteAccessTrackerService } from '@shared/services/site-access-tracker.service'
+import { userSessionService } from '@shared/services/user-session.service'
 import {
   LayoutDashboard,
   FileSpreadsheet,
@@ -46,6 +48,83 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const isDashboard = location.pathname === '/'
+
+  useEffect(() => {
+    // Registra a navegação e acessos do usuário
+    void siteAccessTrackerService.trackCurrentVisit(location.pathname)
+  }, [location.pathname])
+
+  // Heartbeat de sessão ativa para manter presença online e controle de login simultâneo
+  useEffect(() => {
+    if (!user?.email) return
+
+    const sendHeartbeat = () => {
+      void userSessionService.heartbeat(user.email!, currentOrganization?.id)
+    }
+
+    sendHeartbeat()
+    const interval = setInterval(sendHeartbeat, userSessionService.getHeartbeatInterval())
+    return () => clearInterval(interval)
+  }, [user?.email, currentOrganization?.id])
+
+  // Monitoramento estrito e expulsão em tempo real de sessão concorrente (exceto adm@adm.com)
+  useEffect(() => {
+    if (!user?.email || user.email.toLowerCase() === 'adm@adm.com') return
+
+    const currentToken = userSessionService.getToken()
+
+    // 1. Verificação periódica para garantir que a sessão ativa desta conta ainda pertence a esta aba
+    const checkActiveSession = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_active_sessions')
+          .select('session_token')
+          .eq('email', user.email!.toLowerCase())
+          .maybeSingle()
+
+        if (!error && data && data.session_token && data.session_token !== currentToken) {
+          await signOut()
+          alert('Sua conta foi conectada em outro computador ou navegador. Esta sessão foi encerrada.')
+          navigate('/login', { replace: true })
+        }
+      } catch {
+        // Ignora erro de rede momentâneo
+      }
+    }
+
+    const initialTimer = setTimeout(() => void checkActiveSession(), 1500)
+    const interval = setInterval(() => void checkActiveSession(), 6000)
+
+    // 2. Canal Supabase Realtime para expulsão instantânea no momento em que outro login ocorre
+    const channel = supabase
+      .channel(`realtime_session_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_active_sessions',
+          filter: `email=eq.${user.email.toLowerCase()}`,
+        },
+        (payload: any) => {
+          const newToken = payload.new?.session_token
+          if (newToken && newToken !== currentToken) {
+            void (async () => {
+              await signOut()
+              alert('Sua conta foi conectada em outro computador ou navegador. Esta sessão foi encerrada.')
+              navigate('/login', { replace: true })
+            })()
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      clearTimeout(initialTimer)
+      clearInterval(interval)
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.email, user?.id, navigate, signOut])
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
   const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null)
@@ -664,9 +743,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
               <Link
                 ref={homeButtonRef}
-                to="/"
-                aria-label="Página Inicial"
-                title="Página Inicial"
+                to="/dashboard"
+                aria-label="Dashboard"
+                title="Dashboard"
                 className="inline-flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg border border-sky-200/80 dark:border-slate-800 bg-white/80 dark:bg-[#111827] text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
               >
                 <Home aria-hidden="true" className="h-4 w-4" />

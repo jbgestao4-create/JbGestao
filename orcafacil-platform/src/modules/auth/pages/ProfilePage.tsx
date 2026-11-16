@@ -1,6 +1,6 @@
 import { useState, useEffect, type SyntheticEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, X } from 'lucide-react'
+import { Check, X, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { authService } from '../services/auth.service'
 import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
@@ -65,6 +65,7 @@ export function ProfilePage() {
   const [avatarMessage, setAvatarMessage] = useState('')
   const [avatarError, setAvatarError] = useState('')
   const [isAvatarLoading, setIsAvatarLoading] = useState(false)
+  const [isSuccessForcedChange, setIsSuccessForcedChange] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [acceptedFirstAccessTerms, setAcceptedFirstAccessTerms] = useState(false)
@@ -179,8 +180,14 @@ export function ProfilePage() {
     if (res.success) {
       if (mustChangePassword) {
         await termsAcceptanceService.recordAcceptance(user?.email, true)
-        await refreshUser()
-        navigate('/', { replace: true })
+        // Desloga o usuário e exibe tela de sucesso para que efetue um novo login limpo
+        setIsSuccessForcedChange(true)
+        setIsLoading(false)
+        try {
+          await authService.signOut()
+        } catch {
+          // Ignora
+        }
         return
       }
       setMessage('Senha atualizada com sucesso!')
@@ -191,6 +198,33 @@ export function ProfilePage() {
     }
 
     setIsLoading(false)
+  }
+
+  if (isSuccessForcedChange) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-lg items-center px-4">
+        <Card className="w-full border-emerald-300 bg-white shadow-xl text-center p-6 sm:p-8 space-y-4">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-xs">
+            <CheckCircle2 className="h-9 w-9" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
+            Senha alterada com sucesso!
+          </h2>
+          <p className="text-sm text-gray-600 leading-relaxed max-w-md mx-auto">
+            Sua nova senha foi registrada com segurança. Por favor, acesse o sistema utilizando o seu e-mail e a nova senha que você acabou de cadastrar.
+          </p>
+          <div className="pt-3">
+            <Button
+              type="button"
+              onClick={() => navigate('/login', { replace: true })}
+              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+            >
+              Ir para a Tela de Login
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
   }
 
   if (mustChangePassword) {

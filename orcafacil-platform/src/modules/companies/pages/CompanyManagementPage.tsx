@@ -33,6 +33,7 @@ import { ManageCompanyModulesModal } from '../components/ManageCompanyModulesMod
 import { EditCompanyModal } from '../components/EditCompanyModal'
 import { TrialPeriodModal } from '../components/TrialPeriodModal'
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
+import { ManageAccessPlansModal } from '../components/ManageAccessPlansModal'
 import { formatLastAccess } from '@shared/services/screen-time.service'
 import {
   contractService,
@@ -59,6 +60,7 @@ export function CompanyManagementPage() {
   const [selectedCompanyForEdit, setSelectedCompanyForEdit] = useState<ManagedCompany | null>(null)
   const [selectedCompanyForUsers, setSelectedCompanyForUsers] = useState<ManagedCompany | null>(null)
   const [selectedCompanyForTrial, setSelectedCompanyForTrial] = useState<ManagedCompany | null>(null)
+  const [isManagePlansModalOpen, setIsManagePlansModalOpen] = useState(false)
 
   // Diálogo de confirmação para desativar/ativar
   const [confirmStatusCompany, setConfirmStatusCompany] = useState<ManagedCompany | null>(null)
@@ -90,6 +92,18 @@ export function CompanyManagementPage() {
 
   useEffect(() => {
     void loadCompanies()
+
+    // Atualiza periodicamente a contagem de usuários logados em tempo real
+    const interval = setInterval(() => {
+      void (async () => {
+        const cRes = await companyManagementService.listAll()
+        if (cRes.success) {
+          setCompanies(cRes.data)
+        }
+      })()
+    }, 25000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const overdueCompanyIds = useMemo(() => {
@@ -221,7 +235,7 @@ export function CompanyManagementPage() {
 
           <Button
             variant="outline"
-            onClick={() => void navigate('/admin/contracts')}
+            onClick={() => setIsManagePlansModalOpen(true)}
             className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400"
           >
             <FileSignature className="h-4 w-4" />
@@ -363,6 +377,7 @@ export function CompanyManagementPage() {
                 <tr>
                   <th className="px-4 py-3.5">Empresa / Negócio</th>
                   <th className="px-4 py-3.5">Último Acesso</th>
+                  <th className="px-4 py-3.5">Usuários Logados</th>
                   <th className="px-4 py-3.5">Status de Acesso</th>
                   <th className="px-4 py-3.5">Período de Teste</th>
                   <th className="px-4 py-3.5">Páginas Liberadas</th>
@@ -447,6 +462,28 @@ export function CompanyManagementPage() {
                             <Clock className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500 shrink-0" />
                             <span>Nunca acessou</span>
                           </div>
+                        )}
+                      </td>
+
+                      {/* Usuários desta empresa atualmente logados */}
+                      <td className="px-4 py-4">
+                        {(comp.loggedUsersCount ?? 0) > 0 ? (
+                          <span
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70"
+                            title="Usuários desta empresa com sessão ativa agora"
+                          >
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <Users className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>{comp.loggedUsersCount} {comp.loggedUsersCount === 1 ? 'logado agora' : 'logados agora'}</span>
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-slate-400 border border-gray-200 dark:border-slate-700"
+                            title="Nenhum usuário desta empresa está online no momento"
+                          >
+                            <Users className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500" />
+                            <span>Nenhum logado</span>
+                          </span>
                         )}
                       </td>
 
@@ -657,6 +694,15 @@ export function CompanyManagementPage() {
           setFeedbackMsg('Período de teste configurado com sucesso!')
           setTimeout(() => setFeedbackMsg(null), 4000)
           void loadCompanies()
+        }}
+      />
+
+      {/* Modal de Gerenciamento de Planos de Acesso Cadastrados */}
+      <ManageAccessPlansModal
+        open={isManagePlansModalOpen}
+        onClose={() => setIsManagePlansModalOpen(false)}
+        onChanged={async () => {
+          await loadCompanies()
         }}
       />
 

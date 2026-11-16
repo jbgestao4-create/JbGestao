@@ -15,6 +15,7 @@ import { isSystemOwner } from '@shared/utils/system-owner'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { SystemMaintenanceScreen } from '@shared/components/SystemMaintenanceScreen'
 import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
+import { userSessionService } from '@shared/services/user-session.service'
 
 export function LoginPage() {
   const { signIn, signOut } = useAuth()
@@ -64,6 +65,17 @@ export function LoginPage() {
     }
 
     setIsLoading(true)
+
+    // 0. Validação de Acesso Concorrente: impede mesmo login em múltiplos locais (exceto proprietário)
+    const sessionCheck = await userSessionService.checkConcurrentLogin(email)
+    if (sessionCheck.isBlocked) {
+      setError(
+        sessionCheck.message ||
+          'Já consta logado um usuário com esta conta. Não é permitido acesso simultâneo com o mesmo e-mail.',
+      )
+      setIsLoading(false)
+      return
+    }
 
     const res = await signIn({ email, password })
 
@@ -116,6 +128,10 @@ export function LoginPage() {
           }
         }
       }
+
+      // Registra sessão ativa do usuário imediatamente no banco
+      await userSessionService.heartbeat(email)
+
       navigate('/dashboard')
     } else {
       setError(res.error)

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session, User } from '@supabase/supabase-js'
 import { authService, type SignInParams, type SignUpParams } from '../services/auth.service'
 import { cashBillsService } from '@modules/cash/services/cash-bills.service'
+import { userSessionService } from '@shared/services/user-session.service'
 import type { ServiceResult, UserProfile } from '@shared/types/common'
 
 export type FontSizePreference = 'small' | 'medium' | 'large'
@@ -173,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const handleSignOut = async () => {
+    void userSessionService.clearSession(user?.email || undefined)
     const res = await authService.signOut()
     if (res.success) {
       cashBillsService.clearAllAlertDismissals()

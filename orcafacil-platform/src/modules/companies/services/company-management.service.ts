@@ -25,6 +25,7 @@ export interface ManagedCompany {
   membersCount: number
   modules: DashboardModuleCode[]
   lastAccessAt?: string | null
+  loggedUsersCount?: number
 }
 
 export interface CompanyUserItem {
@@ -363,27 +364,73 @@ export const companyManagementService = {
     try {
       const { data, error } = await supabase.rpc('admin_get_all_organizations')
 
+      // Tenta carregar contagem em tempo real de sessões ativas (últimos 90 segundos)
+      let activeSessionsByOrg = new Map<string, number>()
+      try {
+        const threshold = new Date(Date.now() - 90000).toISOString()
+        const { data: activeSessions } = await supabase
+          .from('user_active_sessions')
+          .select('organization_id')
+          .gt('last_heartbeat', threshold)
+
+        if (activeSessions && activeSessions.length > 0) {
+          activeSessions.forEach((s: any) => {
+            if (s.organization_id) {
+              const current = activeSessionsByOrg.get(s.organization_id) || 0
+              activeSessionsByOrg.set(s.organization_id, current + 1)
+            }
+          })
+        }
+      } catch {
+        // Fallback silencioso
+      }
+
+      // Verifica também a sessão ativa local do navegador para a empresa ativa
+      try {
+        const rawLocal = localStorage.getItem('cs_active_user_session')
+        if (rawLocal) {
+          const parsed = JSON.parse(rawLocal)
+          if (parsed.orgId) {
+            const current = activeSessionsByOrg.get(parsed.orgId) || 0
+            if (current === 0) activeSessionsByOrg.set(parsed.orgId, 1)
+          }
+        }
+      } catch {
+        // Ignora
+      }
+
       if (!error && Array.isArray(data)) {
-        const companies: ManagedCompany[] = data.map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          slug: row.slug,
-          isActive: row.is_active !== false,
-          trialEndsAt: row.trial_ends_at ?? null,
-          createdAt: row.created_at,
-          adminEmail: row.admin_email ?? '',
-          adminName: row.admin_name ?? '',
-          cnpj: row.cnpj ?? '',
-          address: row.address ?? '',
-          responsible: row.responsible ?? '',
-          notes: row.notes ?? '',
-          accessPlanId: row.access_plan_id ?? null,
-          accessPlanName: row.access_plan_name ?? null,
-          accessPlanDescription: row.access_plan_description ?? null,
-          membersCount: Number(row.members_count) || 1,
-          modules: (row.modules || []) as DashboardModuleCode[],
-          lastAccessAt: row.last_access_at ?? null,
-        }))
+        const companies: ManagedCompany[] = data.map((row: any) => {
+          const rpcLogged = Number(row.logged_users_count || 0)
+          const fallbackLogged = activeSessionsByOrg.get(row.id) || 0
+
+          // Se a organização registrou atividade nos últimos 90 segundos, garante que consta como conectada
+          const lastAccessMs = row.last_access_at ? new Date(row.last_access_at).getTime() : 0
+          const isRecentlyActive = lastAccessMs > 0 && Math.abs(Date.now() - lastAccessMs) <= 90000
+          const estimatedLogged = isRecentlyActive ? 1 : 0
+
+          return {
+            id: row.id,
+            name: row.name,
+            slug: row.slug,
+            isActive: row.is_active !== false,
+            trialEndsAt: row.trial_ends_at ?? null,
+            createdAt: row.created_at,
+            adminEmail: row.admin_email ?? '',
+            adminName: row.admin_name ?? '',
+            cnpj: row.cnpj ?? '',
+            address: row.address ?? '',
+            responsible: row.responsible ?? '',
+            notes: row.notes ?? '',
+            accessPlanId: row.access_plan_id ?? null,
+            accessPlanName: row.access_plan_name ?? null,
+            accessPlanDescription: row.access_plan_description ?? null,
+            membersCount: Number(row.members_count) || 1,
+            modules: (row.modules || []) as DashboardModuleCode[],
+            lastAccessAt: row.last_access_at ?? null,
+            loggedUsersCount: Math.max(rpcLogged, fallbackLogged, estimatedLogged),
+          }
+        })
         return { success: true, data: companies }
       }
 
@@ -437,6 +484,7 @@ export const companyManagementService = {
           membersCount: 1,
           modules: ALL_PLATFORM_DASHBOARD_MODULES.map((module) => module.code),
           lastAccessAt: o.last_access_at ?? null,
+          loggedUsersCount: activeSessionsByOrg.get(o.id) || 0,
         }))
 
       return { success: true, data: mapped }

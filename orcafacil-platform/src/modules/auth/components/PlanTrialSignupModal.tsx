@@ -544,7 +544,7 @@ export function PlanTrialSignupModal({
                     1. Plano Selecionado
                   </label>
                   <span className="text-xs font-semibold text-blue-600">
-                    {includedMainModules.length} módulos liberados neste plano
+                    {includedMainModules.length} módulos + Suporte / Dúvidas liberados
                   </span>
                 </div>
 

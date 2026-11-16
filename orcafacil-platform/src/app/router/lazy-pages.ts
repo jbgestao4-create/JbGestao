@@ -227,6 +227,12 @@ export const ContractsAdminPage = lazy(() =>
   })),
 )
 
+export const SiteAccessAnalyticsPage = lazy(() =>
+  import('@modules/companies/pages/SiteAccessAnalyticsPage').then((module) => ({
+    default: module.SiteAccessAnalyticsPage,
+  })),
+)
+
 
 
 

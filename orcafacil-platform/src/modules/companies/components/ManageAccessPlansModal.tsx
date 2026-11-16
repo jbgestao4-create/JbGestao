@@ -10,19 +10,19 @@ import type { DashboardModuleCode } from '@shared/types/common'
 
 interface ManageAccessPlansModalProps {
   open: boolean
-  companyName: string
-  assignedPlanId: string | null
-  assignedModuleCodes: DashboardModuleCode[]
+  companyName?: string
+  assignedPlanId?: string | null
+  assignedModuleCodes?: DashboardModuleCode[]
   onClose: () => void
-  onChanged: () => Promise<void>
-  onAssign: (plan: AccessPlan) => Promise<boolean>
+  onChanged?: () => Promise<void>
+  onAssign?: (plan: AccessPlan) => Promise<boolean>
 }
 
 export function ManageAccessPlansModal({
   open,
   companyName,
   assignedPlanId,
-  assignedModuleCodes,
+  assignedModuleCodes = [],
   onClose,
   onChanged,
   onAssign,
@@ -40,9 +40,12 @@ export function ManageAccessPlansModal({
   const [isLoading, setIsLoading] = useState(false)
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId)
   const isSameAssignment =
-    selectedPlan?.id === assignedPlanId &&
-    selectedPlan.modules.length === assignedModuleCodes.length &&
-    selectedPlan.modules.every((code) => assignedModuleCodes.includes(code))
+    Boolean(
+      selectedPlan &&
+        selectedPlan.id === assignedPlanId &&
+        selectedPlan.modules.length === assignedModuleCodes.length &&
+        selectedPlan.modules.every((code) => assignedModuleCodes.includes(code)),
+    )
 
   const loadPlans = useCallback(async () => {
     const result = await accessPlanService.list()
@@ -103,7 +106,7 @@ export function ManageAccessPlansModal({
     })
     if (result.success) {
       await loadPlans()
-      await onChanged()
+      if (onChanged) await onChanged()
       resetForm()
     } else {
       setError(result.error)
@@ -117,7 +120,7 @@ export function ManageAccessPlansModal({
     const result = await accessPlanService.remove(plan.id)
     if (result.success) {
       await loadPlans()
-      await onChanged()
+      if (onChanged) await onChanged()
       if (editingPlan?.id === plan.id) resetForm()
     } else {
       setError(result.error)
@@ -126,7 +129,7 @@ export function ManageAccessPlansModal({
   }
 
   const handleAssign = async () => {
-    if (!selectedPlan || !selectedPlan.isActive || selectedPlan.isLocked) return
+    if (!selectedPlan || !selectedPlan.isActive || selectedPlan.isLocked || !onAssign) return
     setIsLoading(true)
     setError('')
     const assigned = await onAssign(selectedPlan)
@@ -251,9 +254,15 @@ export function ManageAccessPlansModal({
         ) : (
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-gray-600">
-                Empresa: <span className="font-semibold text-gray-900">{companyName}</span>
-              </p>
+              {companyName ? (
+                <p className="text-xs text-gray-600">
+                  Empresa: <span className="font-semibold text-gray-900">{companyName}</span>
+                </p>
+              ) : (
+                <p className="text-xs text-gray-600">
+                  Cadastre novos planos ou edite os valores e módulos liberados.
+                </p>
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -334,26 +343,28 @@ export function ManageAccessPlansModal({
                 </div>
               </div>
             ))}
-            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
-              {selectedPlan && (
-                <p className="text-xs text-gray-600">
-                  Plano selecionado: <span className="font-semibold text-gray-900">{selectedPlan.name}</span>
-                </p>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={() => {
-                  void handleAssign()
-                }}
-                disabled={!selectedPlan || isSameAssignment || isLoading}
-              >
-                {selectedPlan?.id === assignedPlanId
-                  ? 'Atualizar acessos da empresa'
-                  : 'Definir plano para a empresa'}
-              </Button>
-            </div>
+            {companyName && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                {selectedPlan && (
+                  <p className="text-xs text-gray-600">
+                    Plano selecionado: <span className="font-semibold text-gray-900">{selectedPlan.name}</span>
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mt-3 w-full"
+                  onClick={() => {
+                    void handleAssign()
+                  }}
+                  disabled={!selectedPlan || isSameAssignment || isLoading}
+                >
+                  {selectedPlan?.id === assignedPlanId
+                    ? 'Atualizar acessos da empresa'
+                    : 'Definir plano para a empresa'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </section>

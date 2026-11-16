@@ -40,6 +40,7 @@ import {
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
+import { siteAccessTrackerService } from '@shared/services/site-access-tracker.service'
 import { PlanTrialSignupModal } from '../components/PlanTrialSignupModal'
 
 type ModuleCategory = 'all' | 'commercial' | 'services' | 'finance' | 'management'
@@ -224,6 +225,9 @@ export function PresentationPage() {
   useEffect(() => {
     document.documentElement.classList.remove('dark')
     document.documentElement.removeAttribute('data-theme')
+
+    // Registra estatística de acesso da visita pública ao site
+    void siteAccessTrackerService.trackCurrentVisit(window.location.pathname)
 
     let isMounted = true
     void accessPlanService.listPublic().then((loadedPlans) => {
@@ -1201,6 +1205,17 @@ export function PresentationPage() {
                             </li>
                           )
                         })}
+
+                        {/* Suporte / Dúvidas garantido em todos os planos */}
+                        <li className="flex items-start gap-2 text-slate-700">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-semibold text-slate-900">Suporte / Dúvidas</span>
+                            <span className="block text-[11px] text-emerald-700 font-medium">
+                              Atendimento humanizado via WhatsApp e central de ajuda inclusos
+                            </span>
+                          </div>
+                        </li>
                       </ul>
                       <button
                         type="button"
@@ -1478,6 +1493,38 @@ export function PresentationPage() {
               )
             })}
           </div>
+
+          {/* ===================================================================== */}
+          {/* ATENDIMENTO VIA WHATSAPP                                              */}
+          {/* ===================================================================== */}
+          <div className="mt-14 pt-10 border-t border-slate-200">
+            <div className="flex flex-col items-center justify-center text-center max-w-xl mx-auto">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-emerald-700 border border-emerald-200">
+                <MessageCircle className="h-3.5 w-3.5" />
+                Atendimento via WhatsApp
+              </span>
+
+              <h3 className="mt-3 text-2xl font-extrabold text-slate-900">
+                Ainda ficou com alguma dúvida?
+              </h3>
+
+              <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed max-w-md">
+                Tire suas dúvidas sobre planos, implantação gratuita, migração de dados ou solicite uma demonstração com nossa equipe em tempo real.
+              </p>
+
+              <div className="mt-5">
+                <a
+                  href="https://wa.me/5531986848490?text=Ol%C3%A1!%20Gostaria%20de%20tirar%20algumas%20d%C3%BAvidas%20sobre%20o%20ControleSoft."
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-6 py-3.5 text-sm font-bold text-white shadow-md shadow-emerald-600/25 transition-all cursor-pointer"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Chamar no WhatsApp</span>
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1621,6 +1668,44 @@ export function PresentationPage() {
                         </article>
                       )
                     })}
+
+                    {/* Bloco fixo de Suporte e Dúvidas garantido em todos os planos */}
+                    <article className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-100 text-emerald-700">
+                          <MessageCircle className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                            Atendimento Garantido
+                          </span>
+                          <h4 className="text-base font-bold text-slate-900">Suporte / Dúvidas</h4>
+                          <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+                            Atendimento humanizado direto com especialistas para você e sua equipe nunca ficarem com dúvidas.
+                          </p>
+                        </div>
+                      </div>
+                      <ul className="mt-3 space-y-1.5 border-t border-emerald-200/80 pt-3">
+                        <li className="flex items-start gap-2 text-xs text-slate-700">
+                          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                          <div>
+                            <span className="font-semibold text-slate-800">Atendimento via WhatsApp</span>
+                            <span className="block text-[11px] leading-tight text-slate-500">
+                              Canal direto em tempo real para orientações e suporte rápido.
+                            </span>
+                          </div>
+                        </li>
+                        <li className="flex items-start gap-2 text-xs text-slate-700">
+                          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                          <div>
+                            <span className="font-semibold text-slate-800">Central de Ajuda & Chamados</span>
+                            <span className="block text-[11px] leading-tight text-slate-500">
+                              Abertura de dúvidas e acompanhamento diretamente pelo painel do sistema.
+                            </span>
+                          </div>
+                        </li>
+                      </ul>
+                    </article>
                   </div>
                 </div>
 

@@ -11,6 +11,7 @@ import {
   GitBranch,
   FileSignature,
   Settings,
+  Activity,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -24,6 +25,7 @@ import { systemNotificationService } from '@shared/services/system-notification.
 import { systemUpdateService } from '@shared/services/system-update.service'
 import { useSystemVersion } from '@shared/hooks/useSystemVersion'
 import { systemSettingsService } from '@shared/services/system-settings.service'
+import { siteAccessTrackerService } from '@shared/services/site-access-tracker.service'
 import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
 
 export function DeveloperSettingsPage() {
@@ -40,6 +42,7 @@ export function DeveloperSettingsPage() {
   const [activeNotificationsCount, setActiveNotificationsCount] = useState<number | null>(null)
   const [updatesCount, setUpdatesCount] = useState<number | null>(null)
   const [contractsCount, setContractsCount] = useState<number | null>(null)
+  const [siteVisitsToday, setSiteVisitsToday] = useState<number | null>(null)
   const [inactivityMinutes, setInactivityMinutes] = useState<number>(() =>
     systemSettingsService.getLocalInactivityTimeoutMinutes(),
   )
@@ -49,7 +52,7 @@ export function DeveloperSettingsPage() {
 
     const loadStats = async () => {
       try {
-        const [compRes, annRes, maintRes, notifRes, updRes, contractRes, inactRes] = await Promise.all([
+        const [compRes, annRes, maintRes, notifRes, updRes, contractRes, inactRes, siteStats] = await Promise.all([
           companyManagementService.listAll(),
           announcementService.listAll(),
           systemMaintenanceService.getStatus(),
@@ -57,9 +60,13 @@ export function DeveloperSettingsPage() {
           systemUpdateService.listAll(),
           contractService.listContracts(),
           systemSettingsService.getInactivitySettings(),
+          siteAccessTrackerService.getAccessStats().catch(() => null),
         ])
 
         if (isMounted) {
+          if (siteStats) {
+            setSiteVisitsToday(siteStats.todayVisits)
+          }
           if (inactRes.success && inactRes.data) {
             setInactivityMinutes(inactRes.data.timeoutMinutes)
           }
@@ -232,6 +239,20 @@ export function DeveloperSettingsPage() {
       accentColor: 'cyan',
     },
     {
+      id: 'site-access',
+      title: 'Acessos ao Site (Diário / Mensal)',
+      badge: siteVisitsToday !== null ? `${siteVisitsToday} acessos hoje` : 'Estatísticas',
+      badgeColor: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold',
+      description:
+        'Acompanhe e calcule todos os acessos de endereços IP no site controlesoft.vercel.app, tanto diários quanto mensais, páginas mais visitadas e fluxo em tempo real.',
+      actionText: 'Ver Métricas de Acessos',
+      path: '/admin/site-access',
+      icon: Activity,
+      iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400',
+      cardHoverBorder: 'hover:border-blue-400 dark:hover:border-blue-600',
+      accentColor: 'blue',
+    },
+    {
       id: 'system-settings',
       title: 'Configuração do Sistema',
       badge: `${inactivityMinutes} min de inatividade`,
@@ -271,7 +292,17 @@ export function DeveloperSettingsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void navigate('/admin/site-access')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 rounded-lg transition shadow-xs cursor-pointer"
+              title="Calcular e visualizar acessos diários e mensais por IP no site controlesoft.vercel.app"
+            >
+              <Activity className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Acessos ao Site (Diário / Mensal)</span>
+            </button>
+
             <button
               type="button"
               onClick={() => void navigate('/dashboard')}

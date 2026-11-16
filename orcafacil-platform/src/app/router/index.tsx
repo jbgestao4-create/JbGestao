@@ -50,6 +50,7 @@ import {
   PrivacyPolicyPage,
   ContractsAdminPage,
   PresentationPage,
+  SiteAccessAnalyticsPage,
 } from './lazy-pages'
 
 export const router = createBrowserRouter([
@@ -143,6 +144,16 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <RequireOwner>
           <DeveloperSettingsPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/site-access',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <SiteAccessAnalyticsPage />
         </RequireOwner>
       </ProtectedRoute>
     ),
