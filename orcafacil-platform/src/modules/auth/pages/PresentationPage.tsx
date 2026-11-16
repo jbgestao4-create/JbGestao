@@ -173,6 +173,8 @@ export function PresentationPage() {
   >('pdv')
   // Carrossel do PDV: 0 = captura da tela do PDV, 1 = painel de venda
   const [pdvSlide, setPdvSlide] = useState<0 | 1>(0)
+  // Carrossel de O.S. & Orçamentos: 0 = captura da listagem de O.S., 1 = painel de O.S.
+  const [osSlide, setOsSlide] = useState<0 | 1>(0)
   const [showComparisonTable, setShowComparisonTable] = useState(true)
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
 
@@ -195,6 +197,18 @@ export function PresentationPage() {
     }, delay)
     return () => window.clearTimeout(timer)
   }, [activeShowcaseTab, pdvSlide])
+
+  // Carrossel de O.S.: alterna de 5 em 5 segundos
+  useEffect(() => {
+    if (activeShowcaseTab !== 'os') {
+      setOsSlide(0)
+      return
+    }
+    const timer = window.setInterval(() => {
+      setOsSlide((current) => (current === 0 ? 1 : 0))
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [activeShowcaseTab])
 
   useEffect(() => {
     document.documentElement.classList.remove('dark')
@@ -449,35 +463,29 @@ export function PresentationPage() {
               </a>
             </div>
 
-            {/* Diferenciais Principais em Destaque (Sem Taxas / Sem Fidelidade) */}
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-              <div className="inline-flex items-center gap-2 rounded-2xl border-2 border-rose-200/90 bg-rose-50/90 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-rose-900 shadow-sm transition-all hover:border-rose-300 hover:shadow-md">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs">
-                  <X className="h-3.5 w-3.5 stroke-[3.5]" />
-                </span>
-                <span>Sem taxa de implantação</span>
-              </div>
-
-              <div className="inline-flex items-center gap-2 rounded-2xl border-2 border-rose-200/90 bg-rose-50/90 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-rose-900 shadow-sm transition-all hover:border-rose-300 hover:shadow-md">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs">
-                  <X className="h-3.5 w-3.5 stroke-[3.5]" />
-                </span>
-                <span>Sem taxa de Cancelamento</span>
-              </div>
-
-              <div className="inline-flex items-center gap-2 rounded-2xl border-2 border-rose-200/90 bg-rose-50/90 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-rose-900 shadow-sm transition-all hover:border-rose-300 hover:shadow-md">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs">
-                  <X className="h-3.5 w-3.5 stroke-[3.5]" />
-                </span>
-                <span>Sem contrato de Fidelidade, podendo ser cancelado a qualquer momento</span>
-              </div>
-            </div>
-
-            {/* Selos de Confiança Complementares */}
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-semibold text-slate-500">
+            {/* Selos de Confiança e Diferenciais */}
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 text-xs font-semibold text-slate-600">
               <span className="inline-flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 30 dias grátis no 1º mês
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-700">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white text-[10px] font-black">
+                  <X className="h-2.5 w-2.5 stroke-[3.5]" />
+                </span>
+                Sem taxa de implantação
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-700">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white text-[10px] font-black">
+                  <X className="h-2.5 w-2.5 stroke-[3.5]" />
+                </span>
+                Sem taxa de cancelamento
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-700">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white text-[10px] font-black">
+                  <X className="h-2.5 w-2.5 stroke-[3.5]" />
+                </span>
+                Sem contrato de Fidelidade
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-blue-600" />
@@ -722,43 +730,63 @@ export function PresentationPage() {
                       </ul>
                     </div>
 
-                    <div className="w-full lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 overflow-hidden">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                        <div>
-                          <span className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-600">
-                            Ordem de Serviço #OS-2026-0194
-                          </span>
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-900">
-                            Equipamento: Notebook Dell Inspiron 15 • Cliente: Mariana Costa
-                          </h4>
-                        </div>
-                        <span className="self-start sm:self-auto rounded-full bg-emerald-100 px-3 py-1 text-[11px] sm:text-xs font-bold text-emerald-800">
-                          ✓ Aprovado no Portal pelo Cliente
-                        </span>
+                    <div className="w-full lg:col-span-7 grid">
+                      <div
+                        aria-hidden={osSlide !== 0}
+                        className={`col-start-1 row-start-1 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden transition-opacity duration-700 ${
+                          osSlide === 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        }`}
+                      >
+                        <img
+                          src="/showcase-os-lista.jpg"
+                          alt="Painel de Ordens de Serviço (O.S.) do ControleSoft com indicadores e listagem de status"
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
-                          <span className="text-[10px] font-bold uppercase text-slate-400">
-                            Vistoria & Diagnóstico Técnico
-                          </span>
-                          <p className="font-semibold text-slate-800">
-                            Substituição de SSD NVMe 1TB + Limpeza Térmica e Restauração de Sistema
-                          </p>
-                          <span className="inline-block text-[11px] text-blue-600 font-medium">
-                            3 fotos anexadas na vistoria • Garantia de 90 dias
+                      <div
+                        aria-hidden={osSlide !== 1}
+                        className={`col-start-1 row-start-1 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-sm space-y-3 sm:space-y-4 overflow-hidden transition-opacity duration-700 ${
+                          osSlide === 1 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                          <div>
+                            <span className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-600">
+                              Ordem de Serviço #OS-2026-0194
+                            </span>
+                            <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                              Equipamento: Notebook Dell Inspiron 15 • Cliente: Mariana Costa
+                            </h4>
+                          </div>
+                          <span className="self-start sm:self-auto rounded-full bg-emerald-100 px-3 py-1 text-[11px] sm:text-xs font-bold text-emerald-800">
+                            ✓ Aprovado no Portal pelo Cliente
                           </span>
                         </div>
-                        <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-1">
-                          <span className="text-[10px] font-bold uppercase text-blue-700">
-                            Rastreabilidade da Aprovação
-                          </span>
-                          <p className="font-semibold text-slate-800">
-                            Proposta #ORC-0412 validada via CPF no Portal Seguro
-                          </p>
-                          <span className="inline-block text-[11px] text-emerald-700 font-semibold">
-                            Peças + Mão de Obra: R$ 680,00
-                          </span>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
+                            <span className="text-[10px] font-bold uppercase text-slate-400">
+                              Vistoria & Diagnóstico Técnico
+                            </span>
+                            <p className="font-semibold text-slate-800">
+                              Substituição de SSD NVMe 1TB + Limpeza Térmica e Restauração de Sistema
+                            </p>
+                            <span className="inline-block text-[11px] text-blue-600 font-medium">
+                              3 fotos anexadas na vistoria • Garantia de 90 dias
+                            </span>
+                          </div>
+                          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-1">
+                            <span className="text-[10px] font-bold uppercase text-blue-700">
+                              Rastreabilidade da Aprovação
+                            </span>
+                            <p className="font-semibold text-slate-800">
+                              Proposta #ORC-0412 validada via CPF no Portal Seguro
+                            </p>
+                            <span className="inline-block text-[11px] text-emerald-700 font-semibold">
+                              Peças + Mão de Obra: R$ 680,00
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
