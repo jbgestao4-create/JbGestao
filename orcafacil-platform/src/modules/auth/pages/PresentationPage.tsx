@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -171,7 +171,6 @@ export function PresentationPage() {
   const [activeShowcaseTab, setActiveShowcaseTab] = useState<
     'pdv' | 'os' | 'cash' | 'inventory' | 'reports'
   >('pdv')
-  const [selectedCategory, setSelectedCategory] = useState<ModuleCategory>('all')
   const [showComparisonTable, setShowComparisonTable] = useState(true)
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
 
@@ -227,12 +226,7 @@ export function PresentationPage() {
     }
   }, [location.pathname, location.hash, searchParams, plans])
 
-  const filteredModules = useMemo(() => {
-    if (selectedCategory === 'all') return ALL_PLATFORM_DASHBOARD_MODULES
-    return ALL_PLATFORM_DASHBOARD_MODULES.filter(
-      (mod) => (MODULE_METADATA[mod.code]?.category ?? 'management') === selectedCategory,
-    )
-  }, [selectedCategory])
+  const filteredModules = ALL_PLATFORM_DASHBOARD_MODULES
 
   const handleChoosePlan = (plan?: AccessPlan) => {
     const target =
@@ -881,7 +875,7 @@ export function PresentationPage() {
       <section id="modulos" className="py-20 bg-white border-y border-slate-200/80">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-            <div className="max-w-2xl">
+            <div className="max-w-3xl">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-700 border border-blue-200">
                 <Layers className="h-3.5 w-3.5" />
                 Panorama Geral de Módulos
@@ -893,30 +887,6 @@ export function PresentationPage() {
                 Cada módulo possui sub-funções granulares que podem ser habilitadas de acordo com o
                 plano escolhido e com o perfil de cada colaborador da sua empresa.
               </p>
-            </div>
-
-            {/* Filtro de categorias dos módulos */}
-            <div className="flex flex-wrap gap-1.5 rounded-2xl bg-slate-100 p-1.5 border border-slate-200/80 self-start">
-              {[
-                { id: 'all' as const, label: 'Todos (11)' },
-                { id: 'commercial' as const, label: 'Vendas & Clientes' },
-                { id: 'services' as const, label: 'Serviços & O.S.' },
-                { id: 'finance' as const, label: 'Caixa & Estoque' },
-                { id: 'management' as const, label: 'Gestão & Dados' },
-              ].map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    selectedCategory === cat.id
-                      ? 'bg-[#2563EB] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
             </div>
           </div>
 
