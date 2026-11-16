@@ -385,27 +385,20 @@ export function PresentationPage() {
             {user ? (
               <Link
                 to="/dashboard"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition-all hover:bg-slate-800 hover:border-slate-600"
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/30 transition-all cursor-pointer"
               >
-                <span>Ir para Meu Painel</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <span>Acesso ao Sistema</span>
+                <ArrowRight className="h-4 w-4" />
               </Link>
             ) : (
               <Link
                 to="/login"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition-all hover:bg-slate-800 hover:border-slate-600"
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/30 transition-all cursor-pointer"
               >
-                <LogIn className="h-3.5 w-3.5 text-blue-400" />
-                <span>Entrar</span>
+                <LogIn className="h-4 w-4 text-white" />
+                <span>Acesso ao Sistema</span>
               </Link>
             )}
-
-            <a
-              href="#como-funciona"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#2563EB] px-4 py-2 text-xs font-bold text-white shadow-sm shadow-blue-600/25 transition-all hover:bg-blue-700 cursor-pointer"
-            >
-              <span>Testar 1 Mês Grátis</span>
-            </a>
           </div>
         </div>
       </header>
