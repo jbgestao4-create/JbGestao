@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
+  CheckCircle2,
   Clock,
+  Lock,
+  QrCode,
   ShieldAlert,
   X,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { cashBillsService } from '@modules/cash/services/cash-bills.service'
 import { organizationService } from '@modules/organizations/services/organization.service'
+import type { Organization } from '@shared/types/common'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
@@ -16,6 +21,8 @@ import { systemMaintenanceService } from '@shared/services/system-maintenance.se
 import { SystemMaintenanceScreen } from '@shared/components/SystemMaintenanceScreen'
 import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
 import { userSessionService } from '@shared/services/user-session.service'
+import { calculateCompanyLicenseStatus } from '@modules/companies/utils/license.utils'
+import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
 
 export function LoginPage() {
   const { signIn, signOut } = useAuth()
@@ -27,6 +34,12 @@ export function LoginPage() {
   const [isTrialExpired, setIsTrialExpired] = useState(Boolean((location.state as any)?.trialExpired))
   const [expiredOrgName, setExpiredOrgName] = useState<string>((location.state as any)?.orgName || '')
   const [isInactiveLoggedOut] = useState(Boolean((location.state as any)?.inactivity))
+
+  // Estados de bloqueio por fatura/licença vencida e checkout PIX (Item 2)
+  const [isOverdueBlocked, setIsOverdueBlocked] = useState(false)
+  const [blockedOrg, setBlockedOrg] = useState<Organization | null>(null)
+  const [isPixCheckoutOpen, setIsPixCheckoutOpen] = useState(false)
+  const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -91,29 +104,48 @@ export function LoginPage() {
         return
       }
 
-      // Se não for o Proprietário do Sistema, valida se a empresa está desativada ou com teste expirado
+      // Se não for o Proprietário do Sistema, valida se a empresa está desativada ou com fatura em atraso (Item 2)
       if (!isOwner) {
         const orgsRes = await organizationService.getUserOrganizations()
         if (orgsRes.success && orgsRes.data.length > 0) {
+          const firstOrg = orgsRes.data[0]
+
           const allInactive = orgsRes.data.every((o) => o.isActive === false)
           if (allInactive) {
-            const firstOrg = orgsRes.data[0]
             await signOut()
             setIsOrgDeactivated(true)
+            setBlockedOrg(firstOrg)
             setDeactivatedOrgName(firstOrg.name)
             setIsLoading(false)
             return
           }
 
-          const allExpired = orgsRes.data.every((o) => {
-            if (!o.trialEndsAt) return false
-            return new Date(o.trialEndsAt).getTime() < Date.now()
+          // Valida tolerância de 5 dias e bloqueio por inadimplência/fatura em atraso
+          const allBlockedByOverdue = orgsRes.data.every((o) => {
+            const lic = calculateCompanyLicenseStatus(o.trialEndsAt, o.isActive)
+            return lic.isBlockedByOverdue
           })
 
-          if (allExpired) {
-            const firstOrg = orgsRes.data[0]
+          if (allBlockedByOverdue) {
+            await signOut()
+            setIsOverdueBlocked(true)
+            setBlockedOrg(firstOrg)
+            setExpiredOrgName(firstOrg.name)
+            setIsLoading(false)
+            return
+          }
+
+          // Checa se o período de teste expirou há mais de 5 dias
+          const allTrialExpired = orgsRes.data.every((o) => {
+            if (!o.trialEndsAt) return false
+            const lic = calculateCompanyLicenseStatus(o.trialEndsAt, o.isActive)
+            return lic.status === 'blocked_overdue'
+          })
+
+          if (allTrialExpired) {
             await signOut()
             setIsTrialExpired(true)
+            setBlockedOrg(firstOrg)
             setExpiredOrgName(firstOrg.name)
             setIsLoading(false)
             return
@@ -238,6 +270,74 @@ export function LoginPage() {
                 </div>
               )}
 
+              {paymentSuccessNotice && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700 shrink-0 mt-0.5">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-emerald-950">
+                        Pagamento Aprovado com Sucesso!
+                      </h3>
+                      <p className="mt-1 text-xs text-emerald-900 leading-relaxed font-semibold">
+                        {paymentSuccessNotice}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isOverdueBlocked && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-2xl border border-rose-300 bg-rose-50 p-5 shadow-sm"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-xl bg-rose-100 p-2.5 text-rose-700 shrink-0 mt-0.5">
+                      <Lock className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <h3 className="text-sm font-bold text-rose-950">
+                        Acesso Bloqueado por Fatura / Licença em Atraso
+                      </h3>
+                      <p className="mt-1 text-xs text-rose-900 leading-relaxed">
+                        O período de tolerância {expiredOrgName ? `da empresa "${expiredOrgName}"` : 'da sua empresa'} expirou devido a fatura de mensalidade em atraso.
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-rose-800 leading-relaxed">
+                        Para restabelecer o acesso imediatamente com <strong>+30 dias de licença</strong>, realize o pagamento via PIX abaixo:
+                      </p>
+
+                      <div className="pt-2 flex flex-wrap items-center gap-2.5">
+                        <Button
+                          type="button"
+                          onClick={() => setIsPixCheckoutOpen(true)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold shadow-md text-xs py-2 px-3.5"
+                        >
+                          <QrCode className="h-4 w-4" />
+                          <Zap className="h-3.5 w-3.5" />
+                          Pagar Licença via PIX (Liberação Imediata +30 Dias)
+                        </Button>
+
+                        <a
+                          href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20bloqueado%20por%20fatura%20em%20atraso.%20Gostaria%20de%20ajuda."
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Falar com suporte no WhatsApp"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-50 transition-colors"
+                        >
+                          <WhatsAppIcon className="h-4 w-4" />
+                          Suporte WhatsApp
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {isOrgDeactivated && (
                 <div
                   role="alert"
@@ -255,16 +355,25 @@ export function LoginPage() {
                         O acesso {deactivatedOrgName ? `da empresa "${deactivatedOrgName}"` : 'da sua empresa'} encontra-se temporariamente suspenso devido a pendência financeira de assinatura ou inativação administrativa.
                       </p>
                       <p className="mt-1 text-[11px] text-rose-700 leading-relaxed">
-                        Seus dados permanecem íntegros pelo período de carência contratual (30 a 90 dias). Entre em contato pelos canais abaixo para regularizar sua assinatura ou solicitar suporte/exportação LGPD:
+                        Seus dados permanecem íntegros pelo período de carência contratual (30 a 90 dias). Regularize via PIX para somar +30 dias de acesso ou contate nosso suporte:
                       </p>
                       <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                        <Button
+                          type="button"
+                          onClick={() => setIsPixCheckoutOpen(true)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold shadow-md text-xs py-2 px-3.5"
+                        >
+                          <QrCode className="h-4 w-4" />
+                          <Zap className="h-3.5 w-3.5" />
+                          Pagar Licença via PIX (+30 Dias)
+                        </Button>
                         <a
                           href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20desativado.%20Gostaria%20de%20solicitar%20suporte."
                           target="_blank"
                           rel="noreferrer"
                           title="Suporte no WhatsApp"
                           aria-label="Suporte no WhatsApp"
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-50 transition-colors shadow-xs"
                         >
                           <WhatsAppIcon className="h-4 w-4" />
                           Regularizar via WhatsApp
@@ -295,19 +404,28 @@ export function LoginPage() {
                         Período de Avaliação Gratuita (Trial) Encerrado
                       </h3>
                       <p className="mt-1 text-xs font-semibold text-amber-900 leading-relaxed">
-                        Tempo de teste expirado, entre em contato com a ControleSoft
+                        Tempo de teste expirado, renove sua licença via PIX ou contate a ControleSoft
                       </p>
                       <p className="mt-0.5 text-xs text-amber-800 leading-relaxed">
-                        O período de teste gratuito {expiredOrgName ? `da empresa "${expiredOrgName}"` : 'da sua empresa'} chegou ao fim. Seus dados estão preservados pelo período de carência (30 a 90 dias). Fale com nossa equipe para ativar seu plano definitivo:
+                        O período de teste gratuito {expiredOrgName ? `da empresa "${expiredOrgName}"` : 'da sua empresa'} chegou ao fim. Ative seu plano instantaneamente via PIX:
                       </p>
                       <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                        <Button
+                          type="button"
+                          onClick={() => setIsPixCheckoutOpen(true)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold shadow-md text-xs py-2 px-3.5"
+                        >
+                          <QrCode className="h-4 w-4" />
+                          <Zap className="h-3.5 w-3.5" />
+                          Ativar Licença via PIX (+30 Dias)
+                        </Button>
                         <a
                           href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20tempo%20de%20teste%20da%20minha%20empresa%20expirou.%20Gostaria%20de%20renovar%20o%20acesso%20com%20a%20JB%20Software."
                           target="_blank"
                           rel="noreferrer"
                           title="Falar com a ControleSoft no WhatsApp"
                           aria-label="Falar com a ControleSoft no WhatsApp"
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50 transition-colors shadow-xs"
                         >
                           <WhatsAppIcon className="h-4 w-4" />
                           Ativar Plano no WhatsApp
@@ -412,6 +530,24 @@ export function LoginPage() {
             Política de Privacidade e LGPD
           </Link>
         </footer>
+
+        {/* Modal de Pagamento de Licença via PIX - Liberação Imediata (Item 2) */}
+        <PixPaymentCheckoutModal
+          isOpen={isPixCheckoutOpen}
+          onClose={() => setIsPixCheckoutOpen(false)}
+          organizationId={blockedOrg?.id}
+          prefillClientName={blockedOrg?.name || expiredOrgName || deactivatedOrgName}
+          customTitle="Renovação de Licença • Liberação Imediata +30 Dias"
+          onPaymentSuccess={() => {
+            setIsPixCheckoutOpen(false)
+            setIsOverdueBlocked(false)
+            setIsTrialExpired(false)
+            setIsOrgDeactivated(false)
+            setPaymentSuccessNotice(
+              'Pagamento confirmado com sucesso! Mais 30 dias de acesso adicionados à sua empresa. Insira suas credenciais abaixo para entrar.'
+            )
+          }}
+        />
       </main>
   )
 }

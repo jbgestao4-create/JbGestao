@@ -313,6 +313,14 @@ export const mercadopagoService = {
             'O gateway do Mercado Pago não possui um Access Token configurado nas Configurações do Sistema.',
         }
       }
+
+      if (settingsRes.data.accessToken.trim().toUpperCase().startsWith('TESTUSER')) {
+        return {
+          success: false,
+          error:
+            'O Access Token configurado é inválido (começa com "TESTUSER...", que é o identificador de usuário de testes e não a chave de API). Acesse Configurações do Desenvolvedor > Mercado Pago e informe o Access Token oficial (que inicia com "TEST-" para testes em Sandbox, ou "APP_USR-" para Produção).',
+        }
+      }
       const settings = settingsRes.data
 
       const formattedAmount = Number(params.amount.toFixed(2))

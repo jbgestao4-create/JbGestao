@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle,
+  ArrowLeft,
   Building2,
-  CalendarClock,
   CheckCircle2,
   Clock,
+  CreditCard,
   FileSignature,
   Infinity,
   Layers,
@@ -32,9 +33,9 @@ import {
 import { RegisterCompanyModal } from '../components/RegisterCompanyModal'
 import { ManageCompanyModulesModal } from '../components/ManageCompanyModulesModal'
 import { EditCompanyModal } from '../components/EditCompanyModal'
-import { TrialPeriodModal } from '../components/TrialPeriodModal'
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
 import { ManageAccessPlansModal } from '../components/ManageAccessPlansModal'
+import { ContractsManagementSection } from '../components/ContractsManagementSection'
 import { formatLastAccess } from '@shared/services/screen-time.service'
 import {
   contractService,
@@ -47,6 +48,10 @@ export function CompanyManagementPage() {
   const { user } = useAuth()
   const { isLoading: isLoadingRole } = useOrganization()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const activeTab = (searchParams.get('tab') as 'companies' | 'contracts' | 'invoices') || 'companies'
+  const prefillCompanyId = searchParams.get('companyId') || undefined
 
   const [companies, setCompanies] = useState<ManagedCompany[]>([])
   const [invoices, setInvoices] = useState<ContractInvoice[]>([])
@@ -61,7 +66,6 @@ export function CompanyManagementPage() {
   )
   const [selectedCompanyForEdit, setSelectedCompanyForEdit] = useState<ManagedCompany | null>(null)
   const [selectedCompanyForUsers, setSelectedCompanyForUsers] = useState<ManagedCompany | null>(null)
-  const [selectedCompanyForTrial, setSelectedCompanyForTrial] = useState<ManagedCompany | null>(null)
   const [isManagePlansModalOpen, setIsManagePlansModalOpen] = useState(false)
 
   // Diálogo de confirmação para desativar/ativar
@@ -117,6 +121,11 @@ export function CompanyManagementPage() {
     }
     return ids
   }, [invoices])
+
+  const prefillCompanyForContract = useMemo(() => {
+    if (!prefillCompanyId || companies.length === 0) return null
+    return companies.find((c) => c.id === prefillCompanyId) || null
+  }, [prefillCompanyId, companies])
 
   const filteredCompanies = useMemo(() => {
     return companies.filter((c) => {
@@ -223,6 +232,19 @@ export function CompanyManagementPage() {
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Botão Voltar (Item 5) */}
+      <div className="flex items-center">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate(-1)}
+          className="gap-2 text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </Button>
+      </div>
+
       {/* Top Banner / Breadcrumb */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -231,10 +253,10 @@ export function CompanyManagementPage() {
             <span>Módulo Exclusivo do Proprietário</span>
           </div>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-            Gerenciamento de Empresas Cadastradas
+            Gerenciamento de Empresas Cadastradas & Licenças
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Gerencie as empresas cadastradas, acompanhe a data e hora do último acesso, ative/desative empresas e controle as páginas e módulos disponíveis.
+            Gerencie as empresas cadastradas, gere contratos, acompanhe as mensalidades e controle os pagamentos financeiros.
           </p>
         </div>
 
@@ -269,6 +291,58 @@ export function CompanyManagementPage() {
         </div>
       </div>
 
+      {/* Abas Unificadas: Empresas Cadastradas & Gerar Contratos / Faturas (Item 1) */}
+      <div className="border-b border-gray-200 dark:border-slate-800">
+        <nav className="-mb-px flex space-x-6">
+          <button
+            type="button"
+            onClick={() => setSearchParams({ tab: 'companies' })}
+            className={`py-3 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
+              activeTab === 'companies'
+                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-slate-400 dark:hover:text-slate-300'
+            }`}
+          >
+            <Building2 className="h-4 w-4" />
+            Empresas Cadastradas
+            <span className="ml-1 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 px-2 py-0.5 text-xs font-bold">
+              {companies.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSearchParams({ tab: 'contracts' })}
+            className={`py-3 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
+              activeTab === 'contracts'
+                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-slate-400 dark:hover:text-slate-300'
+            }`}
+          >
+            <FileSignature className="h-4 w-4" />
+            Contratos de Licença
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSearchParams({ tab: 'invoices' })}
+            className={`py-3 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
+              activeTab === 'invoices'
+                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-slate-400 dark:hover:text-slate-300'
+            }`}
+          >
+            <CreditCard className="h-4 w-4" />
+            Pagamentos Realizados & Financeiro
+            {overdueCompanyIds.size > 0 && (
+              <span className="ml-1.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 px-2 py-0.5 text-xs font-extrabold animate-pulse">
+                {overdueCompanyIds.size} vencida(s)
+              </span>
+            )}
+          </button>
+        </nav>
+      </div>
+
       {feedbackMsg && (
         <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
           <div className="flex items-center gap-2">
@@ -285,6 +359,28 @@ export function CompanyManagementPage() {
         </div>
       )}
 
+      {/* Conteúdo Aba Contratos */}
+      {activeTab === 'contracts' && (
+        <ContractsManagementSection
+          existingCompanies={companies}
+          initialTab="contracts"
+          initialCompanyId={prefillCompanyId}
+          prefillCompanyForNewContract={prefillCompanyForContract}
+        />
+      )}
+
+      {/* Conteúdo Aba Pagamentos Realizados & Financeiro */}
+      {activeTab === 'invoices' && (
+        <ContractsManagementSection
+          existingCompanies={companies}
+          initialTab="payments"
+          initialCompanyId={prefillCompanyId}
+        />
+      )}
+
+      {/* Conteúdo Aba Empresas Cadastradas */}
+      {activeTab === 'companies' && (
+        <>
       {/* Cards de Métricas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
@@ -452,10 +548,15 @@ export function CompanyManagementPage() {
                                 {comp.name}
                               </span>
                               {overdueCompanyIds.has(comp.id) && (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 dark:bg-rose-950/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-800 dark:text-rose-300 border border-rose-300 animate-pulse">
+                                <button
+                                  type="button"
+                                  onClick={() => setSearchParams({ tab: 'invoices', companyId: comp.id })}
+                                  className="inline-flex items-center gap-1 rounded-md bg-rose-100 dark:bg-rose-950/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-800 dark:text-rose-300 border border-rose-300 animate-pulse hover:bg-rose-200 dark:hover:bg-rose-900 transition cursor-pointer"
+                                  title="Empresa com mensalidade vencida! Clique para ver faturas em Pagamentos Realizados & Financeiro"
+                                >
                                   <AlertTriangle className="h-3 w-3 text-rose-600 dark:text-rose-400 shrink-0" />
                                   FATURA VENCIDA
-                                </span>
+                                </button>
                               )}
                               <span
                                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
@@ -502,58 +603,46 @@ export function CompanyManagementPage() {
                         )}
                       </td>
 
-                      {/* Dias Restantes de Licença (No lugar de Usuários Logados) */}
+                      {/* Dias Restantes de Licença (Apenas visualização - Item 3) */}
                       <td className="px-4 py-4">
                         {(() => {
                           const lic = calculateCompanyLicenseStatus(comp.trialEndsAt, comp.isActive)
                           return (
                             <div className="space-y-1">
                               {lic.badgeVariant === 'active' && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCompanyForTrial(comp)}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition cursor-pointer"
-                                  title="Clique para gerenciar validade ou adicionar dias de licença"
+                                <div
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70"
                                 >
                                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                   <span>{lic.badgeText}</span>
-                                </button>
+                                </div>
                               )}
 
                               {lic.badgeVariant === 'grace' && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCompanyForTrial(comp)}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition cursor-pointer animate-pulse"
-                                  title="Licença de 30 dias venceu. Restam dias de carência para evitar bloqueio por inadimplência."
+                                <div
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse"
                                 >
                                   <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                                   <span>{lic.badgeText}</span>
-                                </button>
+                                </div>
                               )}
 
                               {lic.badgeVariant === 'blocked' && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCompanyForTrial(comp)}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 text-xs font-bold text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition cursor-pointer"
-                                  title="Prazo de 5 dias de carência expirou. Acesso bloqueado por inadimplência."
+                                <div
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 text-xs font-bold text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
                                 >
                                   <Lock className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
                                   <span>{lic.badgeText}</span>
-                                </button>
+                                </div>
                               )}
 
                               {lic.badgeVariant === 'unlimited' && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCompanyForTrial(comp)}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                                  title="Acesso sem data de expiração"
+                                <div
+                                  className="inline-flex items-center gap-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
                                 >
                                   <Infinity className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                                   <span>{lic.badgeText}</span>
-                                </button>
+                                </div>
                               )}
 
                               <div className="text-[10px] text-gray-500 dark:text-slate-400 font-medium">
@@ -637,14 +726,22 @@ export function CompanyManagementPage() {
                             variant="outline"
                             onClick={() => {
                               const isOverdue = overdueCompanyIds.has(comp.id)
-                              void navigate(`/admin/contracts?companyId=${comp.id}${isOverdue ? '&tab=invoices' : ''}`)
+                              if (isOverdue) {
+                                setSearchParams({ tab: 'invoices', companyId: comp.id })
+                              } else {
+                                setSearchParams({ tab: 'contracts', companyId: comp.id })
+                              }
                             }}
                             className={`gap-1.5 text-xs font-semibold ${
                               overdueCompanyIds.has(comp.id)
                                 ? 'text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 dark:text-rose-300 dark:border-rose-800 dark:bg-rose-950/40'
                                 : 'text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400 dark:hover:bg-purple-950/50'
                             }`}
-                            title={overdueCompanyIds.has(comp.id) ? 'Empresa com mensalidade vencida! Clique para gerenciar faturas' : 'Gerar ou consultar contrato desta empresa'}
+                            title={
+                              overdueCompanyIds.has(comp.id)
+                                ? 'Empresa com mensalidade vencida! Clique para ir a Pagamentos Realizados & Financeiro'
+                                : 'Gerar ou consultar contrato desta empresa'
+                            }
                           >
                             <FileSignature className="h-3.5 w-3.5" />
                             {overdueCompanyIds.has(comp.id) ? 'Fatura Vencida' : 'Contrato'}
@@ -661,19 +758,6 @@ export function CompanyManagementPage() {
                           >
                             <Users className="h-3.5 w-3.5" />
                             Usuários
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedCompanyForTrial(comp)
-                            }}
-                            className="gap-1.5 text-xs font-semibold text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
-                            title="Gerenciar licença, somar +30 dias ou definir validade"
-                          >
-                            <CalendarClock className="h-3.5 w-3.5" />
-                            Licença
                           </Button>
 
                           <Button
@@ -698,6 +782,8 @@ export function CompanyManagementPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Modal de Cadastro de Nova Empresa (Requisito 2) */}
       <RegisterCompanyModal
@@ -753,17 +839,6 @@ export function CompanyManagementPage() {
         }}
       />
 
-      {/* Modal de Gestão do Período de Teste */}
-      <TrialPeriodModal
-        company={selectedCompanyForTrial}
-        isOpen={Boolean(selectedCompanyForTrial)}
-        onClose={() => setSelectedCompanyForTrial(null)}
-        onSuccess={() => {
-          setFeedbackMsg('Período de teste configurado com sucesso!')
-          setTimeout(() => setFeedbackMsg(null), 4000)
-          void loadCompanies()
-        }}
-      />
 
       {/* Modal de Gerenciamento de Planos de Acesso Cadastrados */}
       <ManageAccessPlansModal

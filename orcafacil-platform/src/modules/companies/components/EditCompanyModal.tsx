@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import {
+  AlertTriangle,
   Building2,
-  Calendar,
+  CheckCircle2,
   Clock,
   FileText,
   Infinity,
@@ -71,23 +72,16 @@ function EditCompanyForm({
   const [notes, setNotes] = useState(company.notes || '')
   const [isActive, setIsActive] = useState<boolean>(company.isActive)
 
-  // Período de acesso
+  // Período de acesso & Teste de 30 dias
+  const isOriginalTrialActive = Boolean(
+    company.trialEndsAt && new Date(company.trialEndsAt).getTime() > Date.now(),
+  )
+  const isOriginalTrialEnded = Boolean(
+    company.trialEndsAt && new Date(company.trialEndsAt).getTime() <= Date.now(),
+  )
+
+  const [has30DaysTrial, setHas30DaysTrial] = useState<boolean>(isOriginalTrialActive)
   const [isUnlimitedTrial, setIsUnlimitedTrial] = useState<boolean>(!company.trialEndsAt)
-  const [trialDateStr, setTrialDateStr] = useState<string>(() => {
-    if (company.trialEndsAt) {
-      const d = new Date(company.trialEndsAt)
-      const yyyy = d.getFullYear()
-      const mm = String(d.getMonth() + 1).padStart(2, '0')
-      const dd = String(d.getDate()).padStart(2, '0')
-      return `${yyyy}-${mm}-${dd}`
-    }
-    const d = new Date()
-    d.setDate(d.getDate() + 15)
-    const yyyy = d.getFullYear()
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
-    return `${yyyy}-${mm}-${dd}`
-  })
 
   // 2. Módulos / Páginas Liberadas com Filtros Específicos
   const [selectedModules, setSelectedModules] = useState<DashboardModuleCode[]>(() =>
@@ -137,28 +131,6 @@ function EditCompanyForm({
     return true
   }
 
-  // Adicionar dias ao período de teste
-  const handleAddDays = (days: number) => {
-    setIsUnlimitedTrial(false)
-    const base = new Date()
-    base.setDate(base.getDate() + days)
-    const yyyy = base.getFullYear()
-    const mm = String(base.getMonth() + 1).padStart(2, '0')
-    const dd = String(base.getDate()).padStart(2, '0')
-    setTrialDateStr(`${yyyy}-${mm}-${dd}`)
-  }
-
-  // Expirar teste imediatamente
-  const handleExpireNow = () => {
-    setIsUnlimitedTrial(false)
-    const past = new Date()
-    past.setDate(past.getDate() - 1)
-    const yyyy = past.getFullYear()
-    const mm = String(past.getMonth() + 1).padStart(2, '0')
-    const dd = String(past.getDate()).padStart(2, '0')
-    setTrialDateStr(`${yyyy}-${mm}-${dd}`)
-  }
-
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     const cleanName = name.trim()
@@ -175,14 +147,20 @@ function EditCompanyForm({
     }
 
     let finalTrialEndsAt: string | null = null
-    if (!isUnlimitedTrial) {
-      if (!trialDateStr) {
-        setError('Informe a data de término do período de teste ou marque como Ilimitado.')
-        return
+    if (isUnlimitedTrial) {
+      finalTrialEndsAt = null
+    } else if (has30DaysTrial) {
+      // Se marcou Início de contrato Período de 30 dias Testes
+      if (isOriginalTrialActive && company.trialEndsAt) {
+        finalTrialEndsAt = company.trialEndsAt
+      } else {
+        const d = new Date()
+        d.setDate(d.getDate() + 30)
+        finalTrialEndsAt = d.toISOString()
       }
-      const [year, month, day] = trialDateStr.split('-').map(Number)
-      const selected = new Date(year, month - 1, day, 23, 59, 59, 999)
-      finalTrialEndsAt = selected.toISOString()
+    } else {
+      // Período de teste encerrado: mantém a validade acumulada atual
+      finalTrialEndsAt = company.trialEndsAt || null
     }
 
     setIsLoading(true)
@@ -377,103 +355,100 @@ function EditCompanyForm({
             </div>
           </div>
 
-          {/* Gestão de acesso */}
-          <div className="rounded-xl border border-amber-200/80 bg-amber-50/30 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-3">
+          {/* Gestão de acesso: Início de contrato 30 dias Testes vs Período Encerrado */}
+          <div className="rounded-2xl border border-amber-200/80 bg-amber-50/40 dark:border-amber-900/50 dark:bg-amber-950/20 p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
-                <Clock className="h-4 w-4" /> Gestão de acesso
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-amber-600" /> Gestão de Acesso & Licença
               </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleExpireNow}
-                  className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline"
-                  title="Configura para ontem para suspender o acesso imediatamente"
-                >
-                  Suspender agora
-                </button>
-              </div>
-            </div>
-
-            {/* Opções de Expiração */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-xl border border-amber-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <input
-                    type="radio"
-                    id="edit_trial_limited"
-                    name="edit_trial_mode"
-                    checked={!isUnlimitedTrial}
-                    onChange={() => setIsUnlimitedTrial(false)}
-                    className="text-amber-600 focus:ring-amber-500"
-                  />
-                  <label htmlFor="edit_trial_limited" className="text-xs font-bold text-gray-800 dark:text-slate-200 cursor-pointer">
-                    Data de expiração do acesso
-                  </label>
-                </div>
-                {!isUnlimitedTrial && (
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={trialDateStr}
-                      onChange={(e) => setTrialDateStr(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-amber-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800 flex items-center">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id="edit_trial_unlimited"
-                    name="edit_trial_mode"
-                    checked={isUnlimitedTrial}
-                    onChange={() => setIsUnlimitedTrial(true)}
-                    className="text-amber-600 focus:ring-amber-500"
-                  />
-                  <label htmlFor="edit_trial_unlimited" className="text-xs font-bold text-gray-800 dark:text-slate-200 cursor-pointer flex items-center gap-1.5">
-                    <Infinity className="h-4 w-4 text-emerald-600" />
-                    Acesso Ilimitado (Sem expiração)
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Plano mensal e atalhos de duração */}
-            <div>
-              <button
-                type="button"
-                onClick={() => handleAddDays(30)}
-                disabled={isLoading}
-                className="mb-2 w-full rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-left text-xs font-bold text-amber-900 hover:bg-amber-200 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200 dark:hover:bg-amber-900/60"
-              >
-                Plano mensal — liberar por 30 dias
-              </button>
-              <p className="mb-3 text-[11px] text-gray-500 dark:text-slate-400">
-                O acesso vence na data definida. A renovação e a cobrança não são automáticas.
-              </p>
-              {!isUnlimitedTrial && (
-                <>
-                  <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400 block mb-1.5">
-                    Outros períodos de acesso:
-                  </span>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {[7, 15, 30, 60, 90].map((days) => (
-                      <button
-                        key={days}
-                        type="button"
-                        onClick={() => handleAddDays(days)}
-                        className="rounded-lg border border-amber-200 bg-amber-50/60 py-1 text-center text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
-                      >
-                        +{days}d
-                      </button>
-                    ))}
-                  </div>
-                </>
+              {isOriginalTrialActive && (
+                <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-300">
+                  Período de Teste Ativo
+                </span>
               )}
+              {isOriginalTrialEnded && !isUnlimitedTrial && (
+                <span className="text-[11px] font-bold text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-300">
+                  Período de Teste Encerrado
+                </span>
+              )}
+            </div>
+
+            {/* Opções de Marcação Conforme Requisito Oficial */}
+            <div className="space-y-3">
+              {/* Botão de Marcar: Início de contrato Período de 30 dias Testes */}
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                  has30DaysTrial && !isUnlimitedTrial
+                    ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-400/50'
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={has30DaysTrial && !isUnlimitedTrial}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setHas30DaysTrial(checked)
+                    if (checked) {
+                      setIsUnlimitedTrial(false)
+                    }
+                  }}
+                  className="mt-1 h-4 w-4 text-emerald-600 rounded-md border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="flex-1">
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Início de contrato • Período de 30 dias Testes
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    Libera 30 dias de acesso gratuito para a empresa a partir do início.
+                  </p>
+                </div>
+              </label>
+
+              {/* Status quando o Período de 30 dias teste acabar */}
+              {isOriginalTrialEnded && !has30DaysTrial && !isUnlimitedTrial && (
+                <div className="p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Período de teste encerrado
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                    O período de 30 dias de teste desta empresa foi encerrado. A partir de agora, o tempo é somado a cada pagamento que o usuário fizer: <strong>cada pagamento soma mais 30 dias (+5 dias de carência)</strong>.
+                  </p>
+                </div>
+              )}
+
+              {/* Opção de Acesso Ilimitado */}
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                  isUnlimitedTrial
+                    ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 text-blue-950 dark:text-blue-200 ring-2 ring-blue-400/50'
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isUnlimitedTrial}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setIsUnlimitedTrial(checked)
+                    if (checked) {
+                      setHas30DaysTrial(false)
+                    }
+                  }}
+                  className="mt-1 h-4 w-4 text-blue-600 rounded-md border-gray-300 focus:ring-blue-500 cursor-pointer"
+                />
+                <div className="flex-1">
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Infinity className="w-4 h-4 text-blue-600" />
+                    Acesso Ilimitado / Vitalício (Sem expiração)
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    Empresas parceiras ou de teste interno sem bloqueio de data.
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
 

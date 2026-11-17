@@ -72,6 +72,13 @@ export default async function handler(req: any, res: any) {
       })
     }
 
+    if (accessToken.trim().toUpperCase().startsWith('TESTUSER')) {
+      return res.status(400).json({
+        error:
+          'O Access Token informado é inválido: você colou o nome/id do usuário de teste (TESTUSER...), em vez do Access Token oficial. No Mercado Pago Developers, copie o Access Token que inicia com "TEST-" (Sandbox) ou "APP_USR-" (Produção).',
+      })
+    }
+
     const idempotencyKey = crypto.randomUUID()
     const formattedAmount = Number(Number(amount).toFixed(2))
     const nameParts = (payerName || 'Cliente').trim().split(/\s+/)
