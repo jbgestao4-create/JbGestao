@@ -2,6 +2,13 @@ import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult } from '@shared/types/common'
 
+function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'https://controlesoft.vercel.app'
+  }
+  return ''
+}
+
 export interface MercadoPagoSettings {
   id?: string
   accessToken: string
@@ -245,44 +252,37 @@ export const mercadopagoService = {
 
       if (!accessToken) {
         const current = await this.getSettings()
-        if (!current.success || !current.data?.accessToken) {
-          return {
-            connected: false,
-            error: 'Nenhum Access Token informado ou configurado.',
-          }
+        if (current.success && current.data?.accessToken) {
+          accessToken = current.data.accessToken
         }
-        accessToken = current.data.accessToken
       }
 
-      // Consulta a API oficial do Mercado Pago para obter os dados do usuário/aplicação
-      const response = await fetch('https://api.mercadopago.com/v1/users/me', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
+      if (!accessToken) {
         return {
           connected: false,
-          error:
-            errorData.message ||
-            `Token inválido ou rejeitado pela API do Mercado Pago (HTTP ${response.status}).`,
+          error: 'Nenhum Access Token informado ou configurado.',
         }
       }
 
-      const user = await response.json()
-      const isTestToken = accessToken.startsWith('TEST-') || user.site_id === 'MLB' && user.id?.toString().length > 12
+      // Consulta através do backend serverless para evitar bloqueio de CORS no navegador
+      const apiBase = getApiBaseUrl()
+      const response = await fetch(`${apiBase}/api/mercadopago/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ accessToken }),
+      })
 
+      if (response.ok) {
+        const data = await response.json()
+        return data
+      }
+
+      const errData = await response.json().catch(() => ({}))
       return {
-        connected: true,
-        accountName: user.nickname || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Conta Mercado Pago',
-        email: user.email || 'Conta Verificada',
-        siteId: user.site_id,
-        userId: user.id,
-        isSandbox: isTestToken,
+        connected: false,
+        error: errData.error || `Erro ao testar conexão (HTTP ${response.status})`,
       }
     } catch (err: any) {
       return {
@@ -315,127 +315,100 @@ export const mercadopagoService = {
       }
       const settings = settingsRes.data
 
-      const idempotencyKey = crypto.randomUUID()
       const formattedAmount = Number(params.amount.toFixed(2))
       const description =
         params.description || `Licença JB Gestão - ${params.accessPlanName || 'Plano de Acesso'}`
 
-      const nameParts = params.payerName.trim().split(/\s+/)
-      const firstName = nameParts[0] || 'Cliente'
-      const lastName = nameParts.slice(1).join(' ') || 'JB'
-      const cleanDoc = (params.payerDocument || '').replace(/\D/g, '')
-
-      // 2. Prepara o payload para a API oficial de pagamentos v1 do Mercado Pago
-      const mpPayload: any = {
-        transaction_amount: formattedAmount,
-        description: description,
-        payment_method_id: 'pix',
-        payer: {
-          email: params.payerEmail || 'cliente@jbsoftware.com.br',
-          first_name: firstName,
-          last_name: lastName,
-          ...(cleanDoc
-            ? {
-                identification: {
-                  type: cleanDoc.length > 11 ? 'CNPJ' : 'CPF',
-                  number: cleanDoc,
-                },
-              }
-            : {}),
-        },
-        external_reference: params.organizationId,
-      }
-
-      mpPayload.notification_url =
-        settings.notificationUrl?.trim() || 'https://controlesoft.vercel.app/api/mercadopago/webhook'
-
-      // 3. Chamada à API oficial do Mercado Pago
-      const response = await fetch('https://api.mercadopago.com/v1/payments', {
+      // 2. Chama a API serverless na Vercel (eliminando bloqueio de CORS do navegador)
+      const apiBase = getApiBaseUrl()
+      const response = await fetch(`${apiBase}/api/mercadopago/create-pix`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${settings.accessToken.trim()}`,
-          'X-Idempotency-Key': idempotencyKey,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(mpPayload),
+        body: JSON.stringify({
+          organizationId: params.organizationId,
+          accessPlanId: params.accessPlanId,
+          accessPlanName: params.accessPlanName,
+          contractInvoiceId: params.contractInvoiceId,
+          amount: formattedAmount,
+          description: description,
+          payerName: params.payerName,
+          payerEmail: params.payerEmail,
+          payerDocument: params.payerDocument,
+          licenseDaysGranted: params.licenseDaysGranted || settings.licenseDurationDays || 30,
+          accessToken: settings.accessToken.trim(),
+          notificationUrl: settings.notificationUrl?.trim() || 'https://controlesoft.vercel.app/api/mercadopago/webhook',
+        }),
       })
 
-      const mpData = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
         const errorMsg =
-          mpData.message ||
-          mpData.cause?.[0]?.description ||
-          `Erro ao gerar PIX no Mercado Pago (HTTP ${response.status})`
-        logger.error('Erro na API Mercado Pago:', mpData)
+          data.error ||
+          data.message ||
+          `Erro ao gerar cobrança PIX no Mercado Pago (HTTP ${response.status})`
+        logger.error('Erro na API Mercado Pago:', data)
         return { success: false, error: errorMsg }
       }
 
-      const txData = mpData.point_of_interaction?.transaction_data
-      const qrCode = txData?.qr_code || ''
-      const qrCodeBase64 = txData?.qr_code_base64 || ''
-      const ticketUrl = txData?.ticket_url || ''
-
-      // 4. Salva a transação no banco de dados para rastreamento e liberação
-      const insertPayload: any = {
-        organization_id: params.organizationId,
-        contract_invoice_id: params.contractInvoiceId || null,
-        access_plan_id: params.accessPlanId || null,
-        access_plan_name: params.accessPlanName || 'Plano de Acesso',
-        mp_payment_id: mpData.id,
-        idempotency_key: idempotencyKey,
-        status: mpData.status || 'pending',
-        status_detail: mpData.status_detail || 'pending_waiting_transfer',
-        amount: formattedAmount,
-        description: description,
-        qr_code: qrCode,
-        qr_code_base64: qrCodeBase64,
-        ticket_url: ticketUrl,
-        payer_name: params.payerName,
-        payer_email: params.payerEmail,
-        payer_document: params.payerDocument || null,
-        expires_at: mpData.date_of_expiration || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-        license_days_granted: params.licenseDaysGranted || settings.licenseDurationDays || 30,
-        license_activated: false,
-        raw_response: mpData,
-      }
-
-      const { data: dbData, error: dbError } = await supabase
-        .from('mercadopago_pix_transactions')
-        .insert(insertPayload)
-        .select('*')
-        .single()
-
-      if (dbError) {
-        logger.error('Erro ao salvar transação no banco local:', dbError)
-      }
-
-      const record: MercadoPagoPixTransaction = {
-        id: dbData?.id || idempotencyKey,
+      const txRecord: MercadoPagoPixTransaction = {
+        id: data.transactionId || crypto.randomUUID(),
         organizationId: params.organizationId,
         contractInvoiceId: params.contractInvoiceId,
         accessPlanId: params.accessPlanId,
         accessPlanName: params.accessPlanName,
-        mpPaymentId: mpData.id,
-        idempotencyKey: idempotencyKey,
-        status: (mpData.status as any) || 'pending',
-        statusDetail: mpData.status_detail,
-        amount: formattedAmount,
+        mpPaymentId: data.mpPaymentId,
+        idempotencyKey: data.transactionId,
+        status: data.status || 'pending',
+        statusDetail: data.statusDetail || 'pending_waiting_transfer',
+        amount: data.amount || formattedAmount,
         description: description,
-        qrCode: qrCode,
-        qrCodeBase64: qrCodeBase64,
-        ticketUrl: ticketUrl,
+        qrCode: data.qrCode,
+        qrCodeBase64: data.qrCodeBase64,
+        ticketUrl: data.ticketUrl,
         payerName: params.payerName,
         payerEmail: params.payerEmail,
         payerDocument: params.payerDocument,
-        expiresAt: mpData.date_of_expiration,
+        expiresAt: data.expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
         licenseDaysGranted: params.licenseDaysGranted || 30,
         licenseActivated: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
 
-      return { success: true, data: record }
+      // Sincroniza localmente com o Supabase para que a inscrição Realtime funcione
+      try {
+        await supabase.from('mercadopago_pix_transactions').upsert(
+          {
+            organization_id: params.organizationId,
+            contract_invoice_id: params.contractInvoiceId || null,
+            access_plan_id: params.accessPlanId || null,
+            access_plan_name: params.accessPlanName || 'Plano de Acesso',
+            mp_payment_id: data.mpPaymentId,
+            idempotency_key: data.transactionId,
+            status: data.status || 'pending',
+            status_detail: data.statusDetail || 'pending_waiting_transfer',
+            amount: data.amount || formattedAmount,
+            description: description,
+            qr_code: data.qrCode,
+            qr_code_base64: data.qrCodeBase64,
+            ticket_url: data.ticketUrl,
+            payer_name: params.payerName,
+            payer_email: params.payerEmail,
+            payer_document: params.payerDocument || null,
+            expires_at: data.expiresAt,
+            license_days_granted: params.licenseDaysGranted || 30,
+            license_activated: false,
+          } as any,
+          { onConflict: 'mp_payment_id' },
+        )
+      } catch (upsertErr) {
+        logger.warn('Aviso ao sincronizar PIX no Supabase:', { error: String(upsertErr) })
+      }
+
+      return { success: true, data: txRecord }
     } catch (err: any) {
       logger.error('Erro geral ao criar PIX Mercado Pago:', err)
       return {
@@ -452,64 +425,34 @@ export const mercadopagoService = {
   async checkPaymentStatus(mpPaymentId: number): Promise<ServiceResult<{ status: string; isApproved: boolean }>> {
     try {
       const settingsRes = await this.getSettings()
-      if (!settingsRes.success) {
-        return { success: false, error: settingsRes.error }
-      }
-      if (!settingsRes.data.accessToken) {
-        return { success: false, error: 'Access Token não configurado.' }
-      }
-      const settings = settingsRes.data
+      const token = settingsRes.success ? settingsRes.data?.accessToken : ''
 
-      // Consulta direta à API oficial
-      const response = await fetch(`https://api.mercadopago.com/v1/payments/${mpPaymentId}`, {
+      const apiBase = getApiBaseUrl()
+      const queryParam = token ? `?paymentId=${mpPaymentId}&token=${encodeURIComponent(token)}` : `?paymentId=${mpPaymentId}`
+      const response = await fetch(`${apiBase}/api/mercadopago/check-status${queryParam}`, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${settings.accessToken.trim()}`,
-          'Content-Type': 'application/json',
-        },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
 
       if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
         return {
           success: false,
-          error: `Erro ao consultar Mercado Pago (HTTP ${response.status})`,
+          error: errData.error || `Erro ao consultar Mercado Pago (HTTP ${response.status})`,
         }
       }
 
-      const mpData = await response.json()
-      const status = mpData.status // 'approved', 'pending', 'rejected', 'cancelled'
-
-      if (status === 'approved') {
-        // Executa a liberação automática no banco de dados via RPC com proteção de idempotência
-        await supabase.rpc('process_mercadopago_payment_approval', {
-          p_mp_payment_id: mpPaymentId,
-          p_raw_data: mpData,
-          p_status_detail: mpData.status_detail || 'accredited',
-        })
-
-        return {
-          success: true,
-          data: { status: 'approved', isApproved: true },
-        }
-      }
-
-      // Atualiza status se não aprovado
-      await supabase
-        .from('mercadopago_pix_transactions')
-        .update({
-          status: status,
-          status_detail: mpData.status_detail,
-          raw_response: mpData,
-          updated_at: new Date().toISOString(),
-        } as any)
-        .eq('mp_payment_id', mpPaymentId)
-
+      const data = await response.json()
       return {
         success: true,
-        data: { status, isApproved: false },
+        data: {
+          status: data.status,
+          isApproved: data.isApproved,
+        },
       }
     } catch (err: any) {
-      return { success: false, error: err.message || 'Falha ao consultar status.' }
+      logger.error('Erro ao consultar status:', err)
+      return { success: false, error: err.message || 'Erro ao consultar status.' }
     }
   },
 

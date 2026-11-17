@@ -39,9 +39,9 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes: organizationId e amount.' })
     }
 
-    // 1. Busca Access Token do Mercado Pago
-    let accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || ''
-    let notificationUrl = process.env.MERCADO_PAGO_WEBHOOK_URL || ''
+    // 1. Busca Access Token do Mercado Pago (via payload, env ou banco de dados)
+    let accessToken = (body.accessToken as string)?.trim() || process.env.MERCADO_PAGO_ACCESS_TOKEN || ''
+    let notificationUrl = (body.notificationUrl as string)?.trim() || process.env.MERCADO_PAGO_WEBHOOK_URL || ''
 
     if ((!accessToken || !notificationUrl) && supabaseUrl && serviceRoleKey) {
       try {

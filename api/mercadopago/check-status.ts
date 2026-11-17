@@ -23,7 +23,11 @@ export default async function handler(req: any, res: any) {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
 
-    let accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || ''
+    let accessToken =
+      (req.query.token as string)?.trim() ||
+      (req.headers.authorization ? req.headers.authorization.replace('Bearer ', '').trim() : '') ||
+      process.env.MERCADO_PAGO_ACCESS_TOKEN ||
+      ''
 
     if (!accessToken && supabaseUrl && serviceRoleKey) {
       try {
