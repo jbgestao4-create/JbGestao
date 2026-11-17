@@ -19,7 +19,7 @@ import {
   type FeedbackMessage,
 } from '../types/suggestion.types'
 import { supportAiService } from '../services/support-ai.service'
-import { Headset, X, ImagePlus, MessageSquare, Send, ArrowLeft } from 'lucide-react'
+import { Headset, X, ImagePlus, MessageSquare, Send, ArrowLeft, GripHorizontal, Move } from 'lucide-react'
 
 const EMPTY_FORM = {
   type: 'improvement' as SuggestionType,
@@ -191,12 +191,185 @@ export function FeedbackWidget() {
     }
   }
 
-  const close = () => {
+  const close = useCallback(() => {
     if (isSubmitting || sendingReply || isAiProcessing) return
     setIsOpen(false)
     setSelectedSuggestion(null)
     setError('')
+  }, [isSubmitting, sendingReply, isAiProcessing])
+
+  // Fecha com a tecla Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        close()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, close])
+
+  // Posição flutuante arrastável do BOTÃO DE SUPORTE
+  const [buttonPos, setButtonPos] = useState<{ x: number; y: number } | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = localStorage.getItem('controlesoft_support_btn_pos')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+          return parsed
+        }
+      }
+    } catch {}
+    return null
+  })
+
+  const isDraggingBtnRef = useRef(false)
+  const dragBtnStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number; moved: boolean }>({
+    startX: 0,
+    startY: 0,
+    initX: 0,
+    initY: 0,
+    moved: false,
+  })
+
+  const handleButtonPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const rect = e.currentTarget.getBoundingClientRect()
+    isDraggingBtnRef.current = true
+    dragBtnStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: buttonPos?.x ?? rect.left,
+      initY: buttonPos?.y ?? rect.top,
+      moved: false,
+    }
   }
+
+  const handleButtonPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isDraggingBtnRef.current) return
+    const { startX, startY, initX, initY } = dragBtnStartRef.current
+    const dx = e.clientX - startX
+    const dy = e.clientY - startY
+    if (Math.hypot(dx, dy) > 4) {
+      dragBtnStartRef.current.moved = true
+    }
+    const btnWidth = e.currentTarget.offsetWidth || 130
+    const btnHeight = e.currentTarget.offsetHeight || 48
+    const maxX = Math.max(8, window.innerWidth - btnWidth - 8)
+    const maxY = Math.max(8, window.innerHeight - btnHeight - 8)
+    const newX = Math.min(Math.max(8, initX + dx), maxX)
+    const newY = Math.min(Math.max(8, initY + dy), maxY)
+    setButtonPos({ x: newX, y: newY })
+  }
+
+  const handleButtonPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isDraggingBtnRef.current) return
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {}
+    const wasMoved = dragBtnStartRef.current.moved
+    isDraggingBtnRef.current = false
+    if (!wasMoved) {
+      handleOpenModal()
+    } else {
+      setButtonPos((current) => {
+        if (current) {
+          try {
+            localStorage.setItem('controlesoft_support_btn_pos', JSON.stringify(current))
+          } catch {}
+        }
+        return current
+      })
+    }
+  }
+
+  // Posição flutuante arrastável da JANELA DE SUPORTE
+  const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null)
+  const isDraggingWindowRef = useRef(false)
+  const dragWindowStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number }>({
+    startX: 0,
+    startY: 0,
+    initX: 0,
+    initY: 0,
+  })
+
+  // Ao abrir o modal, posiciona no centro da tela ou restaura
+  useEffect(() => {
+    if (isOpen && !windowPos && typeof window !== 'undefined') {
+      const modalWidth = Math.min(672, window.innerWidth - 32)
+      const modalHeight = Math.min(680, window.innerHeight - 40)
+      const initX = Math.max(16, Math.floor((window.innerWidth - modalWidth) / 2))
+      const initY = Math.max(20, Math.floor((window.innerHeight - modalHeight) / 2))
+      setWindowPos({ x: initX, y: initY })
+    }
+  }, [isOpen, windowPos])
+
+  const handleWindowHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, select, textarea, a')) return
+
+    e.currentTarget.setPointerCapture(e.pointerId)
+    isDraggingWindowRef.current = true
+    const currentX = windowPos?.x ?? 20
+    const currentY = windowPos?.y ?? 20
+    dragWindowStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: currentX,
+      initY: currentY,
+    }
+  }
+
+  const handleWindowHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingWindowRef.current) return
+    const { startX, startY, initX, initY } = dragWindowStartRef.current
+    const dx = e.clientX - startX
+    const dy = e.clientY - startY
+    const modalWidth = Math.min(672, window.innerWidth - 32)
+    const maxX = Math.max(8, window.innerWidth - modalWidth - 8)
+    const maxY = Math.max(8, window.innerHeight - 80)
+    const newX = Math.min(Math.max(8, initX + dx), maxX)
+    const newY = Math.min(Math.max(8, initY + dy), maxY)
+    setWindowPos({ x: newX, y: newY })
+  }
+
+  const handleWindowHeaderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingWindowRef.current) return
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {}
+    isDraggingWindowRef.current = false
+  }
+
+  // Ajusta posições ao redimensionar tela
+  useEffect(() => {
+    const handleResize = () => {
+      setButtonPos((prev) => {
+        if (!prev) return null
+        const maxX = Math.max(8, window.innerWidth - 140)
+        const maxY = Math.max(8, window.innerHeight - 60)
+        return {
+          x: Math.min(prev.x, maxX),
+          y: Math.min(prev.y, maxY),
+        }
+      })
+      setWindowPos((prev) => {
+        if (!prev) return null
+        const modalWidth = Math.min(672, window.innerWidth - 32)
+        const maxX = Math.max(8, window.innerWidth - modalWidth - 8)
+        const maxY = Math.max(8, window.innerHeight - 80)
+        return {
+          x: Math.min(prev.x, maxX),
+          y: Math.min(prev.y, maxY),
+        }
+      })
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const submit = async (event: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
     event.preventDefault()
@@ -261,21 +434,42 @@ export function FeedbackWidget() {
         </div>
       )}
 
-      {/* BOTÃO FLUTUANTE DE SUPORTE DO LADO DIREITO */}
+      {/* BOTÃO FLUTUANTE DE SUPORTE ARRASTÁVEL */}
       <button
         type="button"
-        onClick={handleOpenModal}
-        className="fixed bottom-4 right-4 z-[60] inline-flex min-h-12 items-center gap-2 rounded-full bg-blue-700 px-4 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 cursor-pointer"
-        aria-label="Abrir Suporte"
+        onPointerDown={handleButtonPointerDown}
+        onPointerMove={handleButtonPointerMove}
+        onPointerUp={handleButtonPointerUp}
+        style={
+          buttonPos
+            ? {
+                position: 'fixed',
+                left: `${buttonPos.x}px`,
+                top: `${buttonPos.y}px`,
+                bottom: 'auto',
+                right: 'auto',
+                touchAction: 'none',
+              }
+            : {
+                position: 'fixed',
+                bottom: '1rem',
+                right: '1rem',
+                touchAction: 'none',
+              }
+        }
+        className="z-[60] inline-flex min-h-12 items-center gap-2 rounded-full bg-blue-700 px-4 text-sm font-semibold text-white shadow-xl transition-colors hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 cursor-grab active:cursor-grabbing select-none"
+        aria-label="Abrir Suporte (Arraste para mover)"
+        title="Arraste para arredar ou clique para abrir o suporte"
       >
-        <Headset aria-hidden="true" className="h-5 w-5" />
-        <span>Suporte</span>
+        <GripHorizontal className="h-4 w-4 text-blue-200 pointer-events-none" />
+        <Headset aria-hidden="true" className="h-5 w-5 pointer-events-none" />
+        <span className="pointer-events-none">Suporte</span>
 
         {/* NOTIFICAÇÃO DE RESPOSTA DO PROPRIETÁRIO */}
         {unreadRepliesCount > 0 && (
           <span
             title={`${unreadRepliesCount} nova(s) resposta(s) da administração`}
-            className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-black text-white shadow-md animate-bounce ring-2 ring-white dark:ring-slate-900"
+            className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-black text-white shadow-md animate-bounce ring-2 ring-white dark:ring-slate-900 pointer-events-none"
           >
             {unreadRepliesCount}
           </span>
@@ -284,7 +478,7 @@ export function FeedbackWidget() {
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/40 p-0 sm:block sm:bg-transparent sm:pointer-events-none"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) close()
           }}
@@ -293,18 +487,47 @@ export function FeedbackWidget() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="feedback-dialog-title"
-            className="max-h-[94dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl dark:bg-slate-900 sm:max-w-2xl sm:rounded-2xl sm:p-6"
+            style={
+              windowPos && typeof window !== 'undefined' && window.innerWidth >= 640
+                ? {
+                    position: 'fixed',
+                    left: `${windowPos.x}px`,
+                    top: `${windowPos.y}px`,
+                    width: '672px',
+                    maxWidth: 'calc(100vw - 32px)',
+                    maxHeight: 'calc(100vh - 40px)',
+                  }
+                : undefined
+            }
+            className="pointer-events-auto max-h-[94dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10 sm:max-w-2xl sm:rounded-2xl sm:p-6"
           >
-            <header className="mb-4 flex items-start justify-between gap-4 border-b border-slate-100 pb-3 dark:border-slate-800">
-              <div>
-                <h2 id="feedback-dialog-title" className="text-xl font-bold text-slate-900 dark:text-white">
-                  {selectedSuggestion ? 'Acompanhar Atendimento' : 'Central de Suporte'}
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  {selectedSuggestion
-                    ? 'Conversa direta com a administração sobre este chamado.'
-                    : 'Abra chamados de suporte, envie dúvidas ou acompanhe as respostas enviadas pelo proprietário.'}
-                </p>
+            <header
+              onPointerDown={handleWindowHeaderPointerDown}
+              onPointerMove={handleWindowHeaderPointerMove}
+              onPointerUp={handleWindowHeaderPointerUp}
+              className="mb-4 flex items-start justify-between gap-4 border-b border-slate-100 pb-3 dark:border-slate-800 cursor-grab active:cursor-grabbing select-none"
+              title="Clique e arraste pelo cabeçalho para arredar a janela"
+            >
+              <div className="flex items-start gap-2.5">
+                <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
+                  <Move className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 id="feedback-dialog-title" className="text-xl font-bold text-slate-900 dark:text-white">
+                      {selectedSuggestion ? 'Acompanhar Atendimento' : 'Central de Suporte'}
+                    </h2>
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                      <GripHorizontal className="h-3 w-3" />
+                      Arraste para arredar
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    {selectedSuggestion
+                      ? 'Conversa direta com a administração sobre este chamado.'
+                      : 'Abra chamados de suporte, envie dúvidas ou acompanhe as respostas enviadas pelo proprietário.'}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
