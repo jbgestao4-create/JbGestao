@@ -14,7 +14,6 @@ import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { SystemNotificationModal } from '@shared/components/SystemNotificationModal'
 import { OrganizationBillingBanner } from '@modules/organizations/components/OrganizationBillingBanner'
 import { OrganizationSuspensionGuard } from '@modules/organizations/components/OrganizationSuspensionGuard'
-import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
 import { siteAccessTrackerService } from '@shared/services/site-access-tracker.service'
@@ -59,12 +58,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (!user?.email) return
 
     const sendHeartbeat = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       void userSessionService.heartbeat(user.email!, currentOrganization?.id)
     }
 
     sendHeartbeat()
     const interval = setInterval(sendHeartbeat, userSessionService.getHeartbeatInterval())
-    return () => clearInterval(interval)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        sendHeartbeat()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [user?.email, currentOrganization?.id])
 
   // Monitoramento estrito e expulsão em tempo real de sessão concorrente (exceto adm@adm.com)
@@ -73,8 +83,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
     const currentToken = userSessionService.getToken()
 
-    // 1. Verificação periódica para garantir que a sessão ativa desta conta ainda pertence a esta aba
+    // 1. Verificação de contingência (a expulsão instantânea ocorre via Supabase Realtime)
     const checkActiveSession = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       try {
         const { data, error } = await supabase
           .from('user_active_sessions')
@@ -93,7 +104,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
 
     const initialTimer = setTimeout(() => void checkActiveSession(), 1500)
-    const interval = setInterval(() => void checkActiveSession(), 6000)
+    // Contingência leve a cada 60s (Realtime cuida da expulsão imediata)
+    const interval = setInterval(() => void checkActiveSession(), 60000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void checkActiveSession()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
 
     // 2. Canal Supabase Realtime para expulsão instantânea no momento em que outro login ocorre
     const channel = supabase
@@ -122,6 +140,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return () => {
       clearTimeout(initialTimer)
       clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
       void supabase.removeChannel(channel)
     }
   }, [user?.email, user?.id, navigate, signOut])
@@ -293,35 +312,26 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   // Monitora status de manutenção para exibir banner ao desenvolvedor
   useEffect(() => {
-    let isMounted = true
-    const checkMaintenance = async () => {
-      const res = await systemMaintenanceService.getStatus()
-      if (isMounted && res.success && res.data) {
-        setIsMaintenanceActive(res.data.enabled)
+    try {
+      const raw = localStorage.getItem('jb_system_maintenance_status')
+      if (raw) {
+        const parsed = JSON.parse(raw) as { enabled?: boolean }
+        setIsMaintenanceActive(Boolean(parsed.enabled))
+      }
+    } catch {
+      // ignore
+    }
+
+    const handleMaintenanceChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ enabled?: boolean }>).detail
+      if (detail && typeof detail.enabled === 'boolean') {
+        setIsMaintenanceActive(detail.enabled)
       }
     }
-    void checkMaintenance()
 
-    const channelName = `applayout-maint-${Math.random().toString(36).substring(2, 9)}`
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'system_settings',
-          filter: 'key=eq.maintenance_mode',
-        },
-        () => {
-          void checkMaintenance()
-        },
-      )
-      .subscribe()
-
+    window.addEventListener('maintenance-status-changed', handleMaintenanceChange)
     return () => {
-      isMounted = false
-      void supabase.removeChannel(channel)
+      window.removeEventListener('maintenance-status-changed', handleMaintenanceChange)
     }
   }, [])
 
@@ -373,14 +383,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
       )
       .subscribe()
 
-    const interval = window.setInterval(() => {
-      void refreshUnread()
-    }, 30000)
-
     return () => {
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('feedback-unread-count-changed', handleReadCountChange)
-      window.clearInterval(interval)
       void supabase.removeChannel(channel)
     }
   }, [isDeveloper, currentOrganization?.id])

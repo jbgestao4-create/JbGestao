@@ -8,16 +8,14 @@ import {
   Check,
   UserCheck,
   X,
+  Layers,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
 import { formatCNPJ } from '@shared/utils/cnpj'
-import {
-  companyManagementService,
-  getAllPlatformDashboardCodes,
-} from '../services/company-management.service'
-import { CompanyModulesSelector } from './CompanyModulesSelector'
-import type { DashboardModuleCode } from '@shared/types/common'
+import { formatCurrency } from '@shared/utils/monetary'
+import { companyManagementService } from '../services/company-management.service'
+import { accessPlanService, type AccessPlan } from '../services/access-plan.service'
 
 interface RegisterCompanyModalProps {
   isOpen: boolean
@@ -42,10 +40,10 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
   const [adminPassword, setAdminPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
-  // 3. Módulos e Páginas Liberadas
-  const [selectedModules, setSelectedModules] = useState<DashboardModuleCode[]>(() =>
-    getAllPlatformDashboardCodes(),
-  )
+  // 3. Planos Cadastrados
+  const [accessPlans, setAccessPlans] = useState<AccessPlan[]>([])
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('')
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -65,9 +63,20 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       setIsAdminNameManuallyEdited(false)
       setAdminPassword('')
       setShowPassword(false)
-      setSelectedModules(getAllPlatformDashboardCodes())
+      setSelectedPlanId('')
       setError(null)
       setIsLoading(false)
+
+      setIsLoadingPlans(true)
+      void accessPlanService.list().then((res) => {
+        if (res.success && res.data.length > 0) {
+          setAccessPlans(res.data)
+          setSelectedPlanId(res.data[0].id)
+        } else {
+          setAccessPlans([])
+        }
+        setIsLoadingPlans(false)
+      })
     }
   }, [isOpen])
 
@@ -140,6 +149,12 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       return
     }
 
+    const selectedPlan = accessPlans.find((p) => p.id === selectedPlanId)
+    if (accessPlans.length > 0 && !selectedPlan) {
+      setError('Selecione um plano cadastrado para esta empresa.')
+      return
+    }
+
     setIsLoading(true)
     const res = await companyManagementService.registerCompanyWithAdmin({
       name: name.trim(),
@@ -151,8 +166,12 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       adminName: adminName.trim(),
       adminEmail: adminEmail.trim(),
       adminPassword: adminPassword.trim(),
-      modules: selectedModules,
+      modules: selectedPlan ? selectedPlan.modules : [],
     })
+
+    if (res.success && res.data?.organizationId && selectedPlan) {
+      await accessPlanService.assignToCompany(res.data.organizationId, selectedPlan)
+    }
 
     setIsLoading(false)
 
@@ -345,12 +364,77 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
             </div>
           </div>
 
-          {/* 3. Módulos e Páginas Liberadas com Filtros Específicos */}
-          <CompanyModulesSelector
-            selectedCodes={selectedModules}
-            onChange={setSelectedModules}
-            disabled={isLoading}
-          />
+          {/* 3. Seleção Exclusiva de Planos Cadastrados */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-blue-500" />
+                3. Plano de Acesso (Planos Cadastrados)
+              </h3>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                {accessPlans.length} {accessPlans.length === 1 ? 'plano disponível' : 'planos disponíveis'}
+              </span>
+            </div>
+
+            {isLoadingPlans ? (
+              <div className="rounded-xl border border-gray-200 dark:border-slate-800 p-4 text-center text-xs text-gray-500 dark:text-slate-400">
+                Carregando planos cadastrados...
+              </div>
+            ) : accessPlans.length === 0 ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+                Nenhum plano cadastrado encontrado. Cadastre um plano em Gerenciar Planos primeiro.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {accessPlans.map((plan) => {
+                  const isSelected = selectedPlanId === plan.id
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => setSelectedPlanId(plan.id)}
+                      className={`text-left rounded-xl border p-3.5 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/25 dark:border-blue-500 dark:bg-blue-950/40'
+                          : 'border-gray-200 bg-white hover:border-blue-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-bold text-sm text-gray-900 dark:text-white leading-snug">
+                          {plan.name}
+                        </div>
+                        <span
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                            isSelected
+                              ? 'border-blue-600 bg-blue-600 text-white'
+                              : 'border-gray-300 dark:border-slate-600'
+                          }`}
+                        >
+                          {isSelected && <Check className="h-3 w-3" />}
+                        </span>
+                      </div>
+                      {plan.description && (
+                        <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-400 line-clamp-2">
+                          {plan.description}
+                        </p>
+                      )}
+                      <div className="mt-2 flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-blue-700 dark:text-blue-300">
+                          {typeof plan.monthlyPrice === 'number' && plan.monthlyPrice > 0
+                            ? `${formatCurrency(plan.monthlyPrice.toFixed(2))}/mês`
+                            : 'Sob consulta'}
+                        </span>
+                        <span className="text-gray-400 dark:text-slate-500">
+                          {plan.modules.length} {plan.modules.length === 1 ? 'permissão' : 'permissões'}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Footer Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">

@@ -1,6 +1,7 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult } from '@shared/types/common'
+import { calculateNewLicenseExpiry } from '../utils/license.utils'
 
 export type ContractStatus = 'active' | 'draft' | 'cancelled' | 'suspended'
 
@@ -182,6 +183,33 @@ function setLocalInvoices(invoices: ContractInvoice[]): void {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(LOCAL_STORAGE_INVOICES_KEY, JSON.stringify(invoices))
+  } catch {
+    // ignore
+  }
+}
+
+const LOCAL_UNDONE_TIMESTAMPS_KEY = 'cs_undone_invoice_timestamps_v1'
+
+function getUndoneTimestamps(): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(LOCAL_UNDONE_TIMESTAMPS_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function recordUndoneTimestamp(keys: Array<string | null | undefined>, iso: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const map = getUndoneTimestamps()
+    for (const k of keys) {
+      if (k && k.trim()) {
+        map[k.trim().toLowerCase()] = iso
+      }
+    }
+    localStorage.setItem(LOCAL_UNDONE_TIMESTAMPS_KEY, JSON.stringify(map))
   } catch {
     // ignore
   }
@@ -471,10 +499,8 @@ export const contractService = {
         updatedAt: row.updated_at,
       }))
 
-      // Atualiza localmente
-      const currentLocal = getLocalInvoices()
       const merged = contractId
-        ? [...currentLocal.filter((inv) => inv.contractId !== contractId), ...mapped]
+        ? [...getLocalInvoices().filter((inv) => inv.contractId !== contractId), ...mapped]
         : mapped
       setLocalInvoices(merged)
 
@@ -749,10 +775,46 @@ export const contractService = {
     invoiceId: string,
     paymentMethod = 'PIX',
     paymentDate?: string,
+    extendLicense = false,
   ): Promise<ServiceResult<ContractInvoice>> {
     const today = new Date().toISOString().split('T')[0]
-    const local = getLocalInvoices()
-    const target = local.find((i) => i.id === invoiceId)
+    let local = getLocalInvoices()
+    let target = local.find((i) => i.id === invoiceId)
+
+    // Se não encontrou no LocalStorage, busca direto no Supabase
+    if (!target) {
+      try {
+        const { data: dbInv } = await supabase
+          .from('software_contract_invoices')
+          .select('*')
+          .eq('id', invoiceId)
+          .maybeSingle()
+
+        if (dbInv) {
+          target = {
+            id: dbInv.id,
+            contractId: dbInv.contract_id,
+            companyId: dbInv.company_id,
+            invoiceNumber: dbInv.invoice_number,
+            clientName: dbInv.client_name,
+            clientDocument: dbInv.client_document,
+            referenceMonth: dbInv.reference_month,
+            amount: Number(dbInv.amount) || 0,
+            dueDate: dbInv.due_date,
+            paymentDate: dbInv.payment_date,
+            paymentMethod: dbInv.payment_method,
+            status: dbInv.status,
+            pixKey: dbInv.pix_key,
+            notes: dbInv.notes,
+            createdAt: dbInv.created_at,
+            updatedAt: dbInv.updated_at,
+          }
+        }
+      } catch (err) {
+        logger.warn('Erro ao buscar fatura no Supabase para baixa:', { error: String(err) })
+      }
+    }
+
     if (!target) {
       return { success: false, error: 'Fatura não encontrada.' }
     }
@@ -765,19 +827,235 @@ export const contractService = {
       updatedAt: new Date().toISOString(),
     }
 
-    // Ao confirmar o pagamento da fatura, estende a licença da empresa somando +30 dias aos dias restantes
-    if (target.companyId) {
+    // Ao confirmar o pagamento da fatura, estende a licença da empresa SOMENTE se explicitamente solicitado
+    if (extendLicense) {
+      let effectiveCompanyId = target.companyId || null
+      if (!effectiveCompanyId && target.contractId) {
+        try {
+          const { data: cRow } = await supabase
+            .from('software_contracts')
+            .select('company_id')
+            .eq('id', target.contractId)
+            .maybeSingle()
+          if (cRow?.company_id) effectiveCompanyId = cRow.company_id
+        } catch {
+          // ignore
+        }
+      }
+      if (!effectiveCompanyId && target.clientName) {
+        try {
+          const { data: oRow } = await supabase
+            .from('organizations')
+            .select('id')
+            .ilike('name', target.clientName.trim())
+            .limit(1)
+            .maybeSingle()
+          if (oRow?.id) effectiveCompanyId = oRow.id
+        } catch {
+          // ignore
+        }
+      }
+
+      if (effectiveCompanyId) {
+        try {
+          const { error: rpcErr } = await supabase.rpc('admin_add_company_license_days', {
+            p_company_id: effectiveCompanyId,
+            p_days: 30,
+          })
+          if (rpcErr) {
+            const { data: orgData } = await supabase
+              .from('organizations')
+              .select('trial_ends_at')
+              .eq('id', effectiveCompanyId)
+              .maybeSingle()
+
+            const currExpiry = (orgData as any)?.trial_ends_at ? new Date((orgData as any).trial_ends_at) : null
+            const now = new Date()
+            const base = currExpiry && currExpiry.getTime() > now.getTime() ? currExpiry : now
+            const newIso = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
+
+            await supabase
+              .from('organizations')
+              .update({ trial_ends_at: newIso, is_active: true } as any)
+              .eq('id', effectiveCompanyId)
+          }
+        } catch (e) {
+          logger.warn('Erro ao estender licença na baixa de fatura:', { error: String(e) })
+        }
+      }
+    }
+
+    const res = await this.saveInvoice(updated)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('organization-billing-updated'))
+      window.dispatchEvent(new CustomEvent('company-license-updated'))
+    }
+    return res
+  },
+
+  /**
+   * Baixa flexível e infalível de fatura após pagamento PIX.
+   * Procura a fatura por ID, por número (#FAT-...) ou pela mais antiga pendente do cliente/organização.
+   */
+  async settleInvoiceByPayment(params: {
+    invoiceId?: string | null
+    invoiceNumber?: string | null
+    companyId?: string | null
+    clientName?: string | null
+    amount?: number | null
+    paymentMethod?: string
+    extendLicense?: boolean
+  }): Promise<ServiceResult<ContractInvoice | null>> {
+    const today = new Date().toISOString().split('T')[0]
+    const method = params.paymentMethod || 'PIX'
+    let local = getLocalInvoices()
+    let target: ContractInvoice | undefined
+
+    const cleanNum = params.invoiceNumber?.replace(/^#/, '').trim()
+
+    // 1. Tenta achar por ID no LocalStorage
+    if (params.invoiceId) {
+      target = local.find((i) => i.id === params.invoiceId)
+    }
+
+    // 2. Tenta achar por número de fatura no LocalStorage
+    if (!target && cleanNum) {
+      target = local.find(
+        (i) => i.invoiceNumber.replace(/^#/, '').trim().toLowerCase() === cleanNum.toLowerCase(),
+      )
+    }
+
+    // 3. Tenta achar por empresa ou nome de cliente no LocalStorage (fatura pendente/vencida mais antiga)
+    if (!target && (params.companyId || params.clientName)) {
+      const normClient = params.clientName?.trim().toLowerCase()
+      const candidateList = local
+        .filter((inv) => {
+          if (inv.status !== 'pending' && inv.status !== 'overdue') return false
+          if (params.companyId && inv.companyId === params.companyId) return true
+          if (normClient && inv.clientName.trim().toLowerCase() === normClient) return true
+          return false
+        })
+        .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+
+      if (candidateList.length > 0) {
+        target = candidateList[0]
+      }
+    }
+
+    // 4. Se ainda não achou localmente, busca no Supabase
+    if (!target) {
+      try {
+        let query = supabase.from('software_contract_invoices').select('*')
+        if (params.invoiceId) {
+          query = query.eq('id', params.invoiceId)
+        } else if (cleanNum) {
+          query = query.eq('invoice_number', cleanNum)
+        } else if (params.companyId) {
+          query = query.eq('company_id', params.companyId).in('status', ['pending', 'overdue'])
+        } else if (params.clientName) {
+          query = query.ilike('client_name', `%${params.clientName.trim()}%`).in('status', ['pending', 'overdue'])
+        }
+
+        const { data: dbRows } = await query.order('due_date', { ascending: true }).limit(1)
+        let matchedRow = dbRows && dbRows[0] ? dbRows[0] : null
+
+        // Fallback por nome do cliente caso a fatura no banco não tenha company_id vinculado
+        if (!matchedRow && params.companyId && params.clientName) {
+          const { data: nameRows } = await supabase
+            .from('software_contract_invoices')
+            .select('*')
+            .ilike('client_name', `%${params.clientName.trim()}%`)
+            .in('status', ['pending', 'overdue'])
+            .order('due_date', { ascending: true })
+            .limit(1)
+          if (nameRows && nameRows[0]) {
+            matchedRow = nameRows[0]
+          }
+        }
+
+        if (matchedRow) {
+          const row = matchedRow
+          target = {
+            id: row.id,
+            contractId: row.contract_id,
+            companyId: row.company_id,
+            invoiceNumber: row.invoice_number,
+            clientName: row.client_name,
+            clientDocument: row.client_document,
+            referenceMonth: row.reference_month,
+            amount: Number(row.amount) || 0,
+            dueDate: row.due_date,
+            paymentDate: row.payment_date,
+            paymentMethod: row.payment_method,
+            status: row.status,
+            pixKey: row.pix_key,
+            notes: row.notes,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          }
+        }
+      } catch (err) {
+        logger.warn('Erro ao buscar fatura no Supabase para baixa flexível:', { error: String(err) })
+      }
+    }
+
+    if (!target) {
+      logger.warn('Nenhuma fatura correspondente encontrada para baixa.', params)
+      return { success: false, error: 'Fatura não encontrada para baixa.' }
+    }
+
+    const updated: ContractInvoice = {
+      ...target,
+      status: 'paid',
+      paymentDate: today,
+      paymentMethod: method,
+      updatedAt: new Date().toISOString(),
+    }
+
+    // Salva localmente
+    const idx = local.findIndex((i) => i.id === updated.id || i.invoiceNumber === updated.invoiceNumber)
+    if (idx >= 0) {
+      local[idx] = updated
+    } else {
+      local.unshift(updated)
+    }
+    setLocalInvoices(local)
+
+    // Atualiza no Supabase de forma resiliente (por ID e por invoice_number)
+    try {
+      const updatePayload = {
+        status: 'paid',
+        payment_date: today,
+        payment_method: method,
+        updated_at: new Date().toISOString(),
+      }
+
+      await supabase
+        .from('software_contract_invoices')
+        .update(updatePayload)
+        .eq('id', updated.id)
+
+      await supabase
+        .from('software_contract_invoices')
+        .update(updatePayload)
+        .eq('invoice_number', updated.invoiceNumber)
+    } catch (dbErr) {
+      logger.warn('Erro ao sincronizar baixa da fatura no Supabase:', { error: String(dbErr) })
+    }
+
+    // Estende a licença da empresa (+30 dias) APENAS quando explicitamente solicitado (ex: no checkout PIX)
+    const effectiveCompanyId = updated.companyId || params.companyId
+    if (params.extendLicense && effectiveCompanyId) {
       try {
         const { error: rpcErr } = await supabase.rpc('admin_add_company_license_days', {
-          p_company_id: target.companyId,
+          p_company_id: effectiveCompanyId,
           p_days: 30,
         })
         if (rpcErr) {
-          // Fallback resiliente
           const { data: orgData } = await supabase
             .from('organizations')
             .select('trial_ends_at')
-            .eq('id', target.companyId)
+            .eq('id', effectiveCompanyId)
             .maybeSingle()
 
           const currExpiry = (orgData as any)?.trial_ends_at ? new Date((orgData as any).trial_ends_at) : null
@@ -788,34 +1066,405 @@ export const contractService = {
           await supabase
             .from('organizations')
             .update({ trial_ends_at: newIso, is_active: true } as any)
-            .eq('id', target.companyId)
+            .eq('id', effectiveCompanyId)
         }
       } catch (e) {
         logger.warn('Erro ao estender licença na baixa de fatura:', { error: String(e) })
       }
     }
 
-    return this.saveInvoice(updated)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('organization-billing-updated'))
+    }
+
+    return { success: true, data: updated }
   },
 
   /**
-   * Desfaz a baixa do pagamento, retornando para pendente.
+   * Sincroniza pagamentos PIX aprovados recentes com faturas em aberto.
+   * Se houver fatura pendente ou vencida de uma empresa/cliente que já teve PIX aprovado,
+   * realiza a baixa imediata e automática (e garante +30 dias apenas uma vez se license_activated ainda for false).
+   */
+  async syncApprovedPixPaymentsWithInvoices(): Promise<void> {
+    try {
+      const { data: approvedTxs, error } = await supabase
+        .from('mercadopago_pix_transactions')
+        .select('id, organization_id, contract_invoice_id, description, payer_name, amount, license_activated, license_days_granted, paid_at, created_at')
+        .eq('status', 'approved')
+        .order('paid_at', { ascending: false })
+        .limit(20)
+
+      if (error || !approvedTxs || approvedTxs.length === 0) return
+
+      const undoneMap = getUndoneTimestamps()
+
+      const { data: dbUnpaid } = await supabase
+        .from('software_contract_invoices')
+        .select('id, contract_id, company_id, invoice_number, client_name, due_date, status')
+        .in('status', ['pending', 'overdue'])
+        .order('due_date', { ascending: true })
+
+      const localInvoices = getLocalInvoices()
+      const unpaidPool: Array<{
+        id: string
+        companyId?: string | null
+        invoiceNumber: string
+        clientName: string
+        dueDate: string
+        status: string
+      }> = []
+
+      const seenIds = new Set<string>()
+      for (const r of dbUnpaid || []) {
+        seenIds.add(r.id)
+        unpaidPool.push({
+          id: r.id,
+          companyId: r.company_id,
+          invoiceNumber: r.invoice_number,
+          clientName: r.client_name,
+          dueDate: r.due_date,
+          status: r.status,
+        })
+      }
+      for (const l of localInvoices) {
+        if (!seenIds.has(l.id) && (l.status === 'pending' || l.status === 'overdue')) {
+          unpaidPool.push({
+            id: l.id,
+            companyId: l.companyId,
+            invoiceNumber: l.invoiceNumber,
+            clientName: l.clientName,
+            dueDate: l.dueDate,
+            status: l.status,
+          })
+        }
+      }
+
+      for (const tx of approvedTxs) {
+        const txTimeMs = new Date(tx.paid_at || tx.created_at || 0).getTime()
+        const orgUndoneIso = tx.organization_id ? undoneMap[tx.organization_id.toLowerCase()] : undefined
+        const invUndoneIso = tx.contract_invoice_id ? undoneMap[tx.contract_invoice_id.toLowerCase()] : undefined
+        const payerUndoneIso = tx.payer_name ? undoneMap[tx.payer_name.trim().toLowerCase()] : undefined
+        const latestUndoneMs = Math.max(
+          orgUndoneIso ? new Date(orgUndoneIso).getTime() : 0,
+          invUndoneIso ? new Date(invUndoneIso).getTime() : 0,
+          payerUndoneIso ? new Date(payerUndoneIso).getTime() : 0,
+        )
+        if (latestUndoneMs > 0 && txTimeMs <= latestUndoneMs) {
+          continue
+        }
+
+        // Garante +30 dias UMA ÚNICA VEZ caso a transação aprovada ainda não tenha ativado a licença
+        if (!tx.license_activated && tx.organization_id) {
+          const days = Number(tx.license_days_granted) || 30
+          try {
+            const { error: rpcErr } = await supabase.rpc('admin_add_company_license_days', {
+              p_company_id: tx.organization_id,
+              p_days: days,
+            })
+            if (rpcErr) {
+              const { data: orgData } = await supabase
+                .from('organizations')
+                .select('trial_ends_at')
+                .eq('id', tx.organization_id)
+                .maybeSingle()
+
+              const currExpiry = (orgData as any)?.trial_ends_at ? new Date((orgData as any).trial_ends_at) : null
+              const now = new Date()
+              const base = currExpiry && currExpiry.getTime() > now.getTime() ? currExpiry : now
+              const newIso = new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString()
+
+              await supabase
+                .from('organizations')
+                .update({ trial_ends_at: newIso, is_active: true } as any)
+                .eq('id', tx.organization_id)
+            }
+            await supabase
+              .from('mercadopago_pix_transactions')
+              .update({ license_activated: true, updated_at: new Date().toISOString() } as any)
+              .eq('id', tx.id)
+          } catch (actErr) {
+            logger.warn('Erro ao ativar dias pendentes de PIX aprovado:', { error: String(actErr) })
+          }
+        }
+
+        // 1. Se tem contract_invoice_id vinculado, essa transação pertence EXCLUSIVAMENTE a essa fatura
+        if (tx.contract_invoice_id) {
+          const idx = unpaidPool.findIndex((i) => i.id === tx.contract_invoice_id)
+          if (idx >= 0) {
+            const inv = unpaidPool[idx]
+            unpaidPool.splice(idx, 1)
+            await this.settleInvoiceByPayment({
+              invoiceId: inv.id,
+              companyId: inv.companyId || tx.organization_id,
+              clientName: inv.clientName || tx.payer_name,
+              extendLicense: false,
+            })
+          }
+          // Nunca reaproveita uma transação já vinculada a um contract_invoice_id para baixar outra fatura!
+          continue
+        }
+
+        // 2. Se a descrição menciona #FAT-xxxx ou FAT-xxxx, pertence EXCLUSIVAMENTE a essa fatura
+        const descMatch = (tx.description || '').match(/FAT-[\w-]+/)
+        if (descMatch) {
+          const invNum = descMatch[0]
+          const idx = unpaidPool.findIndex(
+            (i) => i.invoiceNumber.replace(/^#/, '').trim().toLowerCase() === invNum.toLowerCase(),
+          )
+          if (idx >= 0) {
+            const inv = unpaidPool[idx]
+            unpaidPool.splice(idx, 1)
+            await this.settleInvoiceByPayment({
+              invoiceId: inv.id,
+              invoiceNumber: invNum,
+              companyId: inv.companyId || tx.organization_id,
+              clientName: inv.clientName || tx.payer_name,
+              extendLicense: false,
+            })
+          }
+          // Nunca reaproveita uma transação de fatura específica para baixar outra fatura!
+          continue
+        }
+
+        // 3. Transação genérica (sem fatura vinculada): baixa APENAS a fatura mais antiga e vincula o contract_invoice_id para não repetir
+        const unpaidForOrg = unpaidPool.filter((inv) => {
+          if (tx.organization_id && inv.companyId === tx.organization_id) return true
+          if (tx.payer_name && inv.clientName.trim().toLowerCase() === tx.payer_name.trim().toLowerCase()) return true
+          return false
+        })
+
+        if (unpaidForOrg.length > 0) {
+          const oldest = unpaidForOrg.sort(
+            (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+          )[0]
+          const poolIdx = unpaidPool.findIndex((i) => i.id === oldest.id)
+          if (poolIdx >= 0) unpaidPool.splice(poolIdx, 1)
+
+          await this.settleInvoiceByPayment({
+            invoiceId: oldest.id,
+            invoiceNumber: oldest.invoiceNumber,
+            companyId: oldest.companyId || tx.organization_id,
+            clientName: oldest.clientName,
+            extendLicense: false,
+          })
+
+          // Vincula contract_invoice_id na transação para que ela nunca baixe uma segunda fatura
+          try {
+            await supabase
+              .from('mercadopago_pix_transactions')
+              .update({ contract_invoice_id: oldest.id } as any)
+              .eq('id', tx.id)
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn('Erro ao sincronizar pagamentos PIX com faturas:', { error: String(err) })
+    }
+  },
+
+  /**
+   * Localiza a fatura pendente ou vencida mais antiga de uma organização e dá baixa automática.
+   */
+  async settleOldestUnpaidInvoiceForOrg(companyId: string, clientName?: string): Promise<ServiceResult<ContractInvoice | null>> {
+    return this.settleInvoiceByPayment({ companyId, clientName })
+  },
+
+  /**
+   * Desfaz a baixa do pagamento, retornando a fatura para pendente,
+   * reduzindo 30 dias da licença da empresa e estornando transações PIX vinculadas para permitir novos testes.
    */
   async undoInvoicePayment(invoiceId: string): Promise<ServiceResult<ContractInvoice>> {
     const local = getLocalInvoices()
-    const target = local.find((i) => i.id === invoiceId)
+    let target = local.find((i) => i.id === invoiceId)
+
+    if (!target) {
+      try {
+        const { data: dbRow } = await supabase
+          .from('software_contract_invoices')
+          .select('*')
+          .eq('id', invoiceId)
+          .maybeSingle()
+        if (dbRow) {
+          target = {
+            id: dbRow.id,
+            contractId: dbRow.contract_id,
+            companyId: dbRow.company_id,
+            invoiceNumber: dbRow.invoice_number,
+            clientName: dbRow.client_name,
+            clientDocument: dbRow.client_document,
+            referenceMonth: dbRow.reference_month,
+            amount: Number(dbRow.amount) || 0,
+            dueDate: dbRow.due_date,
+            paymentDate: dbRow.payment_date,
+            paymentMethod: dbRow.payment_method,
+            status: dbRow.status,
+            pixKey: dbRow.pix_key,
+            notes: dbRow.notes,
+            createdAt: dbRow.created_at,
+            updatedAt: dbRow.updated_at,
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (!target) {
       return { success: false, error: 'Fatura não encontrada.' }
     }
 
+    const nowIso = new Date().toISOString()
     const updated: ContractInvoice = {
       ...target,
       status: 'pending',
       paymentDate: null,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
     }
 
-    return this.saveInvoice(updated)
+    const saveRes = await this.saveInvoice(updated)
+
+    // Garante atualização direta no Supabase por id e por invoice_number
+    try {
+      await supabase
+        .from('software_contract_invoices')
+        .update({ status: 'pending', payment_date: null, updated_at: nowIso })
+        .eq('id', updated.id)
+
+      await supabase
+        .from('software_contract_invoices')
+        .update({ status: 'pending', payment_date: null, updated_at: nowIso })
+        .eq('invoice_number', updated.invoiceNumber)
+    } catch {
+      // ignore
+    }
+
+    // Resolve o ID da empresa vinculada à fatura
+    let effectiveCompanyId = target.companyId || null
+    if (!effectiveCompanyId && target.contractId) {
+      try {
+        const { data: contractRow } = await supabase
+          .from('software_contracts')
+          .select('company_id')
+          .eq('id', target.contractId)
+          .maybeSingle()
+        if (contractRow?.company_id) {
+          effectiveCompanyId = contractRow.company_id
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!effectiveCompanyId && target.clientName) {
+      try {
+        const { data: orgByName } = await supabase
+          .from('organizations')
+          .select('id')
+          .ilike('name', target.clientName.trim())
+          .limit(1)
+          .maybeSingle()
+        if (orgByName?.id) {
+          effectiveCompanyId = orgByName.id
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Diminui 30 dias da licença da empresa
+    if (effectiveCompanyId) {
+      try {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('trial_ends_at')
+          .eq('id', effectiveCompanyId)
+          .maybeSingle()
+
+        const currExpiry = (orgData as any)?.trial_ends_at || null
+        const preview = calculateNewLicenseExpiry(currExpiry, 'decrease', 0)
+        // Reduz até 30 dias do saldo positivo restante sem empurrar a data para -30/-61 dias no passado
+        const daysToReduce = Math.min(30, preview.previousRemainingDays)
+        const calc = calculateNewLicenseExpiry(
+          preview.previousRemainingDays > 0 ? currExpiry : null,
+          'decrease',
+          daysToReduce,
+        )
+
+        const { error: rpcErr } = await supabase.rpc('admin_adjust_company_license_days', {
+          p_company_id: effectiveCompanyId,
+          p_days_delta: -daysToReduce,
+          p_reason: `Estorno / Desfazer pagamento da fatura #${target.invoiceNumber}`,
+          p_new_expiry: calc.newExpiryIso,
+        })
+
+        if (rpcErr) {
+          await supabase
+            .from('organizations')
+            .update({
+              trial_ends_at: calc.newExpiryIso,
+              is_active: !calc.isBlocked,
+              updated_at: nowIso,
+            } as any)
+            .eq('id', effectiveCompanyId)
+        }
+      } catch (err) {
+        logger.warn('Erro ao reduzir 30 dias ao desfazer pagamento:', { error: String(err) })
+      }
+    }
+
+    // Registra timestamp de estorno para que transações PIX antigas não deem baixa automática novamente no reload
+    recordUndoneTimestamp(
+      [
+        target.id,
+        target.invoiceNumber.replace(/^#/, '').trim(),
+        effectiveCompanyId,
+        target.clientName,
+      ],
+      nowIso,
+    )
+
+    // Marca TODAS as transações PIX aprovadas vinculadas como estornadas (refunded)
+    try {
+      const refundPayload = {
+        status: 'refunded',
+        status_detail: 'undone_by_admin',
+        license_activated: false,
+        updated_at: nowIso,
+      }
+
+      await supabase
+        .from('mercadopago_pix_transactions')
+        .update(refundPayload as any)
+        .eq('contract_invoice_id', target.id)
+        .eq('status', 'approved')
+
+      const cleanNum = target.invoiceNumber.replace(/^#/, '').trim()
+      if (cleanNum) {
+        await supabase
+          .from('mercadopago_pix_transactions')
+          .update(refundPayload as any)
+          .ilike('description', `%${cleanNum}%`)
+          .eq('status', 'approved')
+      }
+
+      if (effectiveCompanyId) {
+        await supabase
+          .from('mercadopago_pix_transactions')
+          .update(refundPayload as any)
+          .eq('organization_id', effectiveCompanyId)
+          .eq('status', 'approved')
+      }
+    } catch (txErr) {
+      logger.warn('Aviso ao estornar transação PIX vinculada:', { error: String(txErr) })
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('organization-billing-updated'))
+      window.dispatchEvent(new CustomEvent('company-license-updated'))
+    }
+
+    return saveRes
   },
 
   /**

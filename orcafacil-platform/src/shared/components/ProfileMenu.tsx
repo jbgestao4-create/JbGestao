@@ -14,6 +14,7 @@ import {
   type OrganizationBillingInfo,
 } from '@modules/organizations/services/organization-billing.service'
 import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
+import { calculateCompanyLicenseStatus } from '@modules/companies/utils/license.utils'
 import type { ServiceResult } from '@shared/types/common'
 
 type ProfileMenuProps = {
@@ -122,6 +123,15 @@ export function ProfileMenu({
     null
   const effectiveTrialEndsAt =
     currentOrganization?.trialEndsAt ?? fetchedOrgMeta?.trialEndsAt ?? billingInfo?.trialEndsAt ?? null
+
+  const licenseStatus = calculateCompanyLicenseStatus(
+    effectiveTrialEndsAt,
+    currentOrganization?.isActive,
+  )
+  const shouldShowRenewButton =
+    isAdmin &&
+    licenseStatus.status !== 'unlimited' &&
+    licenseStatus.daysRemaining <= 3
 
   const hasActiveContractPlan = Boolean(
     billingInfo?.contract &&
@@ -301,16 +311,27 @@ export function ProfileMenu({
                   </div>
                 </div>
 
-                {/* BOTÃO ASSINE / RENOVE AGORA VIA PIX MERCADO PAGO */}
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setIsCheckoutModalOpen(true)}
-                    className="mt-4 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-md shadow-emerald-600/20 transition-all outline-none"
-                  >
-                    <Zap className="h-3.5 w-3.5 fill-current text-amber-300" />
-                    <span>{shouldShowSubscribeButton ? 'Assine Agora via PIX' : 'Renovar Licença via PIX'}</span>
-                  </button>
+                {/* BOTÃO ASSINE / RENOVE AGORA VIA PIX MERCADO PAGO (APENAS ADMIN E FALTANDO <= 3 DIAS) */}
+                {shouldShowRenewButton && (
+                  <div className="mt-4 w-full text-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsCheckoutModalOpen(true)}
+                      className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-md shadow-emerald-600/20 transition-all outline-none"
+                    >
+                      <Zap className="h-3.5 w-3.5 fill-current text-amber-300" />
+                      <span>{shouldShowSubscribeButton ? 'Assine Agora via PIX' : 'Renovar Licença via PIX'}</span>
+                    </button>
+                    <p className="mt-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                      {licenseStatus.daysRemaining > 0
+                        ? licenseStatus.daysRemaining === 1
+                          ? 'Falta 1 dia de acesso'
+                          : `Faltam ${licenseStatus.daysRemaining} dias de acesso`
+                        : licenseStatus.status === 'grace_period'
+                          ? `Licença vencida • Carência (${licenseStatus.graceDaysRemaining}d para bloqueio)`
+                          : 'Acesso vencido (0 dias restantes)'}
+                    </p>
+                  </div>
                 )}
               </>
             )}

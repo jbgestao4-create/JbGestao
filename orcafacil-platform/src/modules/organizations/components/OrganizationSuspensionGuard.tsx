@@ -1,14 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ShieldAlert,
   QrCode,
-  Printer,
-  Copy,
-  Check,
   LogOut,
   Building2,
-  Zap,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
@@ -19,64 +15,50 @@ import {
   organizationBillingService,
   type OrganizationBillingInfo,
 } from '../services/organization-billing.service'
-import type { ContractInvoice } from '@modules/companies/services/contract.service'
-import { ContractInvoicePrintModal } from '@modules/companies/components/ContractInvoicePrintModal'
 import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
 
 export function OrganizationSuspensionGuard() {
   const { user, signOut } = useAuth()
-  const { currentOrganization, userRole } = useOrganization()
+  const { currentOrganization, userRole, reloadOrganizations } = useOrganization()
 
   const [billingInfo, setBillingInfo] = useState<OrganizationBillingInfo | null>(null)
-  const [copiedKey, setCopiedKey] = useState(false)
-  const [selectedPrintInvoice, setSelectedPrintInvoice] = useState<ContractInvoice | null>(null)
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
 
   const isDeveloper = isSystemOwner(user)
   const isAdmin = userRole === 'owner' || userRole === 'admin' || isDeveloper
 
-  useEffect(() => {
+  const refreshBilling = useCallback(async () => {
     if (!currentOrganization || isDeveloper) {
       setBillingInfo(null)
       return
     }
+    const info = await organizationBillingService.getBillingInfo({
+      id: currentOrganization.id,
+      name: currentOrganization.name,
+      trialEndsAt: currentOrganization.trialEndsAt,
+    })
+    setBillingInfo(info)
+  }, [currentOrganization, isDeveloper])
 
-    let isCurrent = true
-    void organizationBillingService
-      .getBillingInfo({
-        id: currentOrganization.id,
-        name: currentOrganization.name,
-        trialEndsAt: currentOrganization.trialEndsAt,
-      })
-      .then((info) => {
-        if (isCurrent) {
-          setBillingInfo(info)
-        }
-      })
-
-    return () => {
-      isCurrent = false
+  useEffect(() => {
+    void refreshBilling()
+    const handleUpdate = () => {
+      void refreshBilling()
     }
-  }, [currentOrganization?.id, currentOrganization?.trialEndsAt, isDeveloper])
+    window.addEventListener('organization-billing-updated', handleUpdate)
+    return () => {
+      window.removeEventListener('organization-billing-updated', handleUpdate)
+    }
+  }, [refreshBilling])
 
-  // Desenvolvedor nunca é bloqueado
-  if (isDeveloper) return null
+  // Desenvolvedor e operadores não veem esta tela (apenas administradores da empresa)
+  if (isDeveloper || !isAdmin) return null
 
-  // Se não estiver suspenso por 7+ dias de atraso ou estiver em período de teste gratuito
+  // Se não estiver suspenso (ultrapassou 5 dias de carência) ou estiver em período de teste gratuito
   if (!billingInfo?.isSuspended || billingInfo.isTrial) return null
 
   const overdueInvoice = billingInfo.oldestOverdueInvoice
   const daysLate = billingInfo.maxDaysOverdue
-  const pixKey =
-    overdueInvoice?.pixKey ||
-    billingInfo.contract?.licensorEmail ||
-    'controlesoft@outlook.com'
-
-  const handleCopyPix = () => {
-    void navigator.clipboard.writeText(pixKey)
-    setCopiedKey(true)
-    setTimeout(() => setCopiedKey(false), 2500)
-  }
 
   const modalContent = (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md overflow-y-auto">
@@ -106,7 +88,7 @@ export function OrganizationSuspensionGuard() {
               <span>{currentOrganization?.name}</span>
             </h3>
             <p className="text-sm text-gray-600 dark:text-slate-300 leading-relaxed">
-              O acesso aos módulos do sistema foi temporariamente bloqueado porque a fatura mensal de assinatura está vencida há <strong>{daysLate} dias</strong> (ultrapassou o prazo limite de 7 dias de tolerância).
+              O acesso aos módulos do sistema foi temporariamente bloqueado porque a fatura mensal de assinatura está vencida há <strong>{daysLate} dias</strong> (ultrapassou o prazo limite de 5 dias de tolerância).
             </p>
           </div>
 
@@ -135,59 +117,20 @@ export function OrganizationSuspensionGuard() {
                 </div>
               )}
 
-              {/* Box de Pagamento Rápido via PIX Mercado Pago */}
+              {/* Botão para Gerar QR Code de Pagamento PIX */}
               <div className="p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
-                    <Zap className="h-4 w-4 text-emerald-600 fill-current" />
-                    Pagamento Instantâneo via PIX Oficial:
-                  </span>
-                </div>
-
                 <button
                   type="button"
                   onClick={() => setIsCheckoutModalOpen(true)}
                   className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 transition cursor-pointer"
                 >
                   <QrCode className="w-4 h-4" />
-                  Pagar e Desbloquear Acesso Imediatamente
+                  Gerar QR Code para Pagamento
                 </button>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={pixKey}
-                    className="w-full font-mono text-xs sm:text-sm font-bold bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-emerald-300 dark:border-emerald-700 select-all"
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleCopyPix}
-                    className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 shadow-xs"
-                  >
-                    {copiedKey ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                    {copiedKey ? 'Copiada!' : 'Copiar'}
-                  </Button>
-                </div>
-                <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 text-center">
                   O sistema identifica o PIX automaticamente em segundos e libera o acesso na hora.
                 </p>
               </div>
-
-              {/* Botão de Ver Fatura / Boleto */}
-              {overdueInvoice && (
-                <div className="flex items-center justify-between gap-3 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setSelectedPrintInvoice(overdueInvoice)}
-                    className="gap-2 text-xs font-bold text-blue-700 border-blue-300 hover:bg-blue-50 dark:text-blue-300 w-full"
-                  >
-                    <Printer className="h-4 w-4" />
-                    Visualizar e Imprimir Boleto / Fatura
-                  </Button>
-                </div>
-              )}
             </div>
           ) : (
             /* VISUALIZAÇÃO PARA COLABORADOR / MEMBRO COMUM */
@@ -224,23 +167,22 @@ export function OrganizationSuspensionGuard() {
 
       </div>
 
-      {/* Modal de Impressão de Fatura / Boleto */}
-      <ContractInvoicePrintModal
-        isOpen={Boolean(selectedPrintInvoice)}
-        invoice={selectedPrintInvoice}
-        contract={billingInfo?.contract}
-        onClose={() => setSelectedPrintInvoice(null)}
-      />
-
       {/* Modal de Pagamento Automático PIX Mercado Pago */}
       <PixPaymentCheckoutModal
         isOpen={isCheckoutModalOpen}
-        onClose={() => setIsCheckoutModalOpen(false)}
+        onClose={() => {
+          setIsCheckoutModalOpen(false)
+          void refreshBilling()
+          void reloadOrganizations()
+        }}
+        organizationId={currentOrganization?.id}
+        prefillClientName={currentOrganization?.name}
         contractInvoiceId={overdueInvoice?.id}
         invoiceAmount={overdueInvoice?.amount}
         invoiceNumber={overdueInvoice?.invoiceNumber}
         onPaymentSuccess={() => {
-          setIsCheckoutModalOpen(false)
+          void refreshBilling()
+          void reloadOrganizations()
         }}
       />
     </div>

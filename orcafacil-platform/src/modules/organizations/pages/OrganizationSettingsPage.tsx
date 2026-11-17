@@ -313,12 +313,13 @@ export function OrganizationSettingsPage() {
     if (!isDeveloper || !currentOrganization || activeTab !== 'general') return
 
     const intervalId = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       void organizationService.getMembersWithDetails(currentOrganization.id).then((res) => {
         if (res.success) {
           setMembers(res.data)
         }
       })
-    }, 45000)
+    }, 120000)
 
     return () => {
       window.clearInterval(intervalId)

@@ -341,50 +341,59 @@ export function LoginPage() {
               {isOrgDeactivated && (
                 <div
                   role="alert"
-                  className="mb-5 rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-xs"
+                  className="mb-5 rounded-2xl border border-rose-200 bg-white shadow-md overflow-hidden"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-lg bg-rose-100 p-2 text-rose-600 shrink-0 mt-0.5">
-                      <ShieldAlert className="h-5 w-5" />
+                  {/* Cabeçalho Vermelho */}
+                  <div className="bg-rose-600 px-4 py-3 text-white flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-white/20 shrink-0">
+                      <ShieldAlert className="h-5 w-5 text-white" />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-sm font-bold text-rose-900">
-                        Acesso da Empresa Suspenso / Desativado
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-100 block">
+                        Bloqueio de Segurança Financeira
+                      </span>
+                      <h3 className="text-sm font-black leading-tight">
+                        Bloqueio por Inadimplência
                       </h3>
-                      <p className="mt-1 text-xs text-rose-800 leading-relaxed">
-                        O acesso {deactivatedOrgName ? `da empresa "${deactivatedOrgName}"` : 'da sua empresa'} encontra-se temporariamente suspenso devido a pendência financeira de assinatura ou inativação administrativa.
+                    </div>
+                  </div>
+
+                  {/* Corpo do Aviso */}
+                  <div className="p-4 space-y-3">
+                    <p className="text-xs text-gray-700 leading-relaxed">
+                      O acesso {deactivatedOrgName ? <>da empresa <strong className="text-gray-900">"{deactivatedOrgName}"</strong></> : 'da sua empresa'} encontra-se <strong className="text-rose-700">bloqueado por inadimplência</strong>. Para a normalização e liberação imediata do sistema, é necessário realizar o pagamento.
+                    </p>
+
+                    <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/70 space-y-2">
+                      <Button
+                        type="button"
+                        onClick={() => setIsPixCheckoutOpen(true)}
+                        className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold shadow-sm text-xs uppercase tracking-wide"
+                      >
+                        <QrCode className="h-4 w-4" />
+                        Gerar QR Code para Pagamento (PIX)
+                      </Button>
+                      <p className="text-[11px] text-gray-500 text-center">
+                        O sistema identifica o PIX automaticamente e libera o acesso na hora (+30 dias).
                       </p>
-                      <p className="mt-1 text-[11px] text-rose-700 leading-relaxed">
-                        Seus dados permanecem íntegros pelo período de carência contratual (30 a 90 dias). Regularize via PIX para somar +30 dias de acesso ou contate nosso suporte:
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                        <Button
-                          type="button"
-                          onClick={() => setIsPixCheckoutOpen(true)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold shadow-md text-xs py-2 px-3.5"
-                        >
-                          <QrCode className="h-4 w-4" />
-                          <Zap className="h-3.5 w-3.5" />
-                          Pagar Licença via PIX (+30 Dias)
-                        </Button>
-                        <a
-                          href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20desativado.%20Gostaria%20de%20solicitar%20suporte."
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Suporte no WhatsApp"
-                          aria-label="Suporte no WhatsApp"
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-50 transition-colors shadow-xs"
-                        >
-                          <WhatsAppIcon className="h-4 w-4" />
-                          Regularizar via WhatsApp
-                        </a>
-                        <a
-                          href="mailto:controlesoft@outlook.com"
-                          className="text-[11px] font-semibold text-rose-900 underline hover:text-rose-700"
-                        >
-                          controlesoft@outlook.com
-                        </a>
-                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                      <a
+                        href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20bloqueado%20por%20inadimpl%C3%AAncia.%20Gostaria%20de%20regularizar."
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                      >
+                        <WhatsAppIcon className="h-3.5 w-3.5" />
+                        Falar no WhatsApp
+                      </a>
+                      <a
+                        href="mailto:controlesoft@outlook.com"
+                        className="text-[11px] font-medium text-gray-500 hover:text-gray-700 underline"
+                      >
+                        controlesoft@outlook.com
+                      </a>
                     </div>
                   </div>
                 </div>
@@ -539,12 +548,11 @@ export function LoginPage() {
           prefillClientName={blockedOrg?.name || expiredOrgName || deactivatedOrgName}
           customTitle="Renovação de Licença • Liberação Imediata +30 Dias"
           onPaymentSuccess={() => {
-            setIsPixCheckoutOpen(false)
             setIsOverdueBlocked(false)
             setIsTrialExpired(false)
             setIsOrgDeactivated(false)
             setPaymentSuccessNotice(
-              'Pagamento confirmado com sucesso! Mais 30 dias de acesso adicionados à sua empresa. Insira suas credenciais abaixo para entrar.'
+              'Pix realizado com sucesso. Obrigado! Mais 30 dias de acesso adicionados à sua empresa. Insira suas credenciais abaixo para entrar.'
             )
           }}
         />

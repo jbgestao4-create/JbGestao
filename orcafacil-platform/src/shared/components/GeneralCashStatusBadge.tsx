@@ -12,12 +12,8 @@ export function GeneralCashStatusBadge() {
       setStatus('closed')
       return
     }
-    const res = await cashSessionService.getOpenCashManagementSession(currentOrganization.id)
-    if (res.success && res.data && res.data.status === 'open') {
-      setStatus('open')
-    } else {
-      setStatus('closed')
-    }
+    const isOpen = await cashSessionService.isCashManagementOpen(currentOrganization.id)
+    setStatus(isOpen ? 'open' : 'closed')
   }, [currentOrganization?.id])
 
   useEffect(() => {
@@ -52,15 +48,10 @@ export function GeneralCashStatusBadge() {
       )
       .subscribe()
 
-    const interval = window.setInterval(() => {
-      void checkGeneralCash()
-    }, 60000)
-
     return () => {
       window.removeEventListener('general-cash-session-opened', handleRefresh)
       window.removeEventListener('general-cash-session-closed', handleRefresh)
       window.removeEventListener('focus', handleRefresh)
-      window.clearInterval(interval)
       void supabase.removeChannel(channel)
     }
   }, [currentOrganization?.id, checkGeneralCash])

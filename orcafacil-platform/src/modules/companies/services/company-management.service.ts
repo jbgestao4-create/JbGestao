@@ -5,6 +5,7 @@ import { logger } from '@shared/lib/logger'
 import { organizationService } from '@modules/organizations/services/organization.service'
 import { isSystemOwner, registerSystemOwnerEmail } from '@shared/utils/system-owner'
 import type { DashboardModuleCode, ServiceResult, UUID } from '@shared/types/common'
+import { calculateNewLicenseExpiry } from '../utils/license.utils'
 
 export interface ManagedCompany {
   id: UUID
@@ -945,6 +946,82 @@ export const companyManagementService = {
     } catch (err: any) {
       logger.error('Erro ao somar dias de licença:', err)
       return { success: false, error: err.message || 'Erro inesperado ao somar dias de licença.' }
+    }
+  },
+
+  /**
+   * Ajusta (aumenta ou diminui) os dias de licença da empresa, registrando obrigatoriamente o motivo.
+   */
+  async adjustLicenseDays(
+    companyId: UUID,
+    daysDelta: number,
+    reason: string,
+    exactNewExpiryIso?: string,
+  ): Promise<ServiceResult<{ newExpiry: string; previousExpiry: string | null }>> {
+    if (!reason || !reason.trim() || reason.trim().length < 5) {
+      return { success: false, error: 'O motivo do ajuste de licença é obrigatório (mínimo 5 caracteres).' }
+    }
+
+    try {
+      // 1. Busca os dados atuais da empresa (trial_ends_at e notes)
+      const { data: orgData, error: fetchErr } = await supabase
+        .from('organizations')
+        .select('trial_ends_at, notes, name')
+        .eq('id', companyId)
+        .maybeSingle()
+
+      if (fetchErr || !orgData) {
+        return { success: false, error: 'Empresa não encontrada para ajuste de licença.' }
+      }
+
+      const currentExpiryStr = (orgData as any)?.trial_ends_at ?? null
+
+      // 2. Calcula a nova data exata
+      let newIso: string
+      if (exactNewExpiryIso) {
+        newIso = exactNewExpiryIso
+      } else {
+        const actionType = daysDelta >= 0 ? 'increase' : 'decrease'
+        const calc = calculateNewLicenseExpiry(currentExpiryStr, actionType, Math.abs(daysDelta))
+        newIso = calc.newExpiryIso
+      }
+
+      const now = new Date()
+      const isStillActive = new Date(newIso).getTime() > now.getTime()
+
+      // 3. Registra o log do motivo nas observações da empresa para auditoria
+      const timestamp = new Date().toLocaleString('pt-BR')
+      const sign = daysDelta === -999 ? 'ZERADO E BLOQUEADO' : daysDelta > 0 ? `+${daysDelta} dias` : `${daysDelta} dias`
+      const auditLog = `[${timestamp}] Ajuste de Licença (${sign}): ${reason.trim()}`
+      const existingNotes = (orgData as any)?.notes || ''
+      const updatedNotes = (existingNotes ? existingNotes.trim() + '\n' : '') + auditLog
+
+      // 4. Atualiza no Supabase
+      const { error: updateErr } = await supabase
+        .from('organizations')
+        .update({
+          trial_ends_at: newIso,
+          is_active: isStillActive,
+          notes: updatedNotes,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq('id', companyId)
+
+      if (updateErr) {
+        logger.error('Falha ao atualizar validade da licença no Supabase:', updateErr)
+        return { success: false, error: 'Falha ao atualizar validade da licença no banco de dados.' }
+      }
+
+      return {
+        success: true,
+        data: {
+          newExpiry: newIso,
+          previousExpiry: currentExpiryStr,
+        },
+      }
+    } catch (err: any) {
+      logger.error('Erro ao ajustar dias de licença:', err)
+      return { success: false, error: err.message || 'Erro inesperado ao ajustar licença.' }
     }
   },
 

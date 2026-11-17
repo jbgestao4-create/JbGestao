@@ -310,10 +310,11 @@ export function CashManagementPage() {
   useEffect(() => {
     if (!currentOrganization) return;
 
-    // Contingência: atualização a cada 45 segundos apenas da sessão ativa (sem polling pesado de boletos)
+    // Contingência: atualização a cada 3 minutos apenas da sessão ativa com aba visível (Realtime é principal)
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       void loadActiveSession();
-    }, 45000);
+    }, 180000);
 
     // Canal Realtime do Supabase
     const channelName = `cash-mgmt-${currentOrganization.id}-${Math.random().toString(36).substring(2, 9)}`

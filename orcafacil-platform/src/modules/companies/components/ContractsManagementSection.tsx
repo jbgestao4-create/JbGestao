@@ -16,7 +16,6 @@ import {
   Receipt,
   AlertTriangle,
   RotateCcw,
-  Zap,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
@@ -83,9 +82,12 @@ export function ContractsManagementSection({
   // Integração Mercado Pago
   const [selectedMercadoPagoInvoice, setSelectedMercadoPagoInvoice] = useState<ContractInvoice | null>(null)
 
-  const loadData = async () => {
+  const loadData = async (skipPixSync = false) => {
     setIsLoading(true)
     try {
+      if (!skipPixSync) {
+        await contractService.syncApprovedPixPaymentsWithInvoices()
+      }
       await contractService.autoGenerateInvoicesDueSoon()
     } catch {
       // non-blocking
@@ -356,13 +358,22 @@ export function ContractsManagementSection({
 
   const handleToggleInvoicePaid = async (inv: ContractInvoice) => {
     if (inv.status === 'paid') {
+      if (
+        !window.confirm(
+          `Deseja desfazer o pagamento da fatura #${inv.invoiceNumber} (${inv.clientName})?\n\nIsso irá reduzir 30 dias da licença da empresa e retornar a fatura para pendente/vencida.`,
+        )
+      ) {
+        return
+      }
       await contractService.undoInvoicePayment(inv.id)
-      setFeedbackMsg(`Pagamento da fatura #${inv.invoiceNumber} desfeito.`)
-    } else {
-      await contractService.markInvoiceAsPaid(inv.id, inv.paymentMethod || 'PIX')
-      setFeedbackMsg(`Pagamento da fatura #${inv.invoiceNumber} confirmado com sucesso!`)
+      setFeedbackMsg(`Pagamento da fatura #${inv.invoiceNumber} desfeito (-30 dias reduzidos e pendência restaurada).`)
+      setTimeout(() => setFeedbackMsg(null), 4000)
+      void loadData(true)
+      return
     }
-    setTimeout(() => setFeedbackMsg(null), 3000)
+    await contractService.markInvoiceAsPaid(inv.id, inv.paymentMethod || 'PIX', undefined, true)
+    setFeedbackMsg(`Pagamento da fatura #${inv.invoiceNumber} confirmado com sucesso (+30 dias adicionados)!`)
+    setTimeout(() => setFeedbackMsg(null), 4000)
     void loadData()
   }
 
@@ -1330,48 +1341,23 @@ export function ContractsManagementSection({
                                   size="sm"
                                   variant="outline"
                                   onClick={() => void handleToggleInvoicePaid(inv)}
-                                  className="gap-1 text-xs text-gray-600 hover:text-gray-900 border-gray-200"
-                                  title="Desfazer recebimento / retornar fatura para pendente"
+                                  className="gap-1.5 text-xs font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200 dark:text-rose-300 dark:border-rose-900/50 dark:hover:bg-rose-950/40"
+                                  title="Desfazer pagamento: reduz 30 dias de licença e retorna a pendência"
                                 >
-                                  <RotateCcw className="h-3 w-3" />
-                                  Desfazer
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                  Desfazer pagamento
                                 </Button>
                               ) : (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => setSelectedMercadoPagoInvoice(inv)}
-                                    className="gap-1 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white shadow-xs"
-                                    title="Pagar ou gerar QR Code PIX via Mercado Pago"
-                                  >
-                                    <Zap className="h-3.5 w-3.5 text-amber-300" />
-                                    Pagar PIX (MP)
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => void handleToggleInvoicePaid(inv)}
-                                    className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                                    title="Registrar recebimento desta mensalidade manualmente"
-                                  >
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                    Dar Baixa
-                                  </Button>
-                                </>
+                                <Button
+                                  size="sm"
+                                  onClick={() => void handleToggleInvoicePaid(inv)}
+                                  className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                                  title="Registrar recebimento desta mensalidade manualmente"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Dar Baixa
+                                </Button>
                               )}
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setViewingInvoice(inv)
-                                  setIsInvoicePrintModalOpen(true)
-                                }}
-                                className="gap-1 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-900/60"
-                                title="Visualizar Fatura / Cobrança para Impressão ou Envio"
-                              >
-                                <Printer className="h-3.5 w-3.5" />
-                                Fatura / Recibo
-                              </Button>
 
                               <Button
                                 size="sm"

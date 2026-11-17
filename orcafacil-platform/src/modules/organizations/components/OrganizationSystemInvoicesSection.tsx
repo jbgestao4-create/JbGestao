@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { supabase } from '@app/config/supabase'
 import {
   Receipt,
   CheckCircle2,
@@ -55,6 +56,36 @@ export function OrganizationSystemInvoicesSection({
 
   useEffect(() => {
     void loadBilling()
+
+    if (!organization?.id) return
+
+    const handleRefresh = () => {
+      void loadBilling()
+    }
+
+    window.addEventListener('organization-billing-updated', handleRefresh)
+    window.addEventListener('focus', handleRefresh)
+
+    const channel = supabase
+      .channel(`org-sys-invoices-${organization.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'software_contract_invoices',
+        },
+        () => {
+          void loadBilling()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      window.removeEventListener('organization-billing-updated', handleRefresh)
+      window.removeEventListener('focus', handleRefresh)
+      void supabase.removeChannel(channel)
+    }
   }, [organization?.id, organization?.trialEndsAt])
 
   const filteredInvoices = useMemo(() => {
@@ -101,49 +132,6 @@ export function OrganizationSystemInvoicesSection({
           Atualizar Faturas
         </Button>
       </div>
-
-      {/* 1. SE ESTIVER EM PERÍODO DE TESTE GRATUITO (SEM CUSTO) */}
-      {isTrial && (
-        <div className="rounded-2xl border-2 border-emerald-300 dark:border-emerald-800 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-blue-950/30 p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="p-3 rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-500/20 shrink-0">
-                <Clock className="h-6 w-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 border border-emerald-300">
-                    Período de Testes Ativo
-                  </span>
-                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                    • 100% Gratuito (Sem Cobrança)
-                  </span>
-                </div>
-                <h3 className="mt-1.5 text-lg font-bold text-gray-900 dark:text-white">
-                  Sua empresa está em período de avaliação gratuita
-                </h3>
-                <p className="text-xs text-gray-600 dark:text-slate-300 mt-1 leading-relaxed max-w-2xl">
-                  Durante o período de testes, <strong>nenhuma fatura ou custo mensal é gerado</strong>. Todos os recursos e módulos contratados do sistema estão liberados para uso.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-white dark:bg-slate-800 px-5 py-3 border border-emerald-200 dark:border-emerald-900/60 text-center shrink-0 shadow-xs self-stretch sm:self-auto">
-              <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400 block">
-                Dias de Teste Restantes
-              </span>
-              <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 block">
-                {billingInfo?.trialDaysRemaining || 0} dias
-              </span>
-              {billingInfo?.trialEndsAt && (
-                <span className="text-[11px] text-gray-500 dark:text-slate-400 block mt-0.5">
-                  Válido até {new Date(billingInfo.trialEndsAt).toLocaleDateString('pt-BR')}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 2. CONDIÇÕES DO CONTRATO / PLANO (SE NÃO ESTIVER EM TESTE) */}
       {!isTrial && billingInfo?.contract && (
@@ -245,7 +233,7 @@ export function OrganizationSystemInvoicesSection({
                 Fatura Vencida em Atraso (#{billingInfo.overdueInvoice.invoiceNumber})
               </div>
               <p className="text-xs text-rose-800 dark:text-rose-300 mt-0.5">
-                Vencida há {billingInfo.daysOverdue} {billingInfo.daysOverdue === 1 ? 'dia' : 'dias'} ({formatCurrency(billingInfo.overdueInvoice.amount.toFixed(2))}). Regularize para evitar suspensão após 7 dias de atraso.
+                Vencida há {billingInfo.daysOverdue} {billingInfo.daysOverdue === 1 ? 'dia' : 'dias'} ({formatCurrency(billingInfo.overdueInvoice.amount.toFixed(2))}). Regularize para evitar suspensão após 5 dias de atraso.
               </p>
             </div>
           </div>
@@ -504,14 +492,16 @@ export function OrganizationSystemInvoicesSection({
       {/* Modal de Pagamento Automático PIX Mercado Pago */}
       <PixPaymentCheckoutModal
         isOpen={Boolean(selectedMercadoPagoInvoice)}
-        onClose={() => setSelectedMercadoPagoInvoice(null)}
+        onClose={() => {
+          setSelectedMercadoPagoInvoice(null)
+          void loadBilling()
+        }}
         contractInvoiceId={selectedMercadoPagoInvoice?.id}
         invoiceAmount={selectedMercadoPagoInvoice?.amount}
         invoiceNumber={selectedMercadoPagoInvoice?.invoiceNumber}
         organizationId={organization?.id}
         prefillClientName={organization?.name}
         onPaymentSuccess={() => {
-          setSelectedMercadoPagoInvoice(null)
           void loadBilling()
         }}
       />

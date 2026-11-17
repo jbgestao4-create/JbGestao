@@ -198,6 +198,27 @@ export function ContractFormModal({
     }
   }, [])
 
+  // Preenche automaticamente o valor da mensalidade com base no plano cadastrado da empresa selecionada (apenas novo contrato)
+  useEffect(() => {
+    if (initialContract || !selectedCompanyId || availablePlans.length === 0) return
+    const found = existingCompanies.find((c) => c.id === selectedCompanyId)
+    if (!found) return
+
+    const matchedPlan =
+      (found.accessPlanId && availablePlans.find((p) => p.id === found.accessPlanId)) ||
+      (found.accessPlanName &&
+        availablePlans.find(
+          (p) => p.name.trim().toLowerCase() === found.accessPlanName!.trim().toLowerCase(),
+        ))
+
+    if (matchedPlan) {
+      setPlanName(matchedPlan.name)
+      if (typeof matchedPlan.monthlyPrice === 'number' && matchedPlan.monthlyPrice > 0) {
+        setMonthlyAmount(matchedPlan.monthlyPrice.toFixed(2))
+      }
+    }
+  }, [initialContract, selectedCompanyId, availablePlans, existingCompanies])
+
   // Observações e Cláusulas personalizadas
   const [customTerms, setCustomTerms] = useState(
     initialContract?.customTerms || '',
@@ -336,6 +357,20 @@ export function ContractFormModal({
       if (found.adminEmail) setClientEmail(found.adminEmail)
       if (found.address) setClientAddress(found.address)
       if (found.accessPlanName) setPlanName(found.accessPlanName)
+
+      const matchedPlan =
+        (found.accessPlanId && availablePlans.find((p) => p.id === found.accessPlanId)) ||
+        (found.accessPlanName &&
+          availablePlans.find(
+            (p) => p.name.trim().toLowerCase() === found.accessPlanName!.trim().toLowerCase(),
+          ))
+      if (matchedPlan) {
+        setPlanName(matchedPlan.name)
+        if (typeof matchedPlan.monthlyPrice === 'number' && matchedPlan.monthlyPrice > 0) {
+          setMonthlyAmount(matchedPlan.monthlyPrice.toFixed(2))
+        }
+      }
+
       if (found.modules && found.modules.length > 0) {
         const mapped = getModuleNamesFromCodes(found.modules)
         if (mapped.length > 0) {
@@ -794,7 +829,16 @@ export function ContractFormModal({
                   list="contract-plan-options"
                   placeholder="Ex: Plano Padrão / Completo"
                   value={planName}
-                  onChange={(e) => setPlanName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setPlanName(val)
+                    const matched = availablePlans.find(
+                      (p) => p.name.trim().toLowerCase() === val.trim().toLowerCase(),
+                    )
+                    if (matched && typeof matched.monthlyPrice === 'number' && matched.monthlyPrice > 0) {
+                      setMonthlyAmount(matched.monthlyPrice.toFixed(2))
+                    }
+                  }}
                   className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
                 />
                 <datalist id="contract-plan-options">

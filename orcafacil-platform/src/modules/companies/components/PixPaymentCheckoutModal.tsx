@@ -17,6 +17,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { formatCurrency } from '@shared/utils/monetary'
+import { supabase } from '@app/config/supabase'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import {
@@ -28,6 +29,7 @@ import {
   SYSTEM_DEFAULT_ACCESS_PLANS,
   type AccessPlan,
 } from '../services/access-plan.service'
+import { contractService } from '../services/contract.service'
 
 interface PixPaymentCheckoutModalProps {
   isOpen: boolean
@@ -73,6 +75,7 @@ export function PixPaymentCheckoutModal({
 
   const unsubscribeRef = useRef<(() => void) | null>(null)
   const pollIntervalRef = useRef<any>(null)
+  const hasProcessedApprovalRef = useRef(false)
 
   // Carrega planos disponíveis do banco
   useEffect(() => {
@@ -114,13 +117,14 @@ export function PixPaymentCheckoutModal({
   // Escuta confirmação do pagamento em Realtime e realiza polling preventivo
   useEffect(() => {
     if (step !== 'pix_generated' || !transaction) return
+    hasProcessedApprovalRef.current = false
 
-    // 1. Inscrição Supabase Realtime
+    // 1. Inscrição Supabase Realtime (se chegou via Realtime, o servidor já ativou os +30 dias)
     unsubscribeRef.current = mercadopagoService.subscribeToTransaction(
       transaction.id,
       (updated) => {
         if (updated.status === 'approved' || updated.licenseActivated) {
-          handlePaymentApproved()
+          void handlePaymentApproved(true, updated.contractInvoiceId || null)
         }
       },
     )
@@ -131,7 +135,10 @@ export function PixPaymentCheckoutModal({
       pollIntervalRef.current = setInterval(async () => {
         const check = await mercadopagoService.checkPaymentStatus(mpId)
         if (check.success && check.data?.isApproved) {
-          handlePaymentApproved()
+          void handlePaymentApproved(
+            Boolean(check.data.licenseActivated),
+            check.data.settledInvoiceId || null,
+          )
         }
       }, 4000)
     }
@@ -142,13 +149,81 @@ export function PixPaymentCheckoutModal({
     }
   }, [step, transaction?.id, transaction?.mpPaymentId])
 
-  const handlePaymentApproved = () => {
+  const handlePaymentApproved = async (
+    alreadyActivatedByServer = false,
+    serverSettledInvoiceId: string | null = null,
+  ) => {
+    if (hasProcessedApprovalRef.current) return
+    hasProcessedApprovalRef.current = true
+
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     if (unsubscribeRef.current) unsubscribeRef.current()
+
+    // Atualiza estado de aprovação
     setStep('approved')
-    void reloadOrganizations()
+
+    // Verifica no banco se a RPC do servidor já ativou os +30 dias e qual fatura foi vinculada (evita somar 60 dias!)
+    let licenseAlreadyActivated = alreadyActivatedByServer
+    let resolvedInvoiceId = contractInvoiceId || serverSettledInvoiceId || undefined
+    if (!licenseAlreadyActivated && transaction?.id) {
+      try {
+        const { data: txRow } = await supabase
+          .from('mercadopago_pix_transactions')
+          .select('license_activated, contract_invoice_id')
+          .eq('id', transaction.id)
+          .maybeSingle()
+        if (txRow?.license_activated) {
+          licenseAlreadyActivated = true
+        }
+        if (!resolvedInvoiceId && txRow?.contract_invoice_id) {
+          resolvedInvoiceId = txRow.contract_invoice_id
+        }
+      } catch {
+        // fallback seguro
+      }
+    }
+
+    // Baixa automática na fatura da empresa (APENAS na fatura vinculada ao pagamento)
+    const targetOrg = organizationId || currentOrganization?.id
+    try {
+      await contractService.settleInvoiceByPayment({
+        invoiceId: resolvedInvoiceId,
+        invoiceNumber: invoiceNumber,
+        companyId: targetOrg,
+        clientName: prefillClientName || currentOrganization?.name,
+        amount: finalAmount,
+        paymentMethod: 'PIX',
+        extendLicense: !licenseAlreadyActivated,
+      })
+
+      // Se a licença foi ativada pelo fallback client, marca license_activated na transação
+      if (!licenseAlreadyActivated && transaction?.id) {
+        await supabase
+          .from('mercadopago_pix_transactions')
+          .update({ status: 'approved', license_activated: true, paid_at: new Date().toISOString() } as any)
+          .eq('id', transaction.id)
+      }
+    } catch (err) {
+      console.warn('Baixa flexível de fatura via modal client:', err)
+    }
+
+    // Atualiza organizações e banners de cobrança no contexto
+    await reloadOrganizations()
+    window.dispatchEvent(new CustomEvent('organization-billing-updated'))
+  }
+
+  const handleFinishModal = () => {
     if (onPaymentSuccess) {
       onPaymentSuccess()
+    }
+    onClose()
+  }
+
+  const handleCloseAttempt = () => {
+    if (step === 'approved') {
+      handleFinishModal()
+    } else {
+      onClose()
     }
   }
 
@@ -242,7 +317,7 @@ export function PixPaymentCheckoutModal({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCloseAttempt}
             className="p-2 rounded-xl text-emerald-100 hover:text-white hover:bg-white/10 transition cursor-pointer"
           >
             <X className="h-5 w-5" />
@@ -507,27 +582,35 @@ export function PixPaymentCheckoutModal({
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-2xl font-black text-gray-900 dark:text-white">
-                  Pagamento aprovado! Seu acesso foi liberado com sucesso.
+                <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                  Pix realizado com sucesso. Obrigado!
                 </h4>
-                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                  A confirmação foi recebida pelo Mercado Pago. A licença da sua empresa está ativa e todas as funcionalidades foram desbloqueadas.
+                <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
+                  O pagamento da sua mensalidade via PIX foi processado e confirmado com sucesso. Sua licença foi renovada por mais 30 dias e a fatura correspondente recebeu baixa automática no sistema.
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-xs text-emerald-900 dark:text-emerald-200 max-w-sm mx-auto flex items-center justify-between">
-                <span className="font-bold">Status do Sistema:</span>
-                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-black uppercase">
-                  <Sparkles className="w-3.5 h-3.5" /> Acesso 100% Liberado
-                </span>
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-xs text-emerald-900 dark:text-emerald-200 max-w-md mx-auto space-y-2 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-600 dark:text-slate-400">Status da Licença:</span>
+                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold uppercase">
+                    <Sparkles className="w-3.5 h-3.5" /> Acesso Liberado (+30 dias)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t border-emerald-100 dark:border-emerald-900/40 pt-2">
+                  <span className="font-bold text-slate-600 dark:text-slate-400">Fatura da Mensalidade:</span>
+                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                    <Check className="w-3.5 h-3.5" /> Baixa Concluída no Financeiro
+                  </span>
+                </div>
               </div>
 
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleFinishModal}
                 className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition cursor-pointer"
               >
-                <span>Acessar o Sistema Agora</span>
+                <span>Concluir e Acessar o Sistema</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

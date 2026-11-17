@@ -136,7 +136,7 @@ describe('organizationBillingService', () => {
       expect(res.isSuspended).toBe(false)
     })
 
-    it('deve emitir alerta diário pós-vencimento se estiver atrasada há menos de 7 dias', async () => {
+    it('deve emitir alerta diário pós-vencimento se estiver atrasada dentro da carência de 5 dias', async () => {
       const late3Days = new Date()
       late3Days.setDate(late3Days.getDate() - 3)
       const yyyy = late3Days.getFullYear()
@@ -174,12 +174,12 @@ describe('organizationBillingService', () => {
       expect(res.isSuspended).toBe(false)
     })
 
-    it('deve acionar a suspensão por inadimplência se a fatura estiver vencida há 7 dias ou mais', async () => {
-      const late8Days = new Date()
-      late8Days.setDate(late8Days.getDate() - 8)
-      const yyyy = late8Days.getFullYear()
-      const mm = String(late8Days.getMonth() + 1).padStart(2, '0')
-      const dd = String(late8Days.getDate()).padStart(2, '0')
+    it('deve acionar a suspensão por inadimplência se a fatura ultrapassar 5 dias de atraso', async () => {
+      const late6Days = new Date()
+      late6Days.setDate(late6Days.getDate() - 6)
+      const yyyy = late6Days.getFullYear()
+      const mm = String(late6Days.getMonth() + 1).padStart(2, '0')
+      const dd = String(late6Days.getDate()).padStart(2, '0')
       const dueStr = `${yyyy}-${mm}-${dd}`
 
       vi.spyOn(contractService, 'getContractForOrganization').mockResolvedValue(null)
@@ -207,7 +207,7 @@ describe('organizationBillingService', () => {
 
       expect(res.isTrial).toBe(false)
       expect(res.isSuspended).toBe(true)
-      expect(res.maxDaysOverdue).toBe(8)
+      expect(res.maxDaysOverdue).toBe(6)
       expect(res.oldestOverdueInvoice?.id).toBe('inv-suspended')
     })
 

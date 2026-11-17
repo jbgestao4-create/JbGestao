@@ -40,10 +40,11 @@ export function SiteAccessAnalyticsPage() {
 
   useEffect(() => {
     void loadData()
-    // Atualiza automaticamente a cada 30 segundos
+    // Atualiza automaticamente a cada 2 minutos (apenas com aba visível)
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       void loadData()
-    }, 30000)
+    }, 120000)
     return () => clearInterval(timer)
   }, [])
 

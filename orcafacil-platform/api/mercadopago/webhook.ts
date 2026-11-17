@@ -39,7 +39,7 @@ export default async function handler(req: any, res: any) {
 
     if (!accessToken && supabaseUrl && serviceRoleKey) {
       try {
-        const settingsRes = await fetch(`${supabaseUrl}/rest/v1/mercadopago_settings?select=access_token&limit=1`, {
+        const settingsRes = await fetch(`${supabaseUrl}/rest/v1/mercadopago_settings?select=access_token&order=updated_at.desc&limit=1`, {
           headers: {
             apikey: serviceRoleKey,
             Authorization: `Bearer ${serviceRoleKey}`,
@@ -102,8 +102,10 @@ export default async function handler(req: any, res: any) {
         console.error('Erro ao gravar log de webhook:', logErr)
       }
 
-      // 4. Se o status for APROVADO, executa a RPC de liberação automática e instantânea da licença
+      // 4. Se o status for APROVADO, executa a RPC de liberação automática e baixa direta
       if (paymentStatus === 'approved') {
+        let rpcSucceeded = false
+        let rpcSettledInvoiceId: string | null = null
         const approvalRes = await fetch(`${supabaseUrl}/rest/v1/rpc/process_mercadopago_payment_approval`, {
           method: 'POST',
           headers: {
@@ -122,7 +124,142 @@ export default async function handler(req: any, res: any) {
           const approvalErr = await approvalRes.text()
           console.error('Erro na RPC de aprovação de pagamento:', approvalErr)
         } else {
+          const approvalJson = await approvalRes.json().catch(() => null)
+          if (approvalJson?.success) {
+            rpcSucceeded = true
+            rpcSettledInvoiceId = approvalJson?.invoice_settled_id || null
+          }
           console.log(`[ControleSoft] Pagamento PIX #${mpPaymentId} aprovado e sistema liberado com sucesso.`)
+        }
+
+        // Baixa direta resiliente de APENAS UMA fatura (somente se a RPC não tiver baixado ainda)
+        try {
+          const txRes = await fetch(
+            `${supabaseUrl}/rest/v1/mercadopago_pix_transactions?mp_payment_id=eq.${mpPaymentId}&limit=1`,
+            {
+              headers: {
+                apikey: serviceRoleKey,
+                Authorization: `Bearer ${serviceRoleKey}`,
+              },
+            }
+          )
+          const txList = txRes.ok ? await txRes.json() : []
+          const tx = txList?.[0]
+
+          const today = new Date().toISOString().split('T')[0]
+          const nowIso = new Date().toISOString()
+
+          if (tx) {
+            const alreadySettledByRpc = Boolean(rpcSettledInvoiceId)
+
+            if (!alreadySettledByRpc) {
+              // A. Baixa por contract_invoice_id (exclusivo)
+              if (tx.contract_invoice_id) {
+                await fetch(
+                  `${supabaseUrl}/rest/v1/software_contract_invoices?id=eq.${tx.contract_invoice_id}&status=in.(pending,overdue)`,
+                  {
+                    method: 'PATCH',
+                    headers: {
+                      apikey: serviceRoleKey,
+                      Authorization: `Bearer ${serviceRoleKey}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      status: 'paid',
+                      payment_date: today,
+                      payment_method: 'PIX',
+                      updated_at: nowIso,
+                    }),
+                  }
+                )
+              } else {
+                // B. Baixa por número da fatura se constar na descrição
+                const fatMatch = (tx.description || '').match(/FAT-[\w-]+/)
+                if (fatMatch) {
+                  await fetch(
+                    `${supabaseUrl}/rest/v1/software_contract_invoices?invoice_number=eq.${fatMatch[0]}&status=in.(pending,overdue)`,
+                    {
+                      method: 'PATCH',
+                      headers: {
+                        apikey: serviceRoleKey,
+                        Authorization: `Bearer ${serviceRoleKey}`,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        status: 'paid',
+                        payment_date: today,
+                        payment_method: 'PIX',
+                        updated_at: nowIso,
+                      }),
+                    }
+                  )
+                } else if (tx.organization_id) {
+                  // C. Baixa por organização (ou nome do cliente) - APENAS a fatura pendente/vencida mais antiga
+                  const unpaidRes = await fetch(
+                    `${supabaseUrl}/rest/v1/software_contract_invoices?company_id=eq.${tx.organization_id}&status=in.(pending,overdue)&order=due_date.asc&limit=1`,
+                    {
+                      headers: {
+                        apikey: serviceRoleKey,
+                        Authorization: `Bearer ${serviceRoleKey}`,
+                      },
+                    }
+                  )
+                  let unpaidList = unpaidRes.ok ? await unpaidRes.json() : []
+                  if ((!unpaidList || unpaidList.length === 0) && tx.payer_name) {
+                    const byNameRes = await fetch(
+                      `${supabaseUrl}/rest/v1/software_contract_invoices?client_name=ilike.${encodeURIComponent(tx.payer_name.trim())}&status=in.(pending,overdue)&order=due_date.asc&limit=1`,
+                      {
+                        headers: {
+                          apikey: serviceRoleKey,
+                          Authorization: `Bearer ${serviceRoleKey}`,
+                        },
+                      }
+                    )
+                    unpaidList = byNameRes.ok ? await byNameRes.json() : []
+                  }
+                  if (unpaidList && unpaidList.length > 0) {
+                    await fetch(
+                      `${supabaseUrl}/rest/v1/software_contract_invoices?id=eq.${unpaidList[0].id}`,
+                      {
+                        method: 'PATCH',
+                        headers: {
+                          apikey: serviceRoleKey,
+                          Authorization: `Bearer ${serviceRoleKey}`,
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          status: 'paid',
+                          payment_date: today,
+                          payment_method: 'PIX',
+                          updated_at: nowIso,
+                        }),
+                      }
+                    )
+                  }
+                }
+              }
+            }
+
+            // D. Apenas se a RPC não processou ainda, garante atualização de status da transação
+            if (!rpcSucceeded) {
+              await fetch(`${supabaseUrl}/rest/v1/mercadopago_pix_transactions?id=eq.${tx.id}`, {
+                method: 'PATCH',
+                headers: {
+                  apikey: serviceRoleKey,
+                  Authorization: `Bearer ${serviceRoleKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  status: 'approved',
+                  status_detail: mpPayment.status_detail || 'accredited',
+                  paid_at: nowIso,
+                  updated_at: nowIso,
+                }),
+              })
+            }
+          }
+        } catch (directErr) {
+          console.error('Erro na baixa direta via webhook:', directErr)
         }
       }
     }

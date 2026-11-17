@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { screenTimeService } from '@shared/services/screen-time.service'
 import { systemSettingsService } from '@shared/services/system-settings.service'
 
-const SYNC_INTERVAL_SECONDS = 30 // Sincroniza com Supabase a cada 30 segundos (reduz tráfego contínuo)
+const SYNC_INTERVAL_SECONDS = 120 // Sincroniza com Supabase a cada 2 minutos (reduz tráfego contínuo)
 
 /**
  * Retorna o tempo configurado de inatividade em milissegundos

@@ -91,85 +91,80 @@ export const mercadopagoService = {
    */
   async getSettings(): Promise<ServiceResult<MercadoPagoSettings>> {
     try {
-      const { data, error } = await supabase.rpc('admin_get_mercadopago_settings')
+      let res: any = null
 
-      if (error) {
-        // Fallback direto via SELECT caso a migration esteja recente
-        const fallback = await supabase
-          .from('mercadopago_settings')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+      // 1. Tenta rpc admin_get_mercadopago_settings (para admin logado)
+      const adminRes = await supabase.rpc('admin_get_mercadopago_settings')
+      if (adminRes && !adminRes.error && adminRes.data) {
+        res = adminRes.data
+      } else {
+        // 2. Se falhar (ex: tela de login com usuário anônimo), chama server_get_mercadopago_settings liberada para anon
+        const serverRes = await supabase.rpc('server_get_mercadopago_settings')
+        if (serverRes && !serverRes.error && serverRes.data) {
+          res = serverRes.data
+        } else {
+          // 3. Fallback direto via SELECT caso a migration esteja recente
+          const fallback = await supabase
+            .from('mercadopago_settings')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
 
-        if (!fallback.error && fallback.data) {
-          const row = fallback.data as any
-          return {
-            success: true,
-            data: {
-              id: row.id,
-              accessToken: row.access_token || '',
-              publicKey: row.public_key || '',
-              webhookSecret: row.webhook_secret || '',
-              isSandbox: row.is_sandbox ?? true,
-              notificationUrl: row.notification_url || '',
-              pixKey: row.pix_key || '',
-              autoActivateLicense: row.auto_activate_license ?? true,
-              licenseDurationDays: row.license_duration_days ?? 30,
-              isActive: row.is_active ?? true,
-              updatedAt: row.updated_at,
-            },
+          if (fallback && !fallback.error && fallback.data) {
+            res = fallback.data
           }
         }
+      }
 
-        // Tenta cache local seguro como último recurso de fallback
+      if (res) {
+        const settings: MercadoPagoSettings = {
+          id: res.id,
+          accessToken: res.access_token || '',
+          publicKey: res.public_key || '',
+          webhookSecret: res.webhook_secret || '',
+          isSandbox: res.is_sandbox ?? true,
+          notificationUrl: res.notification_url || 'https://controlesoft.vercel.app/api/mercadopago/webhook',
+          pixKey: res.pix_key || '',
+          autoActivateLicense: res.auto_activate_license ?? true,
+          licenseDurationDays: res.license_duration_days ?? 30,
+          isActive: res.is_active ?? true,
+          updatedAt: res.updated_at,
+        }
+
         try {
-          const cached = localStorage.getItem(MP_LOCAL_STORAGE_SETTINGS_KEY)
-          if (cached) {
-            return { success: true, data: JSON.parse(cached) }
-          }
+          localStorage.setItem(MP_LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(settings))
         } catch {
           // ignore
         }
 
-        return {
-          success: true,
-          data: {
-            accessToken: '',
-            publicKey: '',
-            webhookSecret: '',
-            isSandbox: true,
-            notificationUrl: 'https://controlesoft.vercel.app/api/mercadopago/webhook',
-            pixKey: '',
-            autoActivateLicense: true,
-            licenseDurationDays: 30,
-            isActive: true,
-          },
-        }
+        return { success: true, data: settings }
       }
 
-      const res = data as any
-      const settings: MercadoPagoSettings = {
-        id: res.id,
-        accessToken: res.access_token || '',
-        publicKey: res.public_key || '',
-        webhookSecret: res.webhook_secret || '',
-        isSandbox: res.is_sandbox ?? true,
-        notificationUrl: res.notification_url || 'https://controlesoft.vercel.app/api/mercadopago/webhook',
-        pixKey: res.pix_key || '',
-        autoActivateLicense: res.auto_activate_license ?? true,
-        licenseDurationDays: res.license_duration_days ?? 30,
-        isActive: res.is_active ?? true,
-        updatedAt: res.updated_at,
-      }
-
+      // Tenta cache local seguro como último recurso de fallback
       try {
-        localStorage.setItem(MP_LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(settings))
+        const cached = localStorage.getItem(MP_LOCAL_STORAGE_SETTINGS_KEY)
+        if (cached) {
+          return { success: true, data: JSON.parse(cached) }
+        }
       } catch {
         // ignore
       }
 
-      return { success: true, data: settings }
+      return {
+        success: true,
+        data: {
+          accessToken: '',
+          publicKey: '',
+          webhookSecret: '',
+          isSandbox: true,
+          notificationUrl: 'https://controlesoft.vercel.app/api/mercadopago/webhook',
+          pixKey: '',
+          autoActivateLicense: true,
+          licenseDurationDays: 30,
+          isActive: true,
+        },
+      }
     } catch (err: any) {
       logger.error('Erro ao obter configurações do Mercado Pago:', err)
       return {
@@ -299,35 +294,31 @@ export const mercadopagoService = {
     try {
       // 1. Busca configurações ativas
       const settingsRes = await this.getSettings()
-      if (!settingsRes.success) {
-        return {
-          success: false,
-          error: settingsRes.error,
-        }
-      }
+      const settings = settingsRes.success ? settingsRes.data : null
+      const token = settings?.accessToken?.trim() || ''
 
-      if (!settingsRes.data.accessToken) {
-        return {
-          success: false,
-          error:
-            'O gateway do Mercado Pago não possui um Access Token configurado nas Configurações do Sistema.',
-        }
-      }
-
-      if (settingsRes.data.accessToken.trim().toUpperCase().startsWith('TESTUSER')) {
+      if (token && token.toUpperCase().startsWith('TESTUSER')) {
         return {
           success: false,
           error:
             'O Access Token configurado é inválido (começa com "TESTUSER...", que é o identificador de usuário de testes e não a chave de API). Acesse Configurações do Desenvolvedor > Mercado Pago e informe o Access Token oficial (que inicia com "TEST-" para testes em Sandbox, ou "APP_USR-" para Produção).',
         }
       }
-      const settings = settingsRes.data
+
+      if (settingsRes.success && !token) {
+        return {
+          success: false,
+          error: 'O gateway do Mercado Pago não possui um Access Token configurado nas Configurações do Sistema.',
+        }
+      }
 
       const formattedAmount = Number(params.amount.toFixed(2))
       const description =
         params.description || `Licença JB Gestão - ${params.accessPlanName || 'Plano de Acesso'}`
 
       // 2. Chama a API serverless na Vercel (eliminando bloqueio de CORS do navegador)
+      // Se o token estiver vazio no client (ex: tela de login sem autenticação),
+      // o endpoint create-pix busca diretamente do banco via service_role.
       const apiBase = getApiBaseUrl()
       const response = await fetch(`${apiBase}/api/mercadopago/create-pix`, {
         method: 'POST',
@@ -344,9 +335,9 @@ export const mercadopagoService = {
           payerName: params.payerName,
           payerEmail: params.payerEmail,
           payerDocument: params.payerDocument,
-          licenseDaysGranted: params.licenseDaysGranted || settings.licenseDurationDays || 30,
-          accessToken: settings.accessToken.trim(),
-          notificationUrl: settings.notificationUrl?.trim() || 'https://controlesoft.vercel.app/api/mercadopago/webhook',
+          licenseDaysGranted: params.licenseDaysGranted || settings?.licenseDurationDays || 30,
+          accessToken: token || undefined,
+          notificationUrl: settings?.notificationUrl?.trim() || 'https://controlesoft.vercel.app/api/mercadopago/webhook',
         }),
       })
 
@@ -441,7 +432,16 @@ export const mercadopagoService = {
    * Consulta o status atualizado de uma transação diretamente na API oficial do Mercado Pago
    * e, se estiver aprovada, ativa o acesso instantaneamente.
    */
-  async checkPaymentStatus(mpPaymentId: number): Promise<ServiceResult<{ status: string; isApproved: boolean }>> {
+  async checkPaymentStatus(
+    mpPaymentId: number,
+  ): Promise<
+    ServiceResult<{
+      status: string
+      isApproved: boolean
+      licenseActivated?: boolean
+      settledInvoiceId?: string | null
+    }>
+  > {
     try {
       const settingsRes = await this.getSettings()
       const token = settingsRes.success ? settingsRes.data?.accessToken : ''
@@ -467,6 +467,8 @@ export const mercadopagoService = {
         data: {
           status: data.status,
           isApproved: data.isApproved,
+          licenseActivated: Boolean(data.licenseActivated),
+          settledInvoiceId: data.settledInvoiceId || null,
         },
       }
     } catch (err: any) {

@@ -46,7 +46,7 @@ export default async function handler(req: any, res: any) {
     if ((!accessToken || !notificationUrl) && supabaseUrl && serviceRoleKey) {
       try {
         const settingsRes = await fetch(
-          `${supabaseUrl}/rest/v1/mercadopago_settings?select=access_token,notification_url&limit=1`,
+          `${supabaseUrl}/rest/v1/mercadopago_settings?select=access_token,notification_url&order=updated_at.desc&limit=1`,
           {
             headers: {
               apikey: serviceRoleKey,

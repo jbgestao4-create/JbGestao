@@ -28,7 +28,7 @@ export default async function handler(req: any, res: any) {
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
       if (supabaseUrl && serviceRoleKey) {
         try {
-          const settingsRes = await fetch(`${supabaseUrl}/rest/v1/mercadopago_settings?select=access_token&limit=1`, {
+          const settingsRes = await fetch(`${supabaseUrl}/rest/v1/mercadopago_settings?select=access_token&order=updated_at.desc&limit=1`, {
             headers: {
               apikey: serviceRoleKey,
               Authorization: `Bearer ${serviceRoleKey}`,

@@ -8,9 +8,6 @@ export const PresentationPage = lazy(() =>
     default: module.PresentationPage,
   })),
 )
-export const RegisterPage = lazy(() =>
-  import('@modules/auth/pages/RegisterPage').then((module) => ({ default: module.RegisterPage })),
-)
 export const ForgotPasswordPage = lazy(() =>
   import('@modules/auth/pages/ForgotPasswordPage').then((module) => ({
     default: module.ForgotPasswordPage,
@@ -218,12 +215,6 @@ export const SystemUpdatesAdminPage = lazy(() =>
 export const PrivacyPolicyPage = lazy(() =>
   import('@modules/auth/pages/PrivacyPolicyPage').then((module) => ({
     default: module.PrivacyPolicyPage,
-  })),
-)
-
-export const ContractsAdminPage = lazy(() =>
-  import('@modules/companies/pages/ContractsAdminPage').then((module) => ({
-    default: module.ContractsAdminPage,
   })),
 )
 

@@ -474,6 +474,27 @@ export const cashSessionService = {
   },
 
   /**
+   * Verificação ultra-leve (apenas coluna id) para saber se o Caixa Geral está aberto.
+   * Reduz Egress do Supabase em badges e cabeçalhos.
+   */
+  async isCashManagementOpen(organizationId: UUID): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('cash_sessions')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .eq('status', 'open')
+        .eq('session_type', 'cash_management')
+        .limit(1)
+        .maybeSingle()
+
+      return !error && Boolean(data?.id)
+    } catch {
+      return false
+    }
+  },
+
+  /**
    * Obtém a última sessão de caixa fechada (ex: Caixa Geral ou PDV).
    * Utilizado para herdar obrigatoriamente o saldo final com o qual o caixa anterior encerrou.
    */

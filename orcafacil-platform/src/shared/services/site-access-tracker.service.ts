@@ -101,7 +101,7 @@ export const siteAccessTrackerService = {
           p_is_mobile: isMobile,
         })
         if (!rpcError) return
-      } catch (err) {
+      } catch {
         // Ignora e segue para fallback
       }
 
@@ -160,12 +160,12 @@ export const siteAccessTrackerService = {
     let logs: SiteAccessLog[] = []
 
     try {
-      // Tenta buscar os últimos 1500 logs da tabela do banco
+      // Busca apenas as colunas utilizadas nas estatísticas, limitando a 1000 registros para economizar Egress
       const { data, error } = await supabase
         .from('site_access_logs')
-        .select('*')
+        .select('id, ip_address, path, referrer, is_mobile, created_at')
         .order('created_at', { ascending: false })
-        .limit(2000)
+        .limit(1000)
 
       if (!error && data && data.length > 0) {
         logs = data as SiteAccessLog[]

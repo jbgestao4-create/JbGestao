@@ -2,7 +2,7 @@ import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 
 const DEVICE_TOKEN_KEY = 'cs_device_session_token'
-const HEARTBEAT_INTERVAL_MS = 25000 // A cada 25 segundos atualiza heartbeat online
+const HEARTBEAT_INTERVAL_MS = 55000 // A cada 55 segundos atualiza heartbeat online (dentro da janela de 90s, reduzindo Egress)
 
 /**
  * Obtém ou gera o token único de dispositivo/navegador.

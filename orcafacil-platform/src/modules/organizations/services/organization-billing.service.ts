@@ -4,6 +4,7 @@ import {
   type ContractInvoice,
   getInvoiceEffectiveStatus,
 } from '@modules/companies/services/contract.service'
+import { calculateCompanyLicenseStatus } from '@modules/companies/utils/license.utils'
 
 export interface OrganizationBillingInfo {
   isTrial: boolean
@@ -21,7 +22,7 @@ export interface OrganizationBillingInfo {
   hasOverdueWarning: boolean
   overdueInvoice: ContractInvoice | null
   daysOverdue: number
-  // Suspensão por inadimplência (7 dias ou mais de atraso)
+  // Suspensão por inadimplência (mais de 5 dias de atraso)
   isSuspended: boolean
   oldestOverdueInvoice: ContractInvoice | null
   maxDaysOverdue: number
@@ -63,14 +64,14 @@ export const organizationBillingService = {
   /**
    * Obtém as informações financeiras completas da organização:
    * Contrato, histórico de faturas pagas e a vencer, status de teste,
-   * alertas de 3 dias para vencer, cobrança diária de atraso e suspensão por inadimplência após 7 dias.
+   * alertas de 3 dias para vencer, cobrança diária de atraso e suspensão por inadimplência após 5 dias.
    */
   async getBillingInfo(org: {
     id: string
     name: string
     trialEndsAt?: string | null
   }): Promise<OrganizationBillingInfo> {
-    // Executa rotina de renovação automática quando estiver a 3 dias ou menos do vencimento
+    // Executa rotina de renovação automática
     try {
       await contractService.autoGenerateInvoicesDueSoon()
     } catch {
@@ -121,8 +122,8 @@ export const organizationBillingService = {
       }
     }
 
-    // Se estiver em período de testes gratuito, não gera custo nem alertas de cobrança/bloqueio
-    if (isTrial) {
+    // Se estiver em período de testes gratuito e sem faturas em aberto, não gera custos nem alertas de cobrança/bloqueio
+    if (isTrial && unpaidInvoices.length === 0) {
       return {
         isTrial: true,
         trialEndsAt: effectiveTrialEndsAt,
@@ -155,6 +156,10 @@ export const organizationBillingService = {
     let isSuspended = false
     let oldestOverdueInvoice: ContractInvoice | null = null
 
+    const licenseStatus = calculateCompanyLicenseStatus(org.trialEndsAt, true)
+    const hasRemainingLicenseDays =
+      licenseStatus.status === 'active' && licenseStatus.daysRemaining > 0
+
     for (const inv of unpaidInvoices) {
       const diff = getDiffDaysFromToday(inv.dueDate)
 
@@ -168,15 +173,15 @@ export const organizationBillingService = {
       } else if (diff < 0) {
         // Fatura vencida
         const daysLate = Math.abs(diff)
-        if (daysLate > 5) {
-          // Passou dos 5 dias de carência -> Bloqueado por inadimplência
+        if (daysLate > 5 && !hasRemainingLicenseDays) {
+          // Passou dos 5 dias de carência E não tem mais dias restantes de licença -> Bloqueado por inadimplência
           isSuspended = true
           if (daysLate > maxDaysOverdue) {
             maxDaysOverdue = daysLate
             oldestOverdueInvoice = inv
           }
         } else {
-          // Vencida há 5 dias ou menos -> Período de tolerância/carência para renovação
+          // Dentro dos 5 dias de carência OU ainda possui dias restantes de licença -> Apenas notifica atraso (sem bloquear)
           hasOverdueWarning = true
           if (daysLate > maxDaysOverdue) {
             maxDaysOverdue = daysLate
