@@ -364,8 +364,11 @@ export function CompanyManagementPage() {
         <ContractsManagementSection
           existingCompanies={companies}
           initialTab="contracts"
+          hideSubTabs={true}
+          hideBanner={true}
           initialCompanyId={prefillCompanyId}
           prefillCompanyForNewContract={prefillCompanyForContract}
+          onSelectTab={(tab) => setSearchParams({ tab: tab === 'payments' ? 'invoices' : 'contracts' })}
         />
       )}
 
@@ -374,7 +377,10 @@ export function CompanyManagementPage() {
         <ContractsManagementSection
           existingCompanies={companies}
           initialTab="payments"
+          hideSubTabs={true}
+          hideBanner={true}
           initialCompanyId={prefillCompanyId}
+          onSelectTab={(tab) => setSearchParams({ tab: tab === 'payments' ? 'invoices' : 'contracts' })}
         />
       )}
 

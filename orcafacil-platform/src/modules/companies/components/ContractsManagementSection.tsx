@@ -39,6 +39,9 @@ interface ContractsManagementSectionProps {
   onClearPrefillCompany?: () => void
   initialTab?: 'contracts' | 'payments'
   initialCompanyId?: string
+  hideSubTabs?: boolean
+  hideBanner?: boolean
+  onSelectTab?: (tab: 'contracts' | 'payments') => void
 }
 
 export function ContractsManagementSection({
@@ -47,6 +50,9 @@ export function ContractsManagementSection({
   onClearPrefillCompany,
   initialTab = 'contracts',
   initialCompanyId,
+  hideSubTabs = false,
+  hideBanner = false,
+  onSelectTab,
 }: ContractsManagementSectionProps) {
   // Controle de Abas: 'contracts' (Contratos) ou 'payments' (Faturas & Pagamentos)
   const [activeTab, setActiveTab] = useState<'contracts' | 'payments'>(initialTab)
@@ -378,83 +384,152 @@ export function ContractsManagementSection({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner de Contratos */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400">
-            <FileSignature className="h-4 w-4" />
-            <span>Módulo de Emissão & Gestão de Contratos de Software</span>
+      {/* Top Banner de Contratos (exibido apenas quando standalone) */}
+      {!hideBanner && (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+              <FileSignature className="h-4 w-4" />
+              <span>Módulo de Emissão & Gestão de Contratos de Software</span>
+            </div>
+            <h2 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+              Gerar e Administrar Contratos de Licença / Aluguel
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+              Gere instrumentos contratuais para locação mensal do sistema, definindo o valor da mensalidade, responsável legal, data do contrato e condições para futuros clientes.
+            </p>
           </div>
-          <h2 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
-            Gerar e Administrar Contratos de Licença / Aluguel
-          </h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Gere instrumentos contratuais para locação mensal do sistema, definindo o valor da mensalidade, responsável legal, data do contrato e condições para futuros clientes.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => void loadData()}
+              disabled={isLoading}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
+
+            <Button
+              onClick={() => {
+                setEditingContract(null)
+                setIsFormModalOpen(true)
+              }}
+              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Contrato de Aluguel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-header simplificado quando integrado na página de empresas */}
+      {hideBanner && activeTab === 'contracts' && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-200 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <FileSignature className="h-5 w-5 text-purple-600" />
+              Contratos de Licença de Software
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+              Gere e administre os contratos de locação mensal do sistema para as empresas cadastradas.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadData()}
+              disabled={isLoading}
+              className="gap-2 text-xs"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingContract(null)
+                setIsFormModalOpen(true)
+              }}
+              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-sm text-xs font-bold"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Contrato de Aluguel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {hideBanner && activeTab === 'payments' && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-200 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-emerald-600" />
+              Pagamentos Realizados & Faturas Financeiras
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+              Acompanhe mensalidades recebidas via PIX, faturas pendentes, carência e inadimplência.
+            </p>
+          </div>
+
           <Button
             variant="outline"
+            size="sm"
             onClick={() => void loadData()}
             disabled={isLoading}
-            className="gap-2"
+            className="gap-2 text-xs"
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
-
-          <Button
-            onClick={() => {
-              setEditingContract(null)
-              setIsFormModalOpen(true)
-            }}
-            className="gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Contrato de Aluguel
-          </Button>
         </div>
-      </div>
+      )}
 
-      {/* Navegação por Abas: Contratos x Pagamentos & Faturas */}
-      <div className="flex border-b border-gray-200 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={() => setActiveTab('contracts')}
-          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-sm font-bold transition-all ${
-            activeTab === 'contracts'
-              ? 'border-purple-600 text-purple-600 dark:text-purple-400 bg-purple-50/30 dark:bg-purple-950/20'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
-        >
-          <FileSignature className="h-4 w-4" />
-          <span>Contratos de Licença ({contracts.length})</span>
-          {overdueContractsCount > 0 && (
-            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 animate-pulse">
-              {overdueContractsCount} {overdueContractsCount === 1 ? 'cliente com fatura vencida' : 'clientes com faturas vencidas'}
-            </span>
-          )}
-        </button>
+      {/* Navegação por Abas: Contratos x Pagamentos & Faturas (Ocultada quando embutida no Empresas Cadastradas) */}
+      {!hideSubTabs && (
+        <div className="flex border-b border-gray-200 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setActiveTab('contracts')}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 text-sm font-bold transition-all ${
+              activeTab === 'contracts'
+                ? 'border-purple-600 text-purple-600 dark:text-purple-400 bg-purple-50/30 dark:bg-purple-950/20'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <FileSignature className="h-4 w-4" />
+            <span>Contratos de Licença ({contracts.length})</span>
+            {overdueContractsCount > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 animate-pulse">
+                {overdueContractsCount} {overdueContractsCount === 1 ? 'cliente com fatura vencida' : 'clientes com faturas vencidas'}
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('payments')}
-          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-sm font-bold transition-all ${
-            activeTab === 'payments'
-              ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
-        >
-          <CreditCard className="h-4 w-4" />
-          <span>Pagamentos Realizados & Financeiro ({invoices.length})</span>
-          {invoiceMetrics.overdueCount > 0 && (
-            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 animate-pulse">
-              {invoiceMetrics.overdueCount} {invoiceMetrics.overdueCount === 1 ? 'vencida' : 'vencidas'}
-            </span>
-          )}
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('payments')}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 text-sm font-bold transition-all ${
+              activeTab === 'payments'
+                ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <CreditCard className="h-4 w-4" />
+            <span>Pagamentos Realizados & Financeiro ({invoices.length})</span>
+            {invoiceMetrics.overdueCount > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 animate-pulse">
+                {invoiceMetrics.overdueCount} {invoiceMetrics.overdueCount === 1 ? 'vencida' : 'vencidas'}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {feedbackMsg && (
         <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -802,7 +877,11 @@ export function ContractsManagementSection({
                                 onClick={() => {
                                   setSelectedClientFilter(c.clientName)
                                   setInvoiceStatusFilter('all')
-                                  setActiveTab('payments')
+                                  if (onSelectTab) {
+                                    onSelectTab('payments')
+                                  } else {
+                                    setActiveTab('payments')
+                                  }
                                 }}
                                 className="gap-1.5 text-xs font-bold text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-300 dark:border-emerald-800"
                                 title="Abrir aba de faturas deste cliente (ver todas pagas e não pagas)"
