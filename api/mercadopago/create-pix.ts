@@ -117,8 +117,19 @@ export default async function handler(req: any, res: any) {
     const mpData = await mpRes.json()
 
     if (!mpRes.ok) {
+      let friendlyError = mpData.message || mpData.cause?.[0]?.description || 'Erro ao gerar cobrança PIX no Mercado Pago.'
+
+      if (
+        friendlyError.includes('Unauthorized use of live credentials') ||
+        mpData.message?.includes('Unauthorized use of live credentials') ||
+        JSON.stringify(mpData).includes('Unauthorized use of live credentials')
+      ) {
+        friendlyError =
+          'Credencial de Produção não autorizada pelo Mercado Pago. Para resolver: 1) No painel do Mercado Pago Developers (mercadopago.com.br/developers), acesse sua Aplicação > "Credenciais de produção" e clique em "Ativar credenciais" preenchendo as informações do negócio; OU 2) Se ainda estiver em fase de testes, utilize as "Credenciais de teste" (iniciadas com TEST-).'
+      }
+
       return res.status(mpRes.status).json({
-        error: mpData.message || mpData.cause?.[0]?.description || 'Erro ao gerar cobrança PIX no Mercado Pago.',
+        error: friendlyError,
         details: mpData,
       })
     }
