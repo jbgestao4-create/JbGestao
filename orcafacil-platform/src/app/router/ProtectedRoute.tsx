@@ -3,8 +3,11 @@ import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { useNavigate } from 'react-router-dom'
-import { Clock, Lock } from 'lucide-react'
+import { Clock, Lock, QrCode, Zap } from 'lucide-react'
 import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
+import { Button } from '@shared/components/ui/Button'
+import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
+import { calculateCompanyLicenseStatus } from '@modules/companies/utils/license.utils'
 import { useTheme } from '@shared/context/ThemeContext'
 import { AppLayout } from '@app/layouts/AppLayout'
 import { BrandLoadingScreen } from '@shared/components/BrandLoadingScreen'
@@ -22,10 +25,11 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteProps) {
   const { user, isLoading, signOut, mustChangePassword } = useAuth()
-  const { currentOrganization } = useOrganization()
+  const { currentOrganization, reloadOrganizations } = useOrganization()
   const navigate = useNavigate()
   const { setInsideSystem } = useTheme()
   const location = useLocation()
+  const [isPixModalOpen, setIsPixModalOpen] = useState(false)
 
   const handleInactivityLogout = useCallback(() => {
     void signOut().then(() => {
@@ -157,20 +161,35 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
             ) encontra-se temporariamente suspenso devido a pendência financeira de assinatura ou inativação administrativa.
           </p>
           <p className="text-xs text-gray-500 dark:text-slate-400 mb-6 leading-relaxed">
-            Seus dados permanecem preservados pelo período de carência contratual (30 a 90 dias). Entre em contato pelos canais abaixo para regularização do plano ou solicitações relativas à LGPD:
+            Seus dados permanecem preservados pelo período de carência contratual (30 a 90 dias). Realize o pagamento via PIX para somar +30 dias de acesso ou solicite suporte:
           </p>
           <div className="space-y-3">
+            {/* Botão para realizar pagamento via PIX (+30 dias) */}
+            <Button
+              type="button"
+              onClick={() => setIsPixModalOpen(true)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-3.5 text-sm font-bold text-white shadow-md transition-all cursor-pointer"
+            >
+              <QrCode className="h-5 w-5" />
+              <Zap className="h-4 w-4" />
+              <span>Realizar Pagamento via PIX (+30 Dias)</span>
+            </Button>
+
+            {/* Botão de Mais Informações via WhatsApp */}
             <a
-              href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20acesso%20da%20minha%20empresa%20est%C3%A1%20desativado.%20Gostaria%20de%20solicitar%20suporte."
+              href={`https://wa.me/5531986848490?text=${encodeURIComponent(
+                `Olá! O acesso da minha empresa "${currentOrganization.name}" está suspenso. Gostaria de mais informações sobre pagamento e regularização.`,
+              )}`}
               target="_blank"
               rel="noreferrer"
-              title="Falar com Suporte no WhatsApp"
-              aria-label="Falar com Suporte no WhatsApp"
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 shadow-sm transition-colors"
+              title="Mais informações via WhatsApp"
+              aria-label="Mais informações via WhatsApp"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-600/40 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm font-bold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 shadow-xs transition-colors"
             >
-              <WhatsAppIcon className="h-5 w-5" />
-              <span>Regularizar Acesso no WhatsApp</span>
+              <WhatsAppIcon className="h-5 w-5 text-emerald-600" />
+              <span>Mais Informações via WhatsApp</span>
             </a>
+
             <div className="text-xs text-gray-500 dark:text-slate-400">
               E-mail DPO / Suporte:{' '}
               <a
@@ -194,12 +213,28 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
             </button>
           </div>
         </div>
+
+        <PixPaymentCheckoutModal
+          isOpen={isPixModalOpen}
+          onClose={() => setIsPixModalOpen(false)}
+          organizationId={currentOrganization.id}
+          prefillClientName={currentOrganization.name}
+          customTitle="Regularização de Licença • Liberação Imediata +30 Dias"
+          onPaymentSuccess={async () => {
+            setIsPixModalOpen(false)
+            await reloadOrganizations()
+          }}
+        />
       </div>
     )
   }
 
   // 2. Se o período de teste expirou e o usuário não é o Proprietário do Sistema
-  const isTrialExpired = Boolean(
+  const lic = calculateCompanyLicenseStatus(
+    currentOrganization?.trialEndsAt,
+    currentOrganization?.isActive ?? true,
+  )
+  const isTrialExpired = lic.isBlockedByOverdue || Boolean(
     currentOrganization?.trialEndsAt &&
       new Date(currentOrganization.trialEndsAt).getTime() < Date.now(),
   )
@@ -225,17 +260,32 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
             O período de avaliação da empresa <strong>{currentOrganization.name}</strong> encerrou-se em {expiredDateFormatted}. O acesso às funcionalidades está suspenso até a contratação ou renovação do plano, permanecendo seus dados preservados pelo período de carência (30 a 90 dias).
           </p>
           <div className="space-y-3">
+            {/* Botão para realizar pagamento via PIX (+30 dias na empresa) */}
+            <Button
+              type="button"
+              onClick={() => setIsPixModalOpen(true)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-3.5 text-sm font-bold text-white shadow-md transition-all cursor-pointer"
+            >
+              <QrCode className="h-5 w-5" />
+              <Zap className="h-4 w-4" />
+              <span>Realizar Pagamento via PIX (+30 Dias)</span>
+            </Button>
+
+            {/* Botão de Mais Informações via WhatsApp */}
             <a
-              href="https://wa.me/5531986848490?text=Ol%C3%A1%21%20O%20tempo%20de%20teste%20da%20minha%20empresa%20expirou.%20Gostaria%20de%20renovar%20o%20acesso%20com%20a%20JB%20Software."
+              href={`https://wa.me/5531986848490?text=${encodeURIComponent(
+                `Olá! O tempo de teste da minha empresa "${currentOrganization.name}" encerrou. Gostaria de mais informações sobre a contratação / renovação.`,
+              )}`}
               target="_blank"
               rel="noreferrer"
-              title="Falar com a ControleSoft no WhatsApp"
-              aria-label="Falar com a ControleSoft no WhatsApp"
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 shadow-sm transition-colors"
+              title="Mais informações via WhatsApp"
+              aria-label="Mais informações via WhatsApp"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-600/40 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm font-bold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 shadow-xs transition-colors"
             >
-              <WhatsAppIcon className="h-5 w-5" />
-              <span>Contratar / Regularizar no WhatsApp</span>
+              <WhatsAppIcon className="h-5 w-5 text-emerald-600" />
+              <span>Mais Informações via WhatsApp</span>
             </a>
+
             <div className="text-xs text-gray-500 dark:text-slate-400">
               E-mail DPO / Suporte:{' '}
               <a
@@ -259,6 +309,18 @@ export function ProtectedRoute({ children, hideLayout = false }: ProtectedRouteP
             </button>
           </div>
         </div>
+
+        <PixPaymentCheckoutModal
+          isOpen={isPixModalOpen}
+          onClose={() => setIsPixModalOpen(false)}
+          organizationId={currentOrganization.id}
+          prefillClientName={currentOrganization.name}
+          customTitle="Renovação de Licença • Liberação Imediata +30 Dias"
+          onPaymentSuccess={async () => {
+            setIsPixModalOpen(false)
+            await reloadOrganizations()
+          }}
+        />
       </div>
     )
   }
