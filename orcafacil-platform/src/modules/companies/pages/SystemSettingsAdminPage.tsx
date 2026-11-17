@@ -15,7 +15,6 @@ import {
   Monitor,
   AlertCircle,
   CreditCard,
-  Zap,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { isSystemOwner } from '@shared/utils/system-owner'

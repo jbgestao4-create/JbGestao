@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, LogOut, UserCog, Zap, QrCode } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { ChevronDown, LogOut, UserCog, Zap } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { supabase } from '@app/config/supabase'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -57,7 +57,6 @@ export function ProfileMenu({
   const { currentOrganization, userRole } = useOrganization()
   const { user } = useAuth()
   const isAdmin = userRole === 'owner' || userRole === 'admin' || isSystemOwner(user)
-  const navigate = useNavigate()
 
   useEffect(() => {
     if (!currentOrganization?.id) {

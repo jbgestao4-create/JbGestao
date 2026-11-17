@@ -330,6 +330,33 @@ export function MercadoPagoSettingsSection() {
                 {showToken ? 'Ocultar' : 'Exibir'}
               </button>
             </div>
+
+            {settings.accessToken && settings.accessToken.toUpperCase().startsWith('TESTUSER') && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong>Atenção:</strong> Você colou o nome/ID de um usuário de teste (<code>TESTUSER...</code>). O <strong>Access Token</strong> oficial do Mercado Pago fica na aba <strong>Credenciais de teste</strong> (ou Credenciais de produção) dentro da sua aplicação e sempre começa com <strong><code>TEST-</code></strong> ou <strong><code>APP_USR-</code></strong> seguido de um código longo.
+                </div>
+              </div>
+            )}
+
+            {settings.accessToken && !settings.accessToken.toUpperCase().startsWith('TESTUSER') && (
+              settings.isSandbox && settings.accessToken.startsWith('APP_USR-') ? (
+                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Aviso:</strong> Você colou um token de Produção (<code>APP_USR-...</code>), mas o ambiente acima está marcado como <strong>Modo Sandbox (Testes)</strong>. Para usar cobranças reais, selecione <strong>Modo Produção Oficial</strong> acima. Para testar sem dinheiro real, use o token que começa com <code>TEST-...</code> na aba "Credenciais de teste" do Mercado Pago.
+                  </div>
+                </div>
+              ) : !settings.isSandbox && settings.accessToken.startsWith('TEST-') ? (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Aviso:</strong> Você colou um token de Testes (<code>TEST-...</code>), mas o ambiente acima está marcado como <strong>Modo Produção Oficial</strong>. Selecione <strong>Modo Sandbox (Testes)</strong> acima para validar pagamentos de teste.
+                  </div>
+                </div>
+              ) : null
+            )}
           </div>
 
           {/* Public Key */}
