@@ -49,7 +49,6 @@ import {
   SystemNotificationsAdminPage,
   SystemUpdatesAdminPage,
   PrivacyPolicyPage,
-  ContractsAdminPage,
   PresentationPage,
   SiteAccessAnalyticsPage,
   PixPaymentCheckoutPage,
@@ -221,17 +220,11 @@ export const router = createBrowserRouter([
   },
   {
     path: '/admin/contracts',
-    element: (
-      <ProtectedRoute>
-        <RequireOwner>
-          <ContractsAdminPage />
-        </RequireOwner>
-      </ProtectedRoute>
-    ),
+    element: <Navigate to="/admin/companies?tab=contracts" replace />,
   },
   {
     path: '/contracts',
-    element: <Navigate to="/admin/contracts" replace />,
+    element: <Navigate to="/admin/companies?tab=contracts" replace />,
   },
   {
     path: '/suggestions',

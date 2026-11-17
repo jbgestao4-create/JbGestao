@@ -9,7 +9,6 @@ import {
   Layers,
   BellRing,
   GitBranch,
-  FileSignature,
   Settings,
   Activity,
 } from 'lucide-react'
@@ -18,7 +17,6 @@ import { useOrganization } from '@modules/organizations/context/OrganizationCont
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import { companyManagementService } from '../services/company-management.service'
-import { contractService } from '../services/contract.service'
 import { announcementService, type SystemAnnouncement } from '@shared/services/announcement.service'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { systemNotificationService } from '@shared/services/system-notification.service'
@@ -41,7 +39,6 @@ export function DeveloperSettingsPage() {
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
   const [activeNotificationsCount, setActiveNotificationsCount] = useState<number | null>(null)
   const [updatesCount, setUpdatesCount] = useState<number | null>(null)
-  const [contractsCount, setContractsCount] = useState<number | null>(null)
   const [siteVisitsToday, setSiteVisitsToday] = useState<number | null>(null)
   const [inactivityMinutes, setInactivityMinutes] = useState<number>(() =>
     systemSettingsService.getLocalInactivityTimeoutMinutes(),
@@ -52,13 +49,12 @@ export function DeveloperSettingsPage() {
 
     const loadStats = async () => {
       try {
-        const [compRes, annRes, maintRes, notifRes, updRes, contractRes, inactRes, siteStats] = await Promise.all([
+        const [compRes, annRes, maintRes, notifRes, updRes, inactRes, siteStats] = await Promise.all([
           companyManagementService.listAll(),
           announcementService.listAll(),
           systemMaintenanceService.getStatus(),
           systemNotificationService.listAll(),
           systemUpdateService.listAll(),
-          contractService.listContracts(),
           systemSettingsService.getInactivitySettings(),
           siteAccessTrackerService.getAccessStats().catch(() => null),
         ])
@@ -84,9 +80,6 @@ export function DeveloperSettingsPage() {
           }
           if (updRes.success && updRes.data) {
             setUpdatesCount(updRes.data.length)
-          }
-          if (contractRes.success && contractRes.data) {
-            setContractsCount(contractRes.data.length)
           }
         }
 
@@ -144,27 +137,13 @@ export function DeveloperSettingsPage() {
       badge: companiesCount !== null ? `${companiesCount} cadastradas` : undefined,
       badgeColor: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300',
       description:
-        'Gerencie o acesso de cada Identificador Único (SLUG)/Empresa cadastrado, ative ou desative acessos, configure planos e controle os módulos liberados.',
+        'Gerencie as empresas cadastradas, contratos de locação, faturas mensais, controle financeiro de pagamentos, ative ou desative acessos e controle os módulos liberados.',
       actionText: 'Acessar Empresas',
       path: '/admin/companies',
       icon: Building2,
       iconBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-400',
       cardHoverBorder: 'hover:border-indigo-400 dark:hover:border-indigo-600',
       accentColor: 'indigo',
-    },
-    {
-      id: 'contracts',
-      title: 'Gerar Contratos / Faturas',
-      badge: contractsCount !== null ? `${contractsCount} contratos` : undefined,
-      badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 font-semibold',
-      description:
-        'Gere e administre contratos de locação/aluguel e faturas mensais do sistema para futuros clientes, definindo mensalidade, data, responsável e controle financeiro de pagamentos.',
-      actionText: 'Gerar Contratos / Faturas',
-      path: '/admin/contracts',
-      icon: FileSignature,
-      iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/70 dark:text-purple-400',
-      cardHoverBorder: 'hover:border-purple-400 dark:hover:border-purple-600',
-      accentColor: 'purple',
     },
     {
       id: 'announcements',
