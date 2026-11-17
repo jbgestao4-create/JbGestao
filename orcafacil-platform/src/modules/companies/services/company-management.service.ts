@@ -889,6 +889,66 @@ export const companyManagementService = {
   },
 
   /**
+   * Adiciona dias de licença à empresa (soma aos dias restantes se ainda estiver ativa,
+   * ou define a partir de hoje se estiver vencida ou sem data).
+   * Cada pagamento conta 30 dias de acesso normal + 5 dias de carência.
+   */
+  async addLicenseDays(companyId: UUID, daysToAdd = 30): Promise<ServiceResult<{ newExpiry: string }>> {
+    try {
+      // 1. Tenta a nova RPC admin_add_company_license_days
+      const { data: rpcData, error: rpcError } = await supabase.rpc('admin_add_company_license_days', {
+        p_company_id: companyId,
+        p_days: daysToAdd,
+      })
+
+      if (!rpcError && rpcData) {
+        return { success: true, data: { newExpiry: rpcData } }
+      }
+
+      // 2. Fallback resiliente via consulta e atualização direta
+      const { data: orgData, error: fetchErr } = await supabase
+        .from('organizations')
+        .select('trial_ends_at')
+        .eq('id', companyId)
+        .maybeSingle()
+
+      if (fetchErr) {
+        return { success: false, error: 'Falha ao consultar validade da empresa.' }
+      }
+
+      const currentExpiry = (orgData as any)?.trial_ends_at ? new Date((orgData as any).trial_ends_at) : null
+      const now = new Date()
+      let baseDate = now
+
+      // Se a licença atual ainda estiver ativa (futura), soma aos dias restantes
+      if (currentExpiry && currentExpiry.getTime() > now.getTime()) {
+        baseDate = currentExpiry
+      }
+
+      const newDate = new Date(baseDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000)
+      const newIso = newDate.toISOString()
+
+      const { error: updateErr } = await supabase
+        .from('organizations')
+        .update({
+          trial_ends_at: newIso,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq('id', companyId)
+
+      if (updateErr) {
+        return { success: false, error: 'Falha ao atualizar licença da empresa.' }
+      }
+
+      return { success: true, data: { newExpiry: newIso } }
+    } catch (err: any) {
+      logger.error('Erro ao somar dias de licença:', err)
+      return { success: false, error: err.message || 'Erro inesperado ao somar dias de licença.' }
+    }
+  },
+
+  /**
    * Atualiza os módulos e páginas acessíveis por uma empresa.
    */
   async updateCompanyModules(

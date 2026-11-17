@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   Building2,
+  CalendarClock,
   CheckCircle2,
   Clock,
   FileSignature,
@@ -40,6 +41,7 @@ import {
   type ContractInvoice,
   getInvoiceEffectiveStatus,
 } from '../services/contract.service'
+import { calculateCompanyLicenseStatus } from '../utils/license.utils'
 
 export function CompanyManagementPage() {
   const { user } = useAuth()
@@ -50,7 +52,7 @@ export function CompanyManagementPage() {
   const [invoices, setInvoices] = useState<ContractInvoice[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'grace' | 'blocked' | 'inactive'>('all')
 
   // Modais
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
@@ -125,15 +127,29 @@ export function CompanyManagementPage() {
         (c.cnpj && c.cnpj.includes(searchTerm)) ||
         (c.responsible && c.responsible.toLowerCase().includes(searchTerm.toLowerCase()))
 
-      if (statusFilter === 'active') return matchesSearch && c.isActive
+      const lic = calculateCompanyLicenseStatus(c.trialEndsAt, c.isActive)
+
+      if (statusFilter === 'active') return matchesSearch && c.isActive && !lic.isBlockedByOverdue && lic.status !== 'grace_period'
+      if (statusFilter === 'grace') return matchesSearch && lic.status === 'grace_period'
+      if (statusFilter === 'blocked') return matchesSearch && (lic.isBlockedByOverdue || !c.isActive)
       if (statusFilter === 'inactive') return matchesSearch && !c.isActive
       return matchesSearch
     })
   }, [companies, searchTerm, statusFilter])
 
   const totalCount = companies.length
-  const activeCount = companies.filter((c) => c.isActive).length
-  const inactiveCount = totalCount - activeCount
+  const activeCount = companies.filter((c) => {
+    const lic = calculateCompanyLicenseStatus(c.trialEndsAt, c.isActive)
+    return c.isActive && !lic.isBlockedByOverdue && lic.status !== 'grace_period'
+  }).length
+  const graceCount = companies.filter((c) => {
+    const lic = calculateCompanyLicenseStatus(c.trialEndsAt, c.isActive)
+    return lic.status === 'grace_period'
+  }).length
+  const blockedCount = companies.filter((c) => {
+    const lic = calculateCompanyLicenseStatus(c.trialEndsAt, c.isActive)
+    return lic.isBlockedByOverdue || !c.isActive
+  }).length
 
   const handleConfirmToggleStatus = async () => {
     if (!confirmStatusCompany) return
@@ -270,7 +286,7 @@ export function CompanyManagementPage() {
       )}
 
       {/* Cards de Métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Total de Empresas</span>
@@ -284,24 +300,35 @@ export function CompanyManagementPage() {
 
         <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">Empresas Ativas</span>
+            <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">Licenças Ativas</span>
             <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/60 p-2 text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="h-4 w-4" />
+              <ShieldCheck className="h-4 w-4" />
             </div>
           </div>
           <p className="mt-2 text-2xl font-bold text-emerald-800 dark:text-emerald-200">{activeCount}</p>
-          <span className="text-xs text-emerald-700/80 dark:text-emerald-400">Acesso liberado</span>
+          <span className="text-xs text-emerald-700/80 dark:text-emerald-400">Acesso regular (30 dias)</span>
+        </div>
+
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">Em Carência (5 dias)</span>
+            <div className="rounded-lg bg-amber-100 dark:bg-amber-950/60 p-2 text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-amber-800 dark:text-amber-200">{graceCount}</p>
+          <span className="text-xs text-amber-700/80 dark:text-amber-400">Prazo para renovar</span>
         </div>
 
         <div className="rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-rose-800 dark:text-rose-300">Empresas Desativadas</span>
+            <span className="text-xs font-semibold text-rose-800 dark:text-rose-300">Bloqueadas (Inadimplência)</span>
             <div className="rounded-lg bg-rose-100 dark:bg-rose-900/60 p-2 text-rose-700 dark:text-rose-300">
               <Lock className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-2xl font-bold text-rose-800 dark:text-rose-200">{inactiveCount}</p>
-          <span className="text-xs text-rose-700/80 dark:text-rose-400">Acesso bloqueado</span>
+          <p className="mt-2 text-2xl font-bold text-rose-800 dark:text-rose-200">{blockedCount}</p>
+          <span className="text-xs text-rose-700/80 dark:text-rose-400">Acesso suspenso</span>
         </div>
       </div>
 
@@ -318,11 +345,11 @@ export function CompanyManagementPage() {
           />
         </div>
 
-        <div className="flex items-center gap-1.5 self-start sm:self-center">
+        <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-center">
           <button
             type="button"
             onClick={() => setStatusFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               statusFilter === 'all'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
@@ -333,7 +360,7 @@ export function CompanyManagementPage() {
           <button
             type="button"
             onClick={() => setStatusFilter('active')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               statusFilter === 'active'
                 ? 'bg-emerald-600 text-white'
                 : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
@@ -343,14 +370,25 @@ export function CompanyManagementPage() {
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter('inactive')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              statusFilter === 'inactive'
+            onClick={() => setStatusFilter('grace')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              statusFilter === 'grace'
+                ? 'bg-amber-600 text-white'
+                : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            Em Carência ({graceCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('blocked')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              statusFilter === 'blocked'
                 ? 'bg-rose-600 text-white'
                 : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
             }`}
           >
-            Desativadas ({inactiveCount})
+            Bloqueadas ({blockedCount})
           </button>
         </div>
       </div>
@@ -377,9 +415,8 @@ export function CompanyManagementPage() {
                 <tr>
                   <th className="px-4 py-3.5">Empresa / Negócio</th>
                   <th className="px-4 py-3.5">Último Acesso</th>
-                  <th className="px-4 py-3.5">Usuários Logados</th>
+                  <th className="px-4 py-3.5">Dias Restantes de Licença</th>
                   <th className="px-4 py-3.5">Status de Acesso</th>
-                  <th className="px-4 py-3.5">Período de Teste</th>
                   <th className="px-4 py-3.5">Páginas Liberadas</th>
                   <th className="px-4 py-3.5">Administrador</th>
                   <th className="px-4 py-3.5 text-right">Ações de Gestão</th>
@@ -465,85 +502,103 @@ export function CompanyManagementPage() {
                         )}
                       </td>
 
-                      {/* Usuários desta empresa atualmente logados */}
+                      {/* Dias Restantes de Licença (No lugar de Usuários Logados) */}
                       <td className="px-4 py-4">
-                        {(comp.loggedUsersCount ?? 0) > 0 ? (
-                          <span
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70"
-                            title="Usuários desta empresa com sessão ativa agora"
-                          >
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <Users className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span>{comp.loggedUsersCount} {comp.loggedUsersCount === 1 ? 'logado agora' : 'logados agora'}</span>
-                          </span>
-                        ) : (
-                          <span
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-slate-400 border border-gray-200 dark:border-slate-700"
-                            title="Nenhum usuário desta empresa está online no momento"
-                          >
-                            <Users className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500" />
-                            <span>Nenhum logado</span>
-                          </span>
-                        )}
-                      </td>
+                        {(() => {
+                          const lic = calculateCompanyLicenseStatus(comp.trialEndsAt, comp.isActive)
+                          return (
+                            <div className="space-y-1">
+                              {lic.badgeVariant === 'active' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCompanyForTrial(comp)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition cursor-pointer"
+                                  title="Clique para gerenciar validade ou adicionar dias de licença"
+                                >
+                                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span>{lic.badgeText}</span>
+                                </button>
+                              )}
 
-                      {/* Status */}
-                      <td className="px-4 py-4">
-                        {comp.isActive ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                            Ativo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 text-xs font-bold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/70">
-                            <Lock className="h-3 w-3" />
-                            Desativado
-                          </span>
-                        )}
-                      </td>
+                              {lic.badgeVariant === 'grace' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCompanyForTrial(comp)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition cursor-pointer animate-pulse"
+                                  title="Licença de 30 dias venceu. Restam dias de carência para evitar bloqueio por inadimplência."
+                                >
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span>{lic.badgeText}</span>
+                                </button>
+                              )}
 
-                      {/* Período de Teste */}
-                      <td className="px-4 py-4">
-                        {comp.trialEndsAt ? (
-                          (() => {
-                            const expiry = new Date(comp.trialEndsAt)
-                            const now = new Date()
-                            const diffMs = expiry.getTime() - now.getTime()
-                            const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-                            const isExpired = diffMs < 0
+                              {lic.badgeVariant === 'blocked' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCompanyForTrial(comp)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 text-xs font-bold text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition cursor-pointer"
+                                  title="Prazo de 5 dias de carência expirou. Acesso bloqueado por inadimplência."
+                                >
+                                  <Lock className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                                  <span>{lic.badgeText}</span>
+                                </button>
+                              )}
 
-                            if (isExpired) {
-                              return (
-                                <div>
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 text-xs font-bold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/70">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    Expirado ({Math.abs(diffDays)}d)
-                                  </span>
-                                  <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5 font-medium">
-                                    Suspenso desde {expiry.toLocaleDateString('pt-BR')}
-                                  </div>
-                                </div>
-                              )
-                            }
+                              {lic.badgeVariant === 'unlimited' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCompanyForTrial(comp)}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                                  title="Acesso sem data de expiração"
+                                >
+                                  <Infinity className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                  <span>{lic.badgeText}</span>
+                                </button>
+                              )}
 
-                            return (
-                              <div>
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70">
-                                  <Clock className="h-3 w-3" />
-                                  {diffDays} {diffDays === 1 ? 'dia restante' : 'dias restantes'}
-                                </span>
-                                <div className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">
-                                  Até {expiry.toLocaleDateString('pt-BR')}
-                                </div>
+                              <div className="text-[10px] text-gray-500 dark:text-slate-400 font-medium">
+                                {lic.description}
                               </div>
+                            </div>
+                          )
+                        })()}
+                      </td>
+
+                      {/* Status de Acesso */}
+                      <td className="px-4 py-4">
+                        {(() => {
+                          const lic = calculateCompanyLicenseStatus(comp.trialEndsAt, comp.isActive)
+                          if (!comp.isActive) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-slate-800 px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
+                                <Lock className="h-3 w-3 text-gray-500" />
+                                Desativado
+                              </span>
                             )
-                          })()
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 dark:bg-slate-800/70 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                            <Infinity className="h-3 w-3 text-slate-400" />
-                            Sem expiração
-                          </span>
-                        )}
+                          }
+                          if (lic.isBlockedByOverdue) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 text-xs font-bold text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800/70">
+                                <ShieldAlert className="h-3 w-3 text-rose-600" />
+                                Bloqueado (Inadimplência)
+                              </span>
+                            )
+                          }
+                          if (lic.status === 'grace_period') {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/70 animate-pulse">
+                                <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                Carência ({lic.graceDaysRemaining}d)
+                              </span>
+                            )
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                              Ativo
+                            </span>
+                          )
+                        })()}
                       </td>
 
                       {/* Módulos Liberados */}
@@ -606,6 +661,19 @@ export function CompanyManagementPage() {
                           >
                             <Users className="h-3.5 w-3.5" />
                             Usuários
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedCompanyForTrial(comp)
+                            }}
+                            className="gap-1.5 text-xs font-semibold text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+                            title="Gerenciar licença, somar +30 dias ou definir validade"
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            Licença
                           </Button>
 
                           <Button

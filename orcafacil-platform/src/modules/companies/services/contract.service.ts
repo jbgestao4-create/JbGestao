@@ -765,6 +765,36 @@ export const contractService = {
       updatedAt: new Date().toISOString(),
     }
 
+    // Ao confirmar o pagamento da fatura, estende a licença da empresa somando +30 dias aos dias restantes
+    if (target.companyId) {
+      try {
+        const { error: rpcErr } = await supabase.rpc('admin_add_company_license_days', {
+          p_company_id: target.companyId,
+          p_days: 30,
+        })
+        if (rpcErr) {
+          // Fallback resiliente
+          const { data: orgData } = await supabase
+            .from('organizations')
+            .select('trial_ends_at')
+            .eq('id', target.companyId)
+            .maybeSingle()
+
+          const currExpiry = (orgData as any)?.trial_ends_at ? new Date((orgData as any).trial_ends_at) : null
+          const now = new Date()
+          const base = currExpiry && currExpiry.getTime() > now.getTime() ? currExpiry : now
+          const newIso = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
+
+          await supabase
+            .from('organizations')
+            .update({ trial_ends_at: newIso, is_active: true } as any)
+            .eq('id', target.companyId)
+        }
+      } catch (e) {
+        logger.warn('Erro ao estender licença na baixa de fatura:', { error: String(e) })
+      }
+    }
+
     return this.saveInvoice(updated)
   },
 

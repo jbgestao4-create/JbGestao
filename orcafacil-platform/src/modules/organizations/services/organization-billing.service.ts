@@ -168,14 +168,15 @@ export const organizationBillingService = {
       } else if (diff < 0) {
         // Fatura vencida
         const daysLate = Math.abs(diff)
-        if (daysLate >= 7) {
+        if (daysLate > 5) {
+          // Passou dos 5 dias de carência -> Bloqueado por inadimplência
           isSuspended = true
           if (daysLate > maxDaysOverdue) {
             maxDaysOverdue = daysLate
             oldestOverdueInvoice = inv
           }
         } else {
-          // Vencida há menos de 7 dias (aviso diário)
+          // Vencida há 5 dias ou menos -> Período de tolerância/carência para renovação
           hasOverdueWarning = true
           if (daysLate > maxDaysOverdue) {
             maxDaysOverdue = daysLate
