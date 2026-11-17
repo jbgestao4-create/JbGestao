@@ -255,12 +255,31 @@ export function PixPaymentCheckoutModal({
           {step === 'select_plan' && (
             <div className="space-y-5">
               {errorMessage && (
-                <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold block mb-0.5">Atenção ao gerar PIX:</span>
-                    {errorMessage}
+                <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-300 space-y-2">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-bold block mb-0.5">Atenção ao gerar PIX:</span>
+                      <p className="leading-relaxed">{errorMessage}</p>
+                    </div>
                   </div>
+                  {errorMessage.includes('Credencial') && (
+                    <div className="pt-2 border-t border-rose-200 dark:border-rose-800/60 flex items-center justify-between">
+                      <span className="text-[11px] text-rose-700 dark:text-rose-400">
+                        Configure o Access Token oficial da sua conta em Configurações do Desenvolvedor.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose()
+                          window.location.href = '/developer-settings'
+                        }}
+                        className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition cursor-pointer"
+                      >
+                        Abrir Configurações
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

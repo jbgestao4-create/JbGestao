@@ -53,7 +53,7 @@ export default async function handler(req: any, res: any) {
       })
     }
 
-    const response = await fetch('https://api.mercadopago.com/v1/users/me', {
+    const response = await fetch('https://api.mercadopago.com/users/me', {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -72,7 +72,24 @@ export default async function handler(req: any, res: any) {
     }
 
     const user = await response.json()
-    const isTestToken = token.startsWith('TEST-') || (user.site_id === 'MLB' && user.id?.toString().length > 12)
+    const isTestUser = user.tags?.includes('test_user') || user.test_data?.test_user === true
+    const isTestToken = token.startsWith('TEST-')
+
+    if (isTestUser && token.startsWith('APP_USR-')) {
+      return res.status(200).json({
+        connected: false,
+        accountName: user.nickname || 'Usuário de Teste',
+        email: user.email,
+        userId: user.id,
+        error:
+          'Identificamos que este token pertence a um Usuário de Teste (' +
+          user.nickname +
+          ') gerado com prefixo APP_USR. O Mercado Pago não autoriza pagamentos PIX com credencial de produção para usuários de teste. ' +
+          'COMO RESOLVER: ' +
+          '1) Para testar em Sandbox: Acesse a aba "Credenciais de teste" da sua aplicação e copie o Access Token iniciado por "TEST-". ' +
+          '2) Para cobranças reais: Use as Credenciais de Produção da sua conta titular do Mercado Pago (e confirme se clicou em "Ativar credenciais de produção" no painel).',
+      })
+    }
 
     return res.status(200).json({
       connected: true,
@@ -80,7 +97,7 @@ export default async function handler(req: any, res: any) {
       email: user.email || 'Conta Verificada',
       siteId: user.site_id,
       userId: user.id,
-      isSandbox: isTestToken,
+      isSandbox: isTestToken || isTestUser,
     })
   } catch (err: any) {
     return res.status(500).json({

@@ -345,10 +345,21 @@ export const mercadopagoService = {
       const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
-        const errorMsg =
+        let errorMsg =
           data.error ||
           data.message ||
           `Erro ao gerar cobrança PIX no Mercado Pago (HTTP ${response.status})`
+
+        const fullErrorStr = JSON.stringify(data)
+        if (
+          errorMsg.includes('Unauthorized use of live credentials') ||
+          fullErrorStr.includes('Unauthorized use of live credentials') ||
+          data.details?.cause?.some((c: any) => c.code === 7)
+        ) {
+          errorMsg =
+            'Credencial não autorizada para PIX (Código 7). O token atualmente salvo pertence a um Usuário de Teste ou a aplicação ainda não teve as credenciais ativadas no Mercado Pago. Acesse Configurações > Mercado Pago para configurar as credenciais oficiais da sua conta.'
+        }
+
         logger.error('Erro na API Mercado Pago:', data)
         return { success: false, error: errorMsg }
       }

@@ -101,6 +101,28 @@ export function MercadoPagoSettingsSection() {
   }
 
   const handleSaveSettings = async () => {
+    const rawToken = (settings.accessToken || '').trim()
+
+    // 1. Validação se colou TESTUSER... no lugar do token
+    if (rawToken.toUpperCase().startsWith('TESTUSER')) {
+      alert(
+        'Atenção: O valor digitado no campo Access Token é o nome de um usuário de teste (TESTUSER...), não o Access Token!\n\n' +
+        'O Access Token do Mercado Pago é uma chave longa que começa com "APP_USR-" (para Produção) ou "TEST-" (para Testes).'
+      )
+      return
+    }
+
+    // 2. Validação de incompatibilidade entre modo e prefixo do token
+    if (!settings.isSandbox && rawToken.startsWith('TEST-')) {
+      const confirmChange = window.confirm(
+        'Você selecionou o Modo Produção Oficial, mas o seu Access Token começa com "TEST-" (credencial de teste).\n\n' +
+        'Deseja alterar automaticamente o ambiente para "Modo Sandbox (Testes)" para permitir a validação?'
+      )
+      if (confirmChange) {
+        settings.isSandbox = true
+      }
+    }
+
     setIsSaving(true)
     setSaveSuccess(false)
 
@@ -261,6 +283,52 @@ export function MercadoPagoSettingsSection() {
             </div>
           </div>
         )}
+
+        {/* Guia Rápido de Configuração */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 text-sm">
+              <Key className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              Guia: Onde obter as Credenciais Corretas no Mercado Pago
+            </span>
+            <a
+              href="https://www.mercadopago.com.br/developers/panel/app"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] transition shadow-xs"
+            >
+              Abrir Painel Mercado Pago Developers ↗
+            </a>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-slate-600 dark:text-slate-300">
+            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-950 space-y-1.5">
+              <div className="font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                1. Para Receber Pagamentos Reais (Produção)
+              </div>
+              <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+                <li>No painel do Mercado Pago, abra sua aplicação e clique em <strong>Credenciais de produção</strong> (menu esquerdo).</li>
+                <li>Se houver o botão <strong>"Ativar credenciais de produção"</strong>, clique nele e preencha o segmento de negócio para liberar a conta.</li>
+                <li>Copie o <strong>Access Token</strong> (começa com <code>APP_USR-</code>) e a <strong>Public Key</strong>.</li>
+                <li>Cadastre qualquer <strong>Chave PIX</strong> na sua conta do Mercado Pago para receber as transferências.</li>
+              </ul>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-950 space-y-1.5">
+              <div className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                2. Para Simulação / Testes (Sandbox)
+              </div>
+              <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+                <li>No painel da sua aplicação, clique na aba <strong>Credenciais de teste</strong>.</li>
+                <li>Copie o <strong>Access Token</strong> que começa com <code>TEST-</code>.</li>
+                <li>Selecione a opção <strong>Modo Sandbox (Testes)</strong> abaixo.</li>
+                <li><em>Importante: Não use apelidos como <code>TESTUSER...</code> nem tokens de usuários fictícios no campo de token de produção.</em></li>
+              </ul>
+            </div>
+          </div>
+        </div>
 
         {/* Campos de Credenciais */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
