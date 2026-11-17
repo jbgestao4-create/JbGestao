@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
-  ArrowUpDown,
   Calendar,
   ChevronDown,
   ChevronUp,
@@ -21,7 +20,6 @@ import {
   WalletCards,
   Wrench,
   ShieldCheck,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -358,8 +356,11 @@ export function DashboardPage() {
 
     if (fromIndex !== -1 && toIndex !== -1) {
       const nextOrder = [...currentOrder]
-      const [moved] = nextOrder.splice(fromIndex, 1)
-      nextOrder.splice(toIndex, 0, moved)
+      // Troca somente os dois módulos de lugar (SWAP direto):
+      // O módulo arrastado vai para a posição de destino, e o de destino vai para a posição do arrastado
+      const temp = nextOrder[fromIndex]
+      nextOrder[fromIndex] = nextOrder[toIndex]
+      nextOrder[toIndex] = temp
 
       for (const id of DEFAULT_MODULE_IDS) {
         if (!nextOrder.includes(id)) {
@@ -377,40 +378,6 @@ export function DashboardPage() {
 
     setDraggedModuleId(null)
     setDragOverModuleId(null)
-  }
-
-  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false)
-  const [selectedSourceIndex, setSelectedSourceIndex] = useState<number>(0)
-  const [selectedTargetIndex, setSelectedTargetIndex] = useState<number>(0)
-
-  const handleSwapPositions = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
-    const currentOrder = visibleModules.map((m) => m.id)
-    if (fromIndex >= currentOrder.length || toIndex >= currentOrder.length) return
-
-    const nextOrder = [...currentOrder]
-    const temp = nextOrder[fromIndex]
-    nextOrder[fromIndex] = nextOrder[toIndex]
-    nextOrder[toIndex] = temp
-
-    for (const id of DEFAULT_MODULE_IDS) {
-      if (!nextOrder.includes(id)) {
-        nextOrder.push(id)
-      }
-    }
-
-    setOrderedModuleIds(nextOrder)
-    try {
-      localStorage.setItem(MODULES_ORDER_STORAGE_KEY, JSON.stringify(nextOrder))
-    } catch {
-      // ignore
-    }
-  }
-
-  const handleApplyModalSwap = () => {
-    handleSwapPositions(selectedSourceIndex, selectedTargetIndex)
-    setSelectedSourceIndex(selectedTargetIndex)
-    setSelectedTargetIndex(selectedSourceIndex)
   }
 
   const handleResetOrder = () => {
@@ -467,19 +434,6 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedSourceIndex(0)
-                  setSelectedTargetIndex(visibleModules.length > 1 ? 1 : 0)
-                  setIsReorderModalOpen(true)
-                }}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shadow-2xs cursor-pointer"
-                title="Abrir painel para escolher e trocar as posições dos módulos"
-              >
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                Escolher Posições
-              </button>
               {isCustomOrder && (
                 <button
                   type="button"
@@ -632,173 +586,6 @@ export function DashboardPage() {
           </span>
         </footer>
       </div>
-
-      {/* MODAL DE ESCOLHA E TROCA DE POSIÇÕES DE MÓDULOS */}
-      {isReorderModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsReorderModalOpen(false)
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="w-full max-w-xl max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-          >
-            {/* CABEÇALHO */}
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
-                  <ArrowUpDown className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Organizar Posição dos Módulos
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Selecione qual módulo deseja mover e a posição desejada para trocar.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsReorderModalOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* PAINEL DE TROCA DIRETA (SOLICITADO PELO USUÁRIO) */}
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-end">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    1. Módulo que deseja mover:
-                  </label>
-                  <select
-                    value={selectedSourceIndex}
-                    onChange={(e) => setSelectedSourceIndex(parseInt(e.target.value, 10))}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-800 dark:text-slate-200 focus:outline-blue-600 cursor-pointer"
-                  >
-                    {visibleModules.map((mod, idx) => (
-                      <option key={mod.id} value={idx}>
-                        {idx + 1}º - {mod.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    2. Para qual posição deseja enviá-lo:
-                  </label>
-                  <select
-                    value={selectedTargetIndex}
-                    onChange={(e) => setSelectedTargetIndex(parseInt(e.target.value, 10))}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-800 dark:text-slate-200 focus:outline-blue-600 cursor-pointer"
-                  >
-                    {visibleModules.map((mod, idx) => (
-                      <option key={mod.id} value={idx}>
-                        {idx + 1}ª Posição ({mod.title})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {selectedSourceIndex !== selectedTargetIndex
-                    ? `O módulo "${visibleModules[selectedSourceIndex]?.title}" e "${visibleModules[selectedTargetIndex]?.title}" trocarão de lugar.`
-                    : 'Selecione posições distintas para realizar a troca.'}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={handleApplyModalSwap}
-                  disabled={selectedSourceIndex === selectedTargetIndex}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 text-xs font-semibold text-white shadow-xs transition-colors shrink-0 cursor-pointer"
-                >
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                  Trocar Posições
-                </button>
-              </div>
-            </div>
-
-            {/* LISTA COMPLETA DA SEQUÊNCIA ATUAL COM SELECTS EM CADA ITEM */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-2 max-h-[380px]">
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Sequência Atual dos Módulos:
-              </div>
-
-              {visibleModules.map((mod, idx) => {
-                const Icon = mod.icon
-                return (
-                  <div
-                    key={mod.id}
-                    className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] hover:border-blue-200 dark:hover:border-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-xs">
-                        {idx + 1}
-                      </span>
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${mod.iconStyle}`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                          {mod.title}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <label className="text-[11px] font-medium text-slate-500">Mudar para:</label>
-                      <select
-                        value={idx + 1}
-                        onChange={(e) => handleSwapPositions(idx, parseInt(e.target.value, 10) - 1)}
-                        className="h-8 px-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-blue-600 dark:text-blue-400 cursor-pointer focus:outline-none"
-                      >
-                        {visibleModules.map((targetMod, targetIdx) => (
-                          <option key={targetMod.id} value={targetIdx + 1}>
-                            {targetIdx + 1}º {targetIdx === idx ? '(Atual)' : `(Trocar c/ ${targetMod.title})`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* RODAPÉ DO MODAL */}
-            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 px-5 py-3 bg-slate-50 dark:bg-slate-900/60">
-              {isCustomOrder ? (
-                <button
-                  type="button"
-                  onClick={handleResetOrder}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Restaurar ordem padrão
-                </button>
-              ) : (
-                <span className="text-xs text-slate-400">Ordem padrão do sistema</span>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setIsReorderModalOpen(false)}
-                className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-xs transition-colors cursor-pointer"
-              >
-                Concluir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
