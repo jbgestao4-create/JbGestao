@@ -516,7 +516,7 @@ export function DashboardPage() {
               isModulesExpanded ? '' : 'hidden'
             }`}
           >
-            {visibleModules.map((module, index) => {
+            {visibleModules.map((module) => {
               const Icon = module.icon
               const isBeingDragged = draggedModuleId === module.id
               const isDragOver = dragOverModuleId === module.id
@@ -572,43 +572,17 @@ export function DashboardPage() {
                         <Icon aria-hidden="true" className="h-5 w-5" />
                       </span>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <label
-                          htmlFor={`module-pos-${module.id}`}
-                          className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-blue-400 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors cursor-pointer"
-                          title="Clique para trocar a posição deste módulo com outro"
-                        >
-                          <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">Pos:</span>
-                          <select
-                            id={`module-pos-${module.id}`}
-                            value={index + 1}
-                            onChange={(e) => {
-                              e.stopPropagation()
-                              handleSwapPositions(index, parseInt(e.target.value, 10) - 1)
-                            }}
-                            className="bg-transparent font-bold text-blue-600 dark:text-blue-400 text-xs cursor-pointer focus:outline-none"
-                          >
-                            {visibleModules.map((targetMod, targetIdx) => (
-                              <option
-                                key={targetMod.id}
-                                value={targetIdx + 1}
-                                className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-normal"
-                              >
-                                {targetIdx + 1}º {targetIdx === index ? '(Atual)' : `(Trocar c/ ${targetMod.title})`}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-[10px] font-semibold tracking-wider text-slate-400 dark:text-slate-500">
+                        {module.id}
+                      </span>
                       {module.isAvailable ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                           Disponível
                         </span>
                       ) : (
-                        <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                        <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                           Em breve
                         </span>
                       )}
