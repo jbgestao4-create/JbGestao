@@ -233,6 +233,12 @@ export const SiteAccessAnalyticsPage = lazy(() =>
   })),
 )
 
+export const PixPaymentCheckoutPage = lazy(() =>
+  import('@modules/companies/pages/PixPaymentCheckoutPage').then((module) => ({
+    default: module.PixPaymentCheckoutPage,
+  })),
+)
+
 
 
 

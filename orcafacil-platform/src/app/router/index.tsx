@@ -52,6 +52,7 @@ import {
   ContractsAdminPage,
   PresentationPage,
   SiteAccessAnalyticsPage,
+  PixPaymentCheckoutPage,
 } from './lazy-pages'
 
 function RootRoute() {
@@ -289,6 +290,18 @@ export const router = createBrowserRouter([
   {
     path: '/settings/privacy',
     element: <Navigate to="/settings/organization?tab=privacy" replace />,
+  },
+  {
+    path: '/checkout',
+    element: (
+      <ProtectedRoute>
+        <PixPaymentCheckoutPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/pagamento-pix',
+    element: <Navigate to="/checkout" replace />,
   },
 
   // Rotas do módulo ControleSoft (protegidas por autenticação e concessão de módulo)

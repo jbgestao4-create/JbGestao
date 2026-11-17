@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, LogOut, UserCog } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { ChevronDown, LogOut, UserCog, Zap } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { supabase } from '@app/config/supabase'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import { useAuth } from '@modules/auth/context/AuthContext'
@@ -13,6 +13,7 @@ import {
   organizationBillingService,
   type OrganizationBillingInfo,
 } from '@modules/organizations/services/organization-billing.service'
+import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
 import type { ServiceResult } from '@shared/types/common'
 
 type ProfileMenuProps = {
@@ -47,6 +48,7 @@ export function ProfileMenu({
   onSignOut,
 }: ProfileMenuProps) {
   const [isSignOutDialogOpen, setIsSignOutDialogOpen] = useState(false)
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
   const [billingInfo, setBillingInfo] = useState<OrganizationBillingInfo | null>(null)
   const [fetchedOrgMeta, setFetchedOrgMeta] = useState<{
     accessPlanId?: string | null
@@ -55,7 +57,6 @@ export function ProfileMenu({
   const { currentOrganization, userRole } = useOrganization()
   const { user } = useAuth()
   const isAdmin = userRole === 'owner' || userRole === 'admin' || isSystemOwner(user)
-  const navigate = useNavigate()
 
   useEffect(() => {
     if (!currentOrganization?.id) {
@@ -300,16 +301,16 @@ export function ProfileMenu({
                   </div>
                 </div>
 
-                {/* BOTÃO ASSINE AGORA (SOMENTE EM PERÍODO DE TESTE E SEM PLANO ATIVO) */}
-                {shouldShowSubscribeButton && (
-                  <DropdownMenu.Item
-                    onSelect={() => {
-                      void navigate('/settings/organization?tab=system-invoices')
-                    }}
-                    className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-full bg-[#0088ff] hover:bg-[#0077e6] active:bg-[#0066cc] px-6 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors outline-none"
+                {/* BOTÃO ASSINE / RENOVE AGORA VIA PIX MERCADO PAGO */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCheckoutModalOpen(true)}
+                    className="mt-4 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-md shadow-emerald-600/20 transition-all outline-none"
                   >
-                    Assine Agora
-                  </DropdownMenu.Item>
+                    <Zap className="h-3.5 w-3.5 fill-current text-amber-300" />
+                    <span>{shouldShowSubscribeButton ? 'Assine Agora via PIX' : 'Renovar Licença via PIX'}</span>
+                  </button>
                 )}
               </>
             )}
@@ -353,6 +354,13 @@ export function ProfileMenu({
           onConfirm={onSignOut}
         />
       )}
+
+      {/* MODAL DE CHECKOUT PIX MERCADO PAGO */}
+      <PixPaymentCheckoutModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        initialPlanId={effectiveAccessPlanId}
+      />
     </DropdownMenu.Root>
   )
 }

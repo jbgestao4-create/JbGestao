@@ -8,6 +8,7 @@ import {
   Check,
   LogOut,
   Building2,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
@@ -20,6 +21,7 @@ import {
 } from '../services/organization-billing.service'
 import type { ContractInvoice } from '@modules/companies/services/contract.service'
 import { ContractInvoicePrintModal } from '@modules/companies/components/ContractInvoicePrintModal'
+import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
 
 export function OrganizationSuspensionGuard() {
   const { user, signOut } = useAuth()
@@ -28,6 +30,7 @@ export function OrganizationSuspensionGuard() {
   const [billingInfo, setBillingInfo] = useState<OrganizationBillingInfo | null>(null)
   const [copiedKey, setCopiedKey] = useState(false)
   const [selectedPrintInvoice, setSelectedPrintInvoice] = useState<ContractInvoice | null>(null)
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
 
   const isDeveloper = isSystemOwner(user)
   const isAdmin = userRole === 'owner' || userRole === 'admin' || isDeveloper
@@ -132,14 +135,23 @@ export function OrganizationSuspensionGuard() {
                 </div>
               )}
 
-              {/* Box de Pagamento Rápido via PIX */}
-              <div className="p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/20 space-y-2">
+              {/* Box de Pagamento Rápido via PIX Mercado Pago */}
+              <div className="p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
-                    <QrCode className="h-4 w-4 text-emerald-600" />
-                    Pague via PIX para Desbloqueio Imediato:
+                    <Zap className="h-4 w-4 text-emerald-600 fill-current" />
+                    Pagamento Instantâneo via PIX Oficial:
                   </span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCheckoutModalOpen(true)}
+                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 transition cursor-pointer"
+                >
+                  <QrCode className="w-4 h-4" />
+                  Pagar e Desbloquear Acesso Imediatamente
+                </button>
 
                 <div className="flex items-center gap-2">
                   <input
@@ -158,7 +170,7 @@ export function OrganizationSuspensionGuard() {
                   </Button>
                 </div>
                 <p className="text-[11px] text-gray-500 dark:text-slate-400">
-                  Após realizar o PIX, o comprovante pode ser enviado ao suporte para liberação instantânea.
+                  O sistema identifica o PIX automaticamente em segundos e libera o acesso na hora.
                 </p>
               </div>
 
@@ -218,6 +230,18 @@ export function OrganizationSuspensionGuard() {
         invoice={selectedPrintInvoice}
         contract={billingInfo?.contract}
         onClose={() => setSelectedPrintInvoice(null)}
+      />
+
+      {/* Modal de Pagamento Automático PIX Mercado Pago */}
+      <PixPaymentCheckoutModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        contractInvoiceId={overdueInvoice?.id}
+        invoiceAmount={overdueInvoice?.amount}
+        invoiceNumber={overdueInvoice?.invoiceNumber}
+        onPaymentSuccess={() => {
+          setIsCheckoutModalOpen(false)
+        }}
       />
     </div>
   )

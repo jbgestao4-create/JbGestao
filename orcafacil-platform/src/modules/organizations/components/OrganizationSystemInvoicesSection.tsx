@@ -5,8 +5,8 @@ import {
   AlertTriangle,
   Clock,
   Printer,
-  QrCode,
   RefreshCw,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
@@ -19,6 +19,7 @@ import {
 import type { ContractInvoice } from '@modules/companies/services/contract.service'
 import { InvoicePixModal } from './InvoicePixModal'
 import { ContractInvoicePrintModal } from '@modules/companies/components/ContractInvoicePrintModal'
+import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
 
 interface OrganizationSystemInvoicesSectionProps {
   organization: Organization | null
@@ -37,6 +38,7 @@ export function OrganizationSystemInvoicesSection({
 
   // Modais de ação do administrador
   const [selectedPixInvoice, setSelectedPixInvoice] = useState<ContractInvoice | null>(null)
+  const [selectedMercadoPagoInvoice, setSelectedMercadoPagoInvoice] = useState<ContractInvoice | null>(null)
   const [selectedPrintInvoice, setSelectedPrintInvoice] = useState<ContractInvoice | null>(null)
 
   const loadBilling = async () => {
@@ -212,10 +214,10 @@ export function OrganizationSystemInvoicesSection({
             <div className="flex items-center gap-2 self-start sm:self-center">
               <Button
                 size="sm"
-                onClick={() => setSelectedPixInvoice(billingInfo.upcomingInvoice)}
-                className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => setSelectedMercadoPagoInvoice(billingInfo.upcomingInvoice)}
+                className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
               >
-                <QrCode className="h-3.5 w-3.5" />
+                <Zap className="h-3.5 w-3.5 fill-current text-amber-300" />
                 Pagar com PIX
               </Button>
               <Button
@@ -252,10 +254,10 @@ export function OrganizationSystemInvoicesSection({
             <div className="flex items-center gap-2 self-start sm:self-center">
               <Button
                 size="sm"
-                onClick={() => setSelectedPixInvoice(billingInfo.overdueInvoice)}
-                className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => setSelectedMercadoPagoInvoice(billingInfo.overdueInvoice)}
+                className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
               >
-                <QrCode className="h-3.5 w-3.5" />
+                <Zap className="h-3.5 w-3.5 fill-current text-amber-300" />
                 Pagar com PIX
               </Button>
               <Button
@@ -448,11 +450,11 @@ export function OrganizationSystemInvoicesSection({
                           {!isPaid && inv.amount > 0 && (
                             <Button
                               size="sm"
-                              onClick={() => setSelectedPixInvoice(inv)}
+                              onClick={() => setSelectedMercadoPagoInvoice(inv)}
                               className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                              title="Pagar via Chave PIX"
+                              title="Pagar via PIX com Liberação Instantânea (Mercado Pago)"
                             >
-                              <QrCode className="h-3.5 w-3.5" />
+                              <Zap className="h-3.5 w-3.5 fill-current text-amber-300" />
                               Pagar PIX
                             </Button>
                           )}
@@ -497,6 +499,21 @@ export function OrganizationSystemInvoicesSection({
         invoice={selectedPrintInvoice}
         contract={billingInfo?.contract}
         onClose={() => setSelectedPrintInvoice(null)}
+      />
+
+      {/* Modal de Pagamento Automático PIX Mercado Pago */}
+      <PixPaymentCheckoutModal
+        isOpen={Boolean(selectedMercadoPagoInvoice)}
+        onClose={() => setSelectedMercadoPagoInvoice(null)}
+        contractInvoiceId={selectedMercadoPagoInvoice?.id}
+        invoiceAmount={selectedMercadoPagoInvoice?.amount}
+        invoiceNumber={selectedMercadoPagoInvoice?.invoiceNumber}
+        organizationId={organization?.id}
+        prefillClientName={organization?.name}
+        onPaymentSuccess={() => {
+          setSelectedMercadoPagoInvoice(null)
+          void loadBilling()
+        }}
       />
     </div>
   )

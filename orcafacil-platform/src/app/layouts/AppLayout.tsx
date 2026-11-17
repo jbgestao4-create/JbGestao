@@ -513,7 +513,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     {
       id: 'developer',
       to: '/admin/developer-settings',
-      label: 'Configurações de Desenvolvedor',
+      label: 'Configurações do Desenvolvedor',
       icon: <ShieldCheck className="w-4 h-4" />,
       badge:
         unreadSuggestionsCount > 0
@@ -523,11 +523,24 @@ export function AppLayout({ children }: { children: ReactNode }) {
     },
   ]
 
-  // Módulos estritamente ordenados de forma alfabética
+  // Módulos regulares ordenados alfabeticamente, com Organização e Configurações do Desenvolvedor fixos no final da lista
   const sortedVisibleModuleItems = useMemo(() => {
-    return rawModuleNavItems
-      .filter((item) => item.visible)
+    const regularItems = rawModuleNavItems
+      .filter((item) => item.visible && item.id !== 'organization' && item.id !== 'developer')
       .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }))
+
+    const pinnedItems = rawModuleNavItems.filter(
+      (item) => item.visible && (item.id === 'organization' || item.id === 'developer'),
+    )
+
+    // Fixa Organização e depois Configurações do Desenvolvedor no final
+    pinnedItems.sort((a, b) => {
+      if (a.id === 'organization') return -1
+      if (b.id === 'organization') return 1
+      return 0
+    })
+
+    return [...regularItems, ...pinnedItems]
   }, [
     rawModuleNavItems,
   ])

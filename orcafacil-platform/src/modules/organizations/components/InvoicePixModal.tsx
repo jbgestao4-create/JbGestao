@@ -7,10 +7,12 @@ import {
   X,
   AlertCircle,
   Printer,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
 import type { ContractInvoice, SoftwareContract } from '@modules/companies/services/contract.service'
+import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
 
 interface InvoicePixModalProps {
   isOpen: boolean
@@ -18,6 +20,7 @@ interface InvoicePixModalProps {
   contract?: SoftwareContract | null
   onClose: () => void
   onOpenInvoicePrint?: () => void
+  onPaymentSuccess?: () => void
 }
 
 export function InvoicePixModal({
@@ -26,8 +29,10 @@ export function InvoicePixModal({
   contract,
   onClose,
   onOpenInvoicePrint,
+  onPaymentSuccess,
 }: InvoicePixModalProps) {
   const [copiedKey, setCopiedKey] = useState(false)
+  const [isDynamicCheckoutOpen, setIsDynamicCheckoutOpen] = useState(false)
 
   useEffect(() => {
     if (!isOpen) return
@@ -107,6 +112,16 @@ export function InvoicePixModal({
             </div>
           </div>
 
+          {/* Botão de Pagamento Dinâmico Oficial via Mercado Pago com Liberação Instantânea */}
+          <button
+            type="button"
+            onClick={() => setIsDynamicCheckoutOpen(true)}
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 transition cursor-pointer"
+          >
+            <Zap className="w-4 h-4 fill-current text-amber-300" />
+            <span>Pagar com PIX Dinâmico • Liberação Imediata</span>
+          </button>
+
           {/* Box da Chave PIX com botão Copiar */}
           <div className="space-y-2">
             <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-slate-400">
@@ -179,6 +194,20 @@ export function InvoicePixModal({
         </div>
 
       </div>
+
+      {/* MODAL DE CHECKOUT PIX MERCADO PAGO */}
+      <PixPaymentCheckoutModal
+        isOpen={isDynamicCheckoutOpen}
+        onClose={() => setIsDynamicCheckoutOpen(false)}
+        contractInvoiceId={invoice.id}
+        invoiceAmount={invoice.amount}
+        invoiceNumber={invoice.invoiceNumber}
+        onPaymentSuccess={() => {
+          setIsDynamicCheckoutOpen(false)
+          onClose()
+          if (onPaymentSuccess) onPaymentSuccess()
+        }}
+      />
     </div>
   )
 

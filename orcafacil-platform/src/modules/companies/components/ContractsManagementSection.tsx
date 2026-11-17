@@ -16,6 +16,8 @@ import {
   Receipt,
   AlertTriangle,
   RotateCcw,
+  Zap,
+  X,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
@@ -30,6 +32,7 @@ import type { ManagedCompany } from '../services/company-management.service'
 import { ContractFormModal } from './ContractFormModal'
 import { ContractPrintModal } from './ContractPrintModal'
 import { ContractInvoicePrintModal } from './ContractInvoicePrintModal'
+import { PixPaymentCheckoutModal } from './PixPaymentCheckoutModal'
 
 interface ContractsManagementSectionProps {
   existingCompanies: ManagedCompany[]
@@ -71,6 +74,15 @@ export function ContractsManagementSection({
   const [isInvoicePrintModalOpen, setIsInvoicePrintModalOpen] = useState(false)
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
   const [signingContractId, setSigningContractId] = useState<string | null>(null)
+
+  // Integração Mercado Pago & Fatura Teste
+  const [selectedMercadoPagoInvoice, setSelectedMercadoPagoInvoice] = useState<ContractInvoice | null>(null)
+  const [isTestInvoiceModalOpen, setIsTestInvoiceModalOpen] = useState(false)
+  const [testInvoiceAmount, setTestInvoiceAmount] = useState('1.00')
+  const [testInvoiceCompanyId, setTestInvoiceCompanyId] = useState('')
+  const [testInvoiceClientName, setTestInvoiceClientName] = useState('Cliente Teste Mercado Pago')
+  const [testInvoiceNotes, setTestInvoiceNotes] = useState('Fatura de teste para validação de conexão Mercado Pago PIX')
+  const [isGeneratingTestInvoice, setIsGeneratingTestInvoice] = useState(false)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -361,6 +373,49 @@ export function ContractsManagementSection({
     setFeedbackMsg(`Fatura #${inv.invoiceNumber} excluída.`)
     setTimeout(() => setFeedbackMsg(null), 3000)
     void loadData()
+  }
+
+  const handleCreateTestInvoice = async () => {
+    const rawVal = testInvoiceAmount.replace(',', '.')
+    const amountVal = parseFloat(rawVal)
+    if (isNaN(amountVal) || amountVal <= 0) {
+      alert('Informe um valor válido maior que zero (ex: 1.00 ou 5.00).')
+      return
+    }
+
+    setIsGeneratingTestInvoice(true)
+    const targetComp = existingCompanies.find((c) => c.id === testInvoiceCompanyId)
+    const clientName = targetComp?.name || (testInvoiceClientName.trim() || 'Cliente Teste Mercado Pago')
+    const clientDocument = targetComp?.cnpj || '00.000.000/0001-00'
+
+    const randomSuffix = Math.floor(100000 + Math.random() * 900000).toString()
+    const invoiceNumber = `TESTE-${randomSuffix}`
+
+    const res = await contractService.saveInvoice({
+      companyId: targetComp?.id || undefined,
+      clientName,
+      clientDocument,
+      invoiceNumber,
+      amount: amountVal,
+      referenceMonth: 'Teste MP',
+      dueDate: new Date().toISOString().split('T')[0],
+      status: 'pending',
+      paymentMethod: 'PIX',
+      notes: testInvoiceNotes || 'Fatura de teste gerada para validação de conexão Mercado Pago',
+    })
+
+    setIsGeneratingTestInvoice(false)
+
+    if (!res.success) {
+      alert((res as any).error || 'Erro ao gerar fatura de teste.')
+      return
+    }
+
+    setIsTestInvoiceModalOpen(false)
+    setFeedbackMsg(`Fatura de teste #${res.data.invoiceNumber} (R$ ${amountVal.toFixed(2)}) gerada com sucesso!`)
+    setTimeout(() => setFeedbackMsg(null), 4000)
+    void loadData()
+    setSelectedMercadoPagoInvoice(res.data)
   }
 
   const handleCloseFormModal = () => {
@@ -1095,6 +1150,22 @@ export function ContractsManagementSection({
               >
                 ⚠️ Vencidas em Atraso ({currentTabCounts.overdue})
               </button>
+
+              <Button
+                size="sm"
+                onClick={() => {
+                  setTestInvoiceAmount('1.00')
+                  if (existingCompanies.length > 0 && !testInvoiceCompanyId) {
+                    setTestInvoiceCompanyId(existingCompanies[0].id)
+                  }
+                  setIsTestInvoiceModalOpen(true)
+                }}
+                className="gap-1.5 text-xs font-bold bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-700 hover:to-emerald-700 text-white shadow-xs ml-1"
+                title="Gerar fatura de teste no valor livre desejado para testar a conexão com o Mercado Pago"
+              >
+                <Zap className="h-3.5 w-3.5 text-amber-300" />
+                Gerar Fatura Teste (Mercado Pago)
+              </Button>
             </div>
           </div>
 
@@ -1251,15 +1322,26 @@ export function ContractsManagementSection({
                                   Desfazer
                                 </Button>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  onClick={() => void handleToggleInvoicePaid(inv)}
-                                  className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                                  title="Registrar recebimento desta mensalidade"
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  Dar Baixa / Recebido
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => setSelectedMercadoPagoInvoice(inv)}
+                                    className="gap-1 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white shadow-xs"
+                                    title="Pagar ou gerar QR Code PIX via Mercado Pago"
+                                  >
+                                    <Zap className="h-3.5 w-3.5 text-amber-300" />
+                                    Pagar PIX (MP)
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => void handleToggleInvoicePaid(inv)}
+                                    className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                                    title="Registrar recebimento desta mensalidade manualmente"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Dar Baixa
+                                  </Button>
+                                </>
                               )}
 
                               <Button
@@ -1328,6 +1410,160 @@ export function ContractsManagementSection({
           setViewingInvoice(null)
         }}
       />
+
+      {/* Modal de Geração de Fatura de Teste (Mercado Pago) */}
+      {isTestInvoiceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    Gerar Fatura Teste • Mercado Pago
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    Defina o valor desejado para testar a conexão e o pagamento PIX ao vivo
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTestInvoiceModalOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Valor da Fatura */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-slate-300 mb-1.5">
+                  Valor da Cobrança de Teste (R$) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-2.5 text-sm font-bold text-gray-400">R$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={testInvoiceAmount}
+                    onChange={(e) => setTestInvoiceAmount(e.target.value)}
+                    placeholder="1.00"
+                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-lg text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[11px] text-gray-400">Valores rápidos:</span>
+                  {['1.00', '2.00', '5.00', '10.00'].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setTestInvoiceAmount(val)}
+                      className={`px-2 py-0.5 rounded-md text-xs font-bold transition-all ${
+                        testInvoiceAmount === val
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200'
+                      }`}
+                    >
+                      R$ {val.replace('.', ',')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Empresa / Cliente */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-slate-300 mb-1.5">
+                  Empresa / Cliente para Cobrança
+                </label>
+                <select
+                  value={testInvoiceCompanyId}
+                  onChange={(e) => {
+                    setTestInvoiceCompanyId(e.target.value)
+                    const found = existingCompanies.find((c) => c.id === e.target.value)
+                    if (found) {
+                      setTestInvoiceClientName(found.name)
+                    }
+                  }}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">🏢 Criar para Cliente Teste Avulso</option>
+                  {existingCompanies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.cnpj ? `(${c.cnpj})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Observações */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-slate-300 mb-1.5">
+                  Observação / Descrição da Fatura
+                </label>
+                <input
+                  type="text"
+                  value={testInvoiceNotes}
+                  onChange={(e) => setTestInvoiceNotes(e.target.value)}
+                  placeholder="Fatura de teste para validação de conexão Mercado Pago"
+                  className="w-full px-4 py-2 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300">
+                💡 Ao clicar no botão abaixo, a fatura será registrada no financeiro e abrirá imediatamente o <strong>modal de pagamento PIX com o QR Code dinâmico e código Copia e Cola</strong> do Mercado Pago.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => setIsTestInvoiceModalOpen(false)}
+                disabled={isGeneratingTestInvoice}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void handleCreateTestInvoice()}
+                disabled={isGeneratingTestInvoice}
+                className="gap-2 bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-700 hover:to-emerald-700 text-white font-bold"
+              >
+                {isGeneratingTestInvoice ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4 text-amber-300" />
+                )}
+                Gerar Fatura & Abrir PIX
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Pagamento PIX Mercado Pago */}
+      {selectedMercadoPagoInvoice && (
+        <PixPaymentCheckoutModal
+          isOpen={!!selectedMercadoPagoInvoice}
+          onClose={() => {
+            setSelectedMercadoPagoInvoice(null)
+            void loadData()
+          }}
+          contractInvoiceId={selectedMercadoPagoInvoice.id}
+          invoiceAmount={selectedMercadoPagoInvoice.amount}
+          invoiceNumber={selectedMercadoPagoInvoice.invoiceNumber}
+          customTitle={`Pagamento da Fatura #${selectedMercadoPagoInvoice.invoiceNumber}`}
+          prefillClientName={selectedMercadoPagoInvoice.clientName}
+          prefillDocument={selectedMercadoPagoInvoice.clientDocument}
+          organizationId={selectedMercadoPagoInvoice.companyId}
+          onPaymentSuccess={() => {
+            void loadData()
+          }}
+        />
+      )}
     </div>
   )
 }
