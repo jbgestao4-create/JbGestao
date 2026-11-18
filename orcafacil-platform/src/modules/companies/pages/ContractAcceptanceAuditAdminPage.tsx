@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -34,10 +34,12 @@ import {
 export function ContractAcceptanceAuditAdminPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
+  const urlSearch = searchParams.get('search') || searchParams.get('q') || ''
   const [records, setRecords] = useState<ContractAcceptanceEvidenceRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = useState(urlSearch)
   const [planFilter, setPlanFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | '7days' | '30days'>('all')
 
@@ -60,6 +62,31 @@ export function ContractAcceptanceAuditAdminPage() {
   useEffect(() => {
     void loadRecords()
   }, [])
+
+  // Sincroniza o termo de busca caso a URL mude externamente (ex: atalhos ou botões)
+  useEffect(() => {
+    const q = searchParams.get('search') || searchParams.get('q') || ''
+    if (q !== searchTerm) {
+      setSearchTerm(q)
+    }
+  }, [searchParams])
+
+  // Abre automaticamente o modal se a URL especificar um recibo ou contrato exato
+  useEffect(() => {
+    const q = searchParams.get('search') || searchParams.get('q')
+    if (q && records.length > 0 && !selectedRecord) {
+      const clean = q.trim().toLowerCase()
+      const exactMatch = records.find(
+        (r) =>
+          r.receiptNumber?.toLowerCase() === clean ||
+          r.contractNumber?.toLowerCase() === clean ||
+          r.id?.toLowerCase() === clean,
+      )
+      if (exactMatch) {
+        setSelectedRecord(exactMatch)
+      }
+    }
+  }, [records, searchParams, selectedRecord])
 
   // Verifica integridade quando um registro for aberto
   useEffect(() => {
@@ -90,21 +117,46 @@ export function ContractAcceptanceAuditAdminPage() {
     }
   }
 
+  const handleSearchChange = (val: string) => {
+    setSearchTerm(val)
+    if (val.trim()) {
+      setSearchParams({ search: val.trim() }, { replace: true })
+    } else {
+      setSearchParams({}, { replace: true })
+    }
+  }
+
   // Filtragem dinâmica
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
       // Filtro de Texto
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase().trim()
+        const cleanDigits = q.replace(/\D/g, '')
+
         const matchName = r.userName?.toLowerCase().includes(q)
         const matchEmail = r.userEmail?.toLowerCase().includes(q)
-        const matchDoc = r.userDocument?.replace(/\D/g, '').includes(q.replace(/\D/g, ''))
+        const matchCompany = r.companyName?.toLowerCase().includes(q)
+        const matchPlan = r.planName?.toLowerCase().includes(q)
+        const matchDoc = cleanDigits ? r.userDocument?.replace(/\D/g, '').includes(cleanDigits) : false
+        const matchCompanyDoc = cleanDigits ? r.companyDocument?.replace(/\D/g, '').includes(cleanDigits) : false
         const matchReceipt = r.receiptNumber?.toLowerCase().includes(q)
         const matchContractNum = r.contractNumber?.toLowerCase().includes(q)
         const matchIp = r.ipAddress?.includes(q)
         const matchSha = r.documentSha256?.toLowerCase().includes(q)
 
-        if (!matchName && !matchEmail && !matchDoc && !matchReceipt && !matchContractNum && !matchIp && !matchSha) {
+        if (
+          !matchName &&
+          !matchEmail &&
+          !matchCompany &&
+          !matchPlan &&
+          !matchDoc &&
+          !matchCompanyDoc &&
+          !matchReceipt &&
+          !matchContractNum &&
+          !matchIp &&
+          !matchSha
+        ) {
           return false
         }
       }
@@ -276,8 +328,8 @@ export function ContractAcceptanceAuditAdminPage() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por Nome, E-mail, CPF/CNPJ, Recibo, Contrato, IP ou Hash SHA-256..."
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Buscar por Nome, Empresa, E-mail, CPF/CNPJ, Recibo, Contrato, IP ou Hash SHA-256..."
               className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
             />
           </div>

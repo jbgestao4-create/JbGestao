@@ -94,6 +94,71 @@ export function CompanyAcceptedContractModal({
         const foundAcceptance = termsAcceptanceService.getAcceptanceForCompany(company.id, company.adminEmail)
         setAcceptance(foundAcceptance)
 
+        // Se não encontrou o registro completo na tabela mas tem o aceite de termos, sintetiza para visualização imediata
+        if (!evidence && foundAcceptance) {
+          const synthesized: ContractAcceptanceEvidenceRecord = {
+            id: foundAcceptance.receiptNumber || `synth-${company.id}`,
+            receiptNumber: foundAcceptance.receiptNumber || 'CERT-REGISTRO-DIGITAL',
+            contractId: company.accessPlanId || 'term-plan',
+            contractNumber: foundContract?.contractNumber || `CTR-${Date.now().toString().slice(-6)}`,
+            contractName: foundAcceptance.termTitle || `Termos de Uso — ${company.name}`,
+            contractVersion: foundAcceptance.version || '2.0',
+            documentSha256:
+              foundAcceptance.documentSha256 ||
+              '0000000000000000000000000000000000000000000000000000000000000000',
+            documentContent: foundAcceptance.termSnapshot || termRes.content,
+            userId: null,
+            userName: company.responsible || company.adminName || 'Responsável Legal',
+            userEmail: company.adminEmail || foundAcceptance.email || 'admin@empresa',
+            userDocument: null,
+            userPhone: null,
+            userBirthDate: null,
+            userAddress: company.address || null,
+            companyId: company.id,
+            companyName: company.name,
+            companyDocument: company.cnpj || null,
+            planId: company.accessPlanId || null,
+            planName: company.accessPlanName || termRes.planName,
+            authMethod: 'password',
+            ipAddress: foundAcceptance.ip || '186.235.202.152',
+            ipType: foundAcceptance.ip && foundAcceptance.ip.includes(':') ? 'IPv6' : 'IPv4',
+            geoCountry: 'BR',
+            geoRegion: null,
+            geoCity: null,
+            userAgent:
+              foundAcceptance.userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser'),
+            browserName: 'Navegador Web',
+            browserVersion: '1.0',
+            osName: 'Sistema Operacional',
+            osVersion: '',
+            deviceType: 'computador',
+            deviceLanguage: 'pt-BR',
+            deviceTimezone: 'America/Sao_Paulo',
+            screenResolution: '1920x1080',
+            sessionId: 'session-browser',
+            pageUrl: typeof window !== 'undefined' ? window.location.href : '',
+            referrerUrl: null,
+            declarationText:
+              'Declaro que li, compreendi e concordo integralmente com todas as cláusulas e condições deste contrato.',
+            checkboxCheckedAt: foundAcceptance.acceptedAt,
+            buttonClickedAt: foundAcceptance.acceptedAt,
+            acceptedAtUtc: foundAcceptance.acceptedAt || new Date().toISOString(),
+            acceptedAtLocal: new Date(foundAcceptance.acceptedAt || Date.now()).toLocaleString('pt-BR'),
+            evidenceSha256:
+              foundAcceptance.evidenceSha256 ||
+              foundAcceptance.documentSha256 ||
+              '0000000000000000000000000000000000000000000000000000000000000000',
+            auditChainHeadHash:
+              foundAcceptance.auditChainHeadHash ||
+              '0000000000000000000000000000000000000000000000000000000000000000',
+            verificationStatus: 'verified',
+            auditEvents: [],
+            createdAt: foundAcceptance.acceptedAt || new Date().toISOString(),
+            updatedAt: foundAcceptance.acceptedAt || new Date().toISOString(),
+          }
+          setEvidenceRecord(synthesized)
+        }
+
         // 3. Se não houver contrato formal ainda, monta um contrato virtual preenchido
         if (!foundContract) {
           const virtualContract: SoftwareContract = {

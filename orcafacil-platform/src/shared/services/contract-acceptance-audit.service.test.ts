@@ -164,4 +164,28 @@ describe('contractAcceptanceAuditService', () => {
     expect(dossier.technicalConnection.ipAddress).toBeDefined()
     expect(dossier.chronologicalAuditTrail.events.length).toBeGreaterThan(0)
   })
+
+  it('recupera aceites salvos em jb_terms_acceptance_company_* sintetizando os dados de auditoria', async () => {
+    // Simula um aceite gravado via termsAcceptanceService para uma empresa (ex: 'Next')
+    const sampleReceipt = 'CERT-ACEITE-2026-KI9YOB0633'
+    localStorage.setItem(
+      'jb_terms_acceptance_company_comp-next-123',
+      JSON.stringify({
+        receiptNumber: sampleReceipt,
+        companyName: 'Next',
+        email: 'admin@next.com.br',
+        acceptedAt: new Date().toISOString(),
+        version: '2.0',
+        termTitle: 'Termos de Uso — Next',
+        ip: '186.235.202.152',
+      }),
+    )
+
+    const all = await contractAcceptanceAuditService.listAll()
+    const nextRecord = all.find((r) => r.receiptNumber === sampleReceipt)
+    expect(nextRecord).toBeDefined()
+    expect(nextRecord?.receiptNumber).toBe(sampleReceipt)
+    expect(nextRecord?.companyName).toBe('Next')
+    expect(nextRecord?.userEmail).toBe('admin@next.com.br')
+  })
 })

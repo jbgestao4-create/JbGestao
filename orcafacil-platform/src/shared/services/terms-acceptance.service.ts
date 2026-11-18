@@ -2,6 +2,7 @@ import { supabase } from '@app/config/supabase'
 import {
   contractAcceptanceAuditService,
   DEFAULT_LEGAL_DECLARATION,
+  resolveServerVerifiedConnection,
   type ContractAcceptanceEvidenceRecord,
 } from './contract-acceptance-audit.service'
 
@@ -56,18 +57,10 @@ const COMPANY_STORAGE_PREFIX = 'jb_terms_acceptance_company_'
 
 async function resolvePublicIp(): Promise<string> {
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 2500)
-    const res = await fetch('https://api.ipify.org?format=json', {
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-    if (res.ok) {
-      const json = (await res.json()) as { ip?: string }
-      if (json?.ip) return json.ip
-    }
+    const conn = await resolveServerVerifiedConnection()
+    if (conn?.ip) return conn.ip
   } catch {
-    // Fallback caso o navegador bloqueie ou esteja offline
+    // fallback
   }
   return 'IP registrado na sessão do servidor'
 }
