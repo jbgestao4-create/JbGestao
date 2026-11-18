@@ -235,6 +235,18 @@ export const PixPaymentCheckoutPage = lazy(() =>
   })),
 )
 
+export const PlanTermsAdminPage = lazy(() =>
+  import('@modules/companies/pages/PlanTermsAdminPage').then((module) => ({
+    default: module.PlanTermsAdminPage,
+  })),
+)
+
+export const ContractAcceptanceAuditAdminPage = lazy(() =>
+  import('@modules/companies/pages/ContractAcceptanceAuditAdminPage').then((module) => ({
+    default: module.ContractAcceptanceAuditAdminPage,
+  })),
+)
+
 
 
 

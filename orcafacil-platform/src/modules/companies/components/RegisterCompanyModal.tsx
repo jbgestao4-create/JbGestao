@@ -27,6 +27,8 @@ import {
 } from '@modules/customers/utils/postal-code'
 import { companyManagementService } from '../services/company-management.service'
 import { accessPlanService, type AccessPlan } from '../services/access-plan.service'
+import { contractService } from '../services/contract.service'
+import { planTermsService } from '@shared/services/plan-terms.service'
 
 interface RegisterCompanyModalProps {
   isOpen: boolean
@@ -298,6 +300,33 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
 
     if (res.success && res.data?.organizationId && selectedPlan) {
       await accessPlanService.assignToCompany(res.data.organizationId, selectedPlan)
+      try {
+        const planTerm = await planTermsService.getTermForPlan(selectedPlan.id)
+        await contractService.saveContract({
+          companyId: res.data.organizationId,
+          contractNumber: contractService.generateContractNumber(),
+          clientName: name.trim(),
+          clientTradeName: name.trim(),
+          clientDocument: cnpj.trim() || 'Documento em cadastro',
+          clientResponsibleName: adminName.trim(),
+          clientResponsibleRole: 'Administrador / Responsável',
+          clientEmail: adminEmail.trim(),
+          clientPhone: adminPhone.trim() || null,
+          planName: selectedPlan.name,
+          monthlyAmount: selectedPlan.monthlyPrice || 149.9,
+          billingDay: 10,
+          paymentMethod: 'PIX / Boleto Bancário',
+          startDate: new Date().toISOString().split('T')[0],
+          durationMonths: 12,
+          hasTrialPeriod: true,
+          trialDurationMonths: 1,
+          isSigned: false, // Será assinado eletronicamente no primeiro acesso/aceite do cliente
+          status: 'active',
+          customTerms: planTerm.content,
+        })
+      } catch {
+        // non-blocking
+      }
     }
 
     setIsLoading(false)

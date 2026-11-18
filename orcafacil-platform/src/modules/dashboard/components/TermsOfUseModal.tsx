@@ -5,12 +5,17 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
+import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
+import { planTermsService, type PlanTermConfig } from '@shared/services/plan-terms.service'
 import { Button } from '@shared/components/ui/Button'
 
 export function TermsOfUseModal() {
   const { user } = useAuth()
+  const { currentOrganization } = useOrganization()
+
   const [isOpen, setIsOpen] = useState(false)
+  const [currentTerm, setCurrentTerm] = useState<PlanTermConfig | null>(null)
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false)
   const [isAgreed, setIsAgreed] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -22,38 +27,66 @@ export function TermsOfUseModal() {
       return
     }
 
-    // Todos os cadastros novos e usuários que ainda não aceitaram devem aceitar obrigatoriamente
-    const accepted = termsAcceptanceService.hasAccepted(user.email, user.user_metadata)
+    let isMounted = true
 
-    if (accepted) {
-      setIsOpen(false)
-    } else {
-      setIsOpen(true)
-      setHasScrolledToBottom(false)
-      setIsAgreed(false)
+    const checkAcceptance = async () => {
+      try {
+        const planId = currentOrganization?.accessPlanId || null
+        const term = await planTermsService.getTermForPlan(planId)
+
+        if (!isMounted) return
+        setCurrentTerm(term)
+
+        // Verifica se o usuário já aceitou os termos deste plano e versão
+        const accepted = termsAcceptanceService.hasAcceptedForPlan(
+          user.email,
+          user.user_metadata,
+          planId,
+          term.version,
+        )
+
+        if (accepted) {
+          setIsOpen(false)
+        } else {
+          setIsOpen(true)
+          setHasScrolledToBottom(false)
+          setIsAgreed(false)
+        }
+      } catch {
+        // Fallback: se houver erro ao carregar termos, verifica aceite padrão
+        const accepted = termsAcceptanceService.hasAccepted(user.email, user.user_metadata)
+        if (isMounted) {
+          setIsOpen(!accepted)
+        }
+      }
     }
-  }, [user])
 
-  // Verifica se o texto já cabe inteiro sem barra de rolagem (ex: telas verticais gigantes)
+    void checkAcceptance()
+
+    return () => {
+      isMounted = false
+    }
+  }, [user, currentOrganization?.accessPlanId])
+
+  // Verifica se o texto já cabe inteiro sem barra de rolagem (ex: telas grandes)
   useEffect(() => {
     if (!isOpen) return
     const checkScrollable = () => {
       const el = scrollContainerRef.current
-      if (el && el.scrollHeight <= el.clientHeight + 10) {
+      if (el && el.scrollHeight <= el.clientHeight + 15) {
         setHasScrolledToBottom(true)
       }
     }
     const timer = setTimeout(checkScrollable, 200)
     return () => clearTimeout(timer)
-  }, [isOpen])
+  }, [isOpen, currentTerm])
 
   if (!isOpen) return null
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (hasScrolledToBottom) return
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-    // Se o usuário rolou até o final (tolerância de 25px para DPI e arredondamentos de zoom)
-    if (scrollTop + clientHeight >= scrollHeight - 25) {
+    if (scrollTop + clientHeight >= scrollHeight - 30) {
       setHasScrolledToBottom(true)
     }
   }
@@ -64,17 +97,37 @@ export function TermsOfUseModal() {
     setIsSaving(true)
     try {
       await termsAcceptanceService.recordAcceptance(user.email, true, {
+        companyId: currentOrganization?.id,
+        companyName: currentOrganization?.name,
+        selectedPlanId: currentOrganization?.accessPlanId || undefined,
+        selectedPlanName: currentOrganization?.accessPlanName || currentTerm?.planName,
+        version: currentTerm?.version || '2.0',
+        termTitle: currentTerm?.title,
+        termSnapshot: currentTerm?.content,
         agreedToTrialAndAutoSuspension: true,
       })
       setIsOpen(false)
     } catch {
       // Fallback em caso de erro de rede: salva localmente
-      termsAcceptanceService.recordAcceptance(user.email, false)
+      await termsAcceptanceService.recordAcceptance(user.email, false, {
+        companyId: currentOrganization?.id,
+        companyName: currentOrganization?.name,
+        selectedPlanId: currentOrganization?.accessPlanId || undefined,
+        selectedPlanName: currentOrganization?.accessPlanName || currentTerm?.planName,
+        version: currentTerm?.version || '2.0',
+        termTitle: currentTerm?.title,
+        termSnapshot: currentTerm?.content,
+        agreedToTrialAndAutoSuspension: true,
+      })
       setIsOpen(false)
     } finally {
       setIsSaving(false)
     }
   }
+
+  const planName = currentOrganization?.accessPlanName || currentTerm?.planName || 'Plano Atual'
+  const termVersion = currentTerm?.version || '2.0'
+  const termTitle = currentTerm?.title || `Termos de Uso e Licença de Software — ${planName}`
 
   return (
     <div
@@ -82,134 +135,56 @@ export function TermsOfUseModal() {
       aria-modal="true"
       aria-labelledby="terms-modal-title"
       aria-describedby="terms-modal-description"
-      className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-black/65 p-4 backdrop-blur-xs"
     >
-      <section className="max-h-[92vh] w-full max-w-2xl flex flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-        {/* Cabeçalho no mesmo estilo do diálogo de confirmação */}
+      <section className="max-h-[92vh] w-full max-w-2xl flex flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 animate-in fade-in zoom-in-95 duration-150">
+        {/* Cabeçalho */}
         <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300">
+              Plano: {planName}
+            </span>
+            <span className="text-[11px] font-mono text-slate-400">Versão: v{termVersion}</span>
+          </div>
           <h2
             id="terms-modal-title"
-            className="text-lg font-bold text-gray-900 dark:text-white"
+            className="text-base sm:text-lg font-bold text-gray-900 dark:text-white"
           >
-            Termos de Uso e Política de Privacidade
+            {termTitle}
           </h2>
           <p
             id="terms-modal-description"
-            className="mt-1 text-sm text-gray-500 dark:text-slate-400"
+            className="mt-1 text-xs text-gray-500 dark:text-slate-400"
           >
-            Role o termo até o final para liberar a caixa de aceite e clicar em Avançar.
+            Role o documento abaixo até o final para habilitar o campo de aceite e avançar para o sistema.
           </p>
         </div>
 
-        {/* Caixa de Texto Rolável com os Termos Oficiais da tela /politica-de-privacidade?tab=terms */}
+        {/* Caixa de Texto Rolável com os Termos Atribuídos ao Plano */}
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="my-4 max-h-[50vh] flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-xs text-slate-700 leading-relaxed space-y-5 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300 select-text"
+          className="my-4 max-h-[50vh] flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-700 leading-relaxed whitespace-pre-line dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300 select-text space-y-4"
         >
-          {/* Aviso Importante — Contrato Legalmente Vinculante */}
-          <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-1.5 dark:border-amber-800 dark:bg-amber-950/40">
+          {/* Alerta de Contrato Legalmente Vinculante */}
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 space-y-1.5 dark:border-amber-800 dark:bg-amber-950/40">
             <div className="flex items-center gap-2 text-amber-950 dark:text-amber-300 font-bold text-xs">
               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>Aviso Importante — Contrato Legalmente Vinculante</span>
             </div>
             <p className="text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed">
-              Estes Termos e Condições de Uso (&ldquo;Termos&rdquo;) constituem um contrato legalmente
-              vinculante entre você (o &ldquo;Cliente&rdquo; / &ldquo;Assinante&rdquo;) e a{' '}
-              <strong>ControleSoft / JB Gestão</strong>. Ao criar uma conta, contratar um plano ou iniciar
-              o período de teste de 30 dias grátis, você declara ter lido, compreendido e aceito integralmente todas as disposições aqui previstas.
-            </p>
-          </section>
-
-          {/* 1. Definições */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">1. Definições</h3>
-            <ul className="space-y-1 text-slate-600 dark:text-slate-300">
-              <li>• <strong>Plataforma / Serviço:</strong> O sistema SaaS multi-tenant ControleSoft / JB Gestão.</li>
-              <li>• <strong>Cliente:</strong> A pessoa física ou jurídica que realiza o cadastro e assume a responsabilidade pela organização.</li>
-              <li>• <strong>Usuário / Preposto:</strong> Pessoas autorizadas pelo Cliente a operar a conta.</li>
-              <li>• <strong>Dados do Cliente:</strong> Registros comerciais, clientes, produtos e históricos inseridos no sistema.</li>
-            </ul>
-          </div>
-
-          {/* 2. Aceitação, Capacidade e Hierarquia de Contas */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">2. Aceitação, Capacidade e Hierarquia de Contas</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              O Cliente declara plena capacidade civil ou poderes de representação jurídica. O administrador é responsável exclusivo pela gestão de permissões de seus operadores e responde de forma objetiva por atos de seus prepostos (art. 932, III, do Código Civil).
+              Estes Termos de Uso e Condições de Licença constituem um contrato vinculante entre você e a plataforma{' '}
+              <strong>ControleSoft / JB Gestão</strong> para o <strong>{planName}</strong>.
             </p>
           </div>
 
-          {/* 3. Natureza do Serviço e Isenção Fiscal */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">3. Natureza do Serviço e Isenção Fiscal e Contábil</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              A Plataforma constitui ferramenta de apoio gerencial (obrigação de meio). A apuração de tributos, parametrização correta de alíquotas (NCM, CFOP, CST/CSOSN) e a emissão oficial de documentos fiscais perante os órgãos competentes (SEFAZ) são de exclusiva responsabilidade do Cliente.
-            </p>
+          {/* Conteúdo Dinâmico do Termo */}
+          <div className="leading-relaxed">
+            {currentTerm?.content}
           </div>
 
-          {/* 4. Operações Financeiras e Boletos */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">4. Operações Financeiras, Caixa e Boletos</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              A Plataforma não é uma instituição financeira. Lançamentos de caixa, baixas e extração de dados de boletos bancários em PDF são controles gerenciais internos e não liquidam títulos na rede bancária comercial, cabendo ao Cliente a conferência de valores antes do pagamento no seu banco.
-            </p>
-          </div>
-
-          {/* 5. Segurança de Credenciais e Senhas de Aparelhos (O.S.) */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">5. Segurança de Credenciais e Senhas de Aparelhos (O.S.)</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              As credenciais de login são pessoais e intransferíveis. O armazenamento de senhas de aparelhos de clientes finais em ordens de serviço é de inteira responsabilidade civil e legal do Cliente e de seus técnicos.
-            </p>
-          </div>
-
-          {/* 6. Período de Teste (Trial de 30 Dias) e Pagamentos */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">6. Período de Teste (Trial de 30 Dias) e Assinatura</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              Novas organizações possuem 30 (trinta) dias de avaliação gratuita sem cobrança imediata. Ao término dos 30 dias de teste, a continuidade do acesso fica condicionada ao pagamento da assinatura mensal correspondente ao plano adquirido.
-            </p>
-          </div>
-
-          {/* 7. Condutas Proibidas */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">7. Condutas Proibidas</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              É terminantemente proibido utilizar o sistema para fraudes, sonegação fiscal, compartilhamento indevido de acessos ou engenharia reversa do código-fonte.
-            </p>
-          </div>
-
-          {/* 8. Propriedade Intelectual & 9. LGPD */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">8. Propriedade Intelectual & 9. LGPD</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              A marca, interfaces e softwares são propriedade exclusiva da ControleSoft. Para os fins da LGPD (Lei nº 13.709/2018), o Cliente atua como Controlador dos dados de seus clientes finais e a ControleSoft atua como Operadora da infraestrutura em nuvem com isolamento de dados por RLS.
-            </p>
-          </div>
-
-          {/* 10. Disponibilidade, 11. Limitação de Responsabilidade e 12. Indenização */}
-          <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-white">10. Disponibilidade e Limitação de Responsabilidade</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              O serviço opera em melhores esforços comerciais. Não respondemos por lucros cessantes ou danos indiretos. A responsabilidade indenizatória agregada fica limitada ao valor efetivamente pago pelo Cliente nos últimos 3 (três) meses anteriores ao evento.
-            </p>
-          </div>
-
-          {/* 13. Cancelamento, 14. Foro e Contato */}
-          <div className="space-y-1.5">
-            <h3 className="font-bold text-slate-900 dark:text-white">13. Cancelamento, 14. Vigência e Foro</h3>
-            <p className="text-slate-600 dark:text-slate-300">
-              O cancelamento pode ser efetuado a qualquer momento sem multa. Estes termos regem-se pelas leis brasileiras com foro na comarca da operadora da plataforma. Contato oficial:{' '}
-              <a href="mailto:controlesoft@outlook.com" className="text-blue-600 underline">
-                controlesoft@outlook.com
-              </a>
-              .
-            </p>
-          </div>
-
-          <div className="pt-2 text-center text-[10px] text-slate-400 font-mono">
-            — Fim dos Termos e Condições de Uso —
+          <div className="pt-3 text-center text-[10px] text-slate-400 font-mono">
+            — Fim dos Termos de Uso e Licença de Software ({planName}) —
           </div>
         </div>
 
@@ -242,11 +217,12 @@ export function TermsOfUseModal() {
             className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 cursor-pointer"
           />
           <span className="text-xs font-medium text-gray-800 dark:text-slate-200 leading-relaxed">
-            Li e aceito os <strong>Termos de Uso</strong> e a <strong>Política de Privacidade</strong> da plataforma ControleSoft / JB Gestão, incluindo as condições de licenciamento e os 30 dias de teste grátis.
+            Li e aceito integralmente os <strong>Termos de Uso e Licenciamento do {planName}</strong> e a{' '}
+            <strong>Política de Privacidade</strong> da plataforma ControleSoft / JB Gestão.
           </span>
         </label>
 
-        {/* Rodapé com botão Avançar à direita no mesmo layout do print */}
+        {/* Rodapé com botão Avançar */}
         <div className="mt-5 flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-slate-800">
           <Button
             type="button"

@@ -38,6 +38,7 @@ import { AdjustCompanyLicenseModal } from '../components/AdjustCompanyLicenseMod
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
 import { ManageAccessPlansModal } from '../components/ManageAccessPlansModal'
 import { ContractsManagementSection } from '../components/ContractsManagementSection'
+import { CompanyAcceptedContractModal } from '../components/CompanyAcceptedContractModal'
 import { formatLastAccess } from '@shared/services/screen-time.service'
 import {
   contractService,
@@ -69,6 +70,7 @@ export function CompanyManagementPage() {
   const [selectedCompanyForEdit, setSelectedCompanyForEdit] = useState<ManagedCompany | null>(null)
   const [selectedCompanyForUsers, setSelectedCompanyForUsers] = useState<ManagedCompany | null>(null)
   const [selectedCompanyForLicense, setSelectedCompanyForLicense] = useState<ManagedCompany | null>(null)
+  const [selectedCompanyForContract, setSelectedCompanyForContract] = useState<ManagedCompany | null>(null)
   const [isManagePlansModalOpen, setIsManagePlansModalOpen] = useState(false)
 
   // Diálogo de confirmação para desativar/ativar
@@ -754,12 +756,7 @@ export function CompanyManagementPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              const isOverdue = overdueCompanyIds.has(comp.id)
-                              if (isOverdue) {
-                                setSearchParams({ tab: 'invoices', companyId: comp.id })
-                              } else {
-                                setSearchParams({ tab: 'contracts', companyId: comp.id })
-                              }
+                              setSelectedCompanyForContract(comp)
                             }}
                             className={`gap-1.5 text-xs font-semibold ${
                               overdueCompanyIds.has(comp.id)
@@ -768,12 +765,12 @@ export function CompanyManagementPage() {
                             }`}
                             title={
                               overdueCompanyIds.has(comp.id)
-                                ? 'Empresa com mensalidade vencida! Clique para ir a Pagamentos Realizados & Financeiro'
-                                : 'Gerar ou consultar contrato desta empresa'
+                                ? 'Empresa com mensalidade vencida. Clique para consultar o contrato e termo aceito pelo cliente'
+                                : 'Consultar contrato vinculado ao termo de adesão aceito pelo cliente'
                             }
                           >
                             <FileSignature className="h-3.5 w-3.5" />
-                            {overdueCompanyIds.has(comp.id) ? 'Fatura Vencida' : 'Contrato'}
+                            {overdueCompanyIds.has(comp.id) ? 'Contrato (Vencida)' : 'Contrato'}
                           </Button>
 
                           {/* Botão de Ajustar Dias de Licença (Aumentar / Diminuir) - À frente do botão Usuários */}
@@ -1054,6 +1051,18 @@ export function CompanyManagementPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* Modal de Contrato Vinculado ao Termo Aceito */}
+      {selectedCompanyForContract && (
+        <CompanyAcceptedContractModal
+          company={selectedCompanyForContract}
+          isOpen={Boolean(selectedCompanyForContract)}
+          onClose={() => setSelectedCompanyForContract(null)}
+          onOpenInvoices={(comp) => {
+            setSelectedCompanyForContract(null)
+            setSearchParams({ tab: 'invoices', companyId: comp.id })
+          }}
+        />
       )}
     </div>
   )

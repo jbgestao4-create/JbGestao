@@ -53,6 +53,8 @@ import {
   RegisterCompanyPublicPage,
   SiteAccessAnalyticsPage,
   PixPaymentCheckoutPage,
+  PlanTermsAdminPage,
+  ContractAcceptanceAuditAdminPage,
 } from './lazy-pages'
 
 function RootRoute() {
@@ -156,6 +158,30 @@ export const router = createBrowserRouter([
         </RequireOwner>
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/admin/terms',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <PlanTermsAdminPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/acceptance-audit',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <ContractAcceptanceAuditAdminPage />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/developer-settings/terms',
+    element: <Navigate to="/admin/terms" replace />,
   },
   {
     path: '/admin/developer-settings',

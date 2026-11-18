@@ -28,6 +28,7 @@ import {
 import { contractService } from '@modules/companies/services/contract.service'
 import type { AccessPlan } from '@modules/companies/services/access-plan.service'
 import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
+import { planTermsService, type PlanTermConfig } from '@shared/services/plan-terms.service'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
 import { formatPhoneNumber } from '@shared/utils/phone'
@@ -112,6 +113,21 @@ export function PlanTrialSignupModal({
   const [acceptedTermsAndPrivacy, setAcceptedTermsAndPrivacy] = useState(false)
   const [acceptedAutoSuspensionRule, setAcceptedAutoSuspensionRule] = useState(false)
   const [showTermsPreview, setShowTermsPreview] = useState(false)
+  const [planTerm, setPlanTerm] = useState<PlanTermConfig | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+    if (currentPlan?.id || currentPlan?.name) {
+      void planTermsService.getTermForPlan(currentPlan.id || currentPlan.name).then((res) => {
+        if (isMounted) {
+          setPlanTerm(res)
+        }
+      })
+    }
+    return () => {
+      isMounted = false
+    }
+  }, [currentPlan?.id, currentPlan?.name])
 
   // Controle de submissão e sucesso
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -323,6 +339,9 @@ export function PlanTrialSignupModal({
       const acceptanceRecord = await termsAcceptanceService.recordAcceptance(cleanEmail, false, {
         selectedPlanId: currentPlan.id,
         selectedPlanName: currentPlan.name,
+        version: planTerm?.version || '2.0',
+        termTitle: planTerm?.title,
+        termSnapshot: planTerm?.content,
         agreedToTrialAndAutoSuspension: true,
       })
 
@@ -357,6 +376,9 @@ export function PlanTrialSignupModal({
         void termsAcceptanceService.recordAcceptance(cleanEmail, true, {
           selectedPlanId: currentPlan.id,
           selectedPlanName: currentPlan.name,
+          version: planTerm?.version || '2.0',
+          termTitle: planTerm?.title,
+          termSnapshot: planTerm?.content,
           agreedToTrialAndAutoSuspension: true,
         })
       }
@@ -456,11 +478,13 @@ export function PlanTrialSignupModal({
         signedAt: acceptanceRecord.acceptedAt,
         status: 'active',
         includedModules: includedMainModules.map((m) => m.name),
-        customTerms: `Adesão digital na apresentação do site com aprovação dos Termos de Uso v${acceptanceRecord.version} e Política de Privacidade (IP: ${acceptanceRecord.ip}). ${
-          useFreeTrial
-            ? `1º mês gratuito (30 dias até ${trialEndFormatted}). A partir do próximo mês, o pagamento de ${formatCurrency(planPrice.toFixed(2))} é obrigatório para manter o acesso, ocorrendo retirada/suspensão automática do acesso em caso de não pagamento.`
-            : 'Assinatura mensal ativa com suspensão automática em caso de inadimplência.'
-        }`,
+        customTerms: planTerm?.content
+          ? `${planTerm.title} (v${acceptanceRecord.version}) — Aceito digitalmente por ${cleanEmail} (IP: ${acceptanceRecord.ip}) aos ${new Date(acceptanceRecord.acceptedAt).toLocaleString('pt-BR')}\n\n${planTerm.content}`
+          : `Adesão digital na apresentação do site com aprovação dos Termos de Uso v${acceptanceRecord.version} e Política de Privacidade (IP: ${acceptanceRecord.ip}). ${
+              useFreeTrial
+                ? `1º mês gratuito (30 dias até ${trialEndFormatted}). A partir do próximo mês, o pagamento de ${formatCurrency(planPrice.toFixed(2))} é obrigatório para manter o acesso, ocorrendo retirada/suspensão automática do acesso em caso de não pagamento.`
+                : 'Assinatura mensal ativa com suspensão automática em caso de inadimplência.'
+            }`,
       })
 
       if (savedContractRes.success && savedContractRes.data) {
@@ -930,14 +954,14 @@ export function PlanTrialSignupModal({
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-700">
                     <Scale className="h-4 w-4 text-blue-600" />
-                    <span>3. Aprovação das Políticas e Termos de Uso</span>
+                    <span>3. Termo do Plano {currentPlan.name} (v{planTerm?.version || '2.0'})</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowTermsPreview(!showTermsPreview)}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
                   >
-                    <span>{showTermsPreview ? 'Ocultar resumo' : 'Ler cláusulas do contrato'}</span>
+                    <span>{showTermsPreview ? 'Ocultar cláusulas' : 'Ler cláusulas do plano'}</span>
                     {showTermsPreview ? (
                       <ChevronUp className="h-3.5 w-3.5" />
                     ) : (
@@ -947,30 +971,15 @@ export function PlanTrialSignupModal({
                 </div>
 
                 {showTermsPreview && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs text-slate-600 space-y-2 max-h-48 overflow-y-auto leading-relaxed">
-                    <p className="font-bold text-slate-900">
-                      Resumo da Cláusula 6 — Planos, Período de Teste Grátis (1 Mês), Pagamentos e
-                      Suspensão de Acesso:
-                    </p>
-                    <p>
-                      <strong>6.1. Teste Grátis de 1 Mês (30 dias):</strong> Ao escolher um plano com
-                      a opção de teste grátis, o Cliente recebe 30 dias corridos de acesso gratuito
-                      aos módulos integrantes do plano selecionado, sem cobrança no primeiro mês.
-                    </p>
-                    <p>
-                      <strong>6.2. Pagamento no Próximo Mês:</strong> Encerrado o período de 1 mês
-                      gratuito, a continuidade da utilização do sistema no mês subsequente depende
-                      exclusivamente da quitação da fatura mensal do plano escolhido até a data de
-                      vencimento.
-                    </p>
-                    <p>
-                      <strong>6.3. Retirada Automática de Acesso por Inadimplemento:</strong> Caso o
-                      Cliente não efetue o pagamento da mensalidade referente ao próximo mês, o
-                      sistema <strong>retirará e suspenderá automaticamente o acesso</strong> da
-                      empresa e de seus usuários (bloqueio automático de login e operação),
-                      preservando os dados cadastrados pelo prazo de carência contratual (30 a 90
-                      dias) para regularização financeira ou exportação nos termos da LGPD.
-                    </p>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs text-slate-600 space-y-2 max-h-56 overflow-y-auto leading-relaxed whitespace-pre-line select-text">
+                    <div className="font-bold text-slate-900 border-b border-slate-100 pb-1.5 mb-2">
+                      {planTerm?.title || `Termos de Uso e Licença de Software — ${currentPlan.name}`} (v{planTerm?.version || '2.0'})
+                    </div>
+                    {planTerm?.content || (
+                      <p>
+                        Adesão aos termos do plano {currentPlan.name} com 30 dias de teste gratuito e suspensão automática após 10 dias de atraso.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -983,15 +992,7 @@ export function PlanTrialSignupModal({
                     required
                   />
                   <span className="leading-relaxed">
-                    Li e aprovo integralmente os{' '}
-                    <Link
-                      to="/politica-de-privacidade?tab=terms"
-                      target="_blank"
-                      className="font-bold text-blue-600 hover:underline"
-                    >
-                      Termos e Condições de Uso (v2.0)
-                    </Link>{' '}
-                    e a{' '}
+                    Li e aprovo integralmente o <strong>Termo de Adesão do {currentPlan.name} (v{planTerm?.version || '2.0'})</strong> e a{' '}
                     <Link
                       to="/politica-de-privacidade"
                       target="_blank"
@@ -999,7 +1000,7 @@ export function PlanTrialSignupModal({
                     >
                       Política de Privacidade e Proteção de Dados (LGPD)
                     </Link>{' '}
-                    da plataforma ControleSoft.
+                    da plataforma ControleSoft / JB Gestão.
                   </span>
                 </label>
 

@@ -35,6 +35,8 @@ import {
 import type { DashboardModuleCode } from '@shared/types/common'
 import { ALL_PLATFORM_DASHBOARD_MODULES } from '../services/company-management.service'
 import { accessPlanService, type AccessPlan } from '../services/access-plan.service'
+import { contractService } from '../services/contract.service'
+import { planTermsService } from '@shared/services/plan-terms.service'
 import { ManageAccessPlansModal } from './ManageAccessPlansModal'
 
 interface EditCompanyModalProps {
@@ -147,6 +149,31 @@ function EditCompanyForm({
       setError(result.error)
       return false
     }
+
+    // Atualiza contrato da empresa para o novo plano e vincula o novo termo
+    try {
+      const contractsRes = await contractService.listContracts()
+      if (contractsRes.success && contractsRes.data) {
+        const found = contractsRes.data.find(
+          (c) =>
+            c.companyId === company.id ||
+            (company.name && c.clientName?.trim().toLowerCase() === company.name.trim().toLowerCase()),
+        )
+        if (found) {
+          const newTerm = await planTermsService.getTermForPlan(plan.id)
+          await contractService.saveContract({
+            ...found,
+            planName: plan.name,
+            monthlyAmount: plan.monthlyPrice ?? found.monthlyAmount,
+            customTerms: newTerm.content,
+            isSigned: false, // Requer novo aceite do cliente para o novo plano
+          })
+        }
+      }
+    } catch {
+      // non-blocking
+    }
+
     setSelectedPlanId(plan.id)
     setSelectedModules(plan.modules)
     setIsManagePlansOpen(false)
