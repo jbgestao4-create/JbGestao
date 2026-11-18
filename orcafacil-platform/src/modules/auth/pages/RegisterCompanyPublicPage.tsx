@@ -7,7 +7,6 @@ import {
   Eye,
   EyeOff,
   Layers,
-  Phone,
   UserCheck,
   X,
   Zap,
@@ -658,18 +657,15 @@ export function RegisterCompanyPublicPage() {
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       Telefone / WhatsApp (Com DDD) <span className="text-rose-500">*</span>
                     </label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                      <Input
-                        type="text"
-                        required
-                        placeholder="(00) 00000-0000"
-                        value={adminPhone}
-                        onChange={(e) => setAdminPhone(formatPhoneNumber(e.target.value))}
-                        className="pl-9 text-xs"
-                        maxLength={15}
-                      />
-                    </div>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="(00) 00000-0000"
+                      value={adminPhone}
+                      onChange={(e) => setAdminPhone(formatPhoneNumber(e.target.value))}
+                      className="text-xs"
+                      maxLength={15}
+                    />
                   </div>
 
                   <div>
