@@ -32,6 +32,13 @@ import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import { supabase } from '@app/config/supabase'
+import {
+  validateCpf,
+  validateCnpj,
+  formatCustomerDocument,
+  CPF_INVALID_ERROR,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
 
 interface PlanTrialSignupModalProps {
   isOpen: boolean
@@ -42,18 +49,13 @@ interface PlanTrialSignupModalProps {
 }
 
 function formatCpfOrCnpj(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 14)
-  if (digits.length <= 11) {
-    return digits
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+  const cleanAlnum = value.toUpperCase().replace(/[^0-9A-Z]/g, '')
+  const onlyDigits = value.replace(/\D/g, '')
+
+  if (cleanAlnum === onlyDigits && onlyDigits.length <= 11) {
+    return formatCustomerDocument(onlyDigits, 'individual')
   }
-  return digits
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1/$2')
-    .replace(/(\d{4})(\d)/, '$1-$2')
+  return formatCustomerDocument(cleanAlnum, 'company')
 }
 
 function generateSlug(name: string): string {
@@ -96,6 +98,8 @@ export function PlanTrialSignupModal({
   const [useFreeTrial, setUseFreeTrial] = useState(true)
   const [companyName, setCompanyName] = useState('')
   const [documentNumber, setDocumentNumber] = useState('')
+  const [documentError, setDocumentError] = useState('')
+  const [documentSuccess, setDocumentSuccess] = useState('')
   const [adminName, setAdminName] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [email, setEmail] = useState('')
@@ -130,6 +134,8 @@ export function PlanTrialSignupModal({
       setError(null)
       setCompletedData(null)
       setUseFreeTrial(true)
+      setDocumentError('')
+      setDocumentSuccess('')
       if (user?.email && !email) {
         setEmail(user.email)
       }
@@ -159,6 +165,84 @@ export function PlanTrialSignupModal({
     )
   }, [currentPlan])
 
+  const handleDocumentChange = (raw: string) => {
+    const formatted = formatCpfOrCnpj(raw)
+    setDocumentNumber(formatted)
+
+    const cleanAlnum = formatted.toUpperCase().replace(/[^0-9A-Z]/g, '')
+    const onlyDigits = formatted.replace(/\D/g, '')
+    const isCpf = cleanAlnum === onlyDigits && onlyDigits.length <= 11
+
+    if (cleanAlnum.length === 0) {
+      setDocumentError('')
+      setDocumentSuccess('')
+      return
+    }
+
+    if (isCpf && cleanAlnum.length === 11) {
+      const val = validateCpf(cleanAlnum)
+      if (val.isValid) {
+        setDocumentError('')
+        setDocumentSuccess('✓ CPF válido')
+      } else {
+        setDocumentError(val.error ?? CPF_INVALID_ERROR)
+        setDocumentSuccess('')
+      }
+    } else if (!isCpf && cleanAlnum.length === 14) {
+      const val = validateCnpj(cleanAlnum)
+      if (val.isValid) {
+        setDocumentError('')
+        setDocumentSuccess('✓ CNPJ válido')
+      } else {
+        setDocumentError(val.error ?? CNPJ_INVALID_ERROR)
+        setDocumentSuccess('')
+      }
+    } else {
+      setDocumentError('')
+      setDocumentSuccess('')
+    }
+  }
+
+  const handleDocumentBlur = () => {
+    const cleanAlnum = documentNumber.toUpperCase().replace(/[^0-9A-Z]/g, '')
+    const onlyDigits = documentNumber.replace(/\D/g, '')
+    if (!cleanAlnum) {
+      setDocumentError('')
+      setDocumentSuccess('')
+      return
+    }
+    const isCpf = cleanAlnum === onlyDigits && onlyDigits.length <= 11
+    if (isCpf) {
+      if (cleanAlnum.length < 11) {
+        setDocumentError('Informe o CPF completo com 11 dígitos.')
+        setDocumentSuccess('')
+        return
+      }
+      const val = validateCpf(cleanAlnum)
+      if (!val.isValid) {
+        setDocumentError(val.error ?? CPF_INVALID_ERROR)
+        setDocumentSuccess('')
+      } else {
+        setDocumentError('')
+        setDocumentSuccess('✓ CPF válido')
+      }
+    } else {
+      if (cleanAlnum.length < 14) {
+        setDocumentError('Informe o CNPJ completo com 14 caracteres.')
+        setDocumentSuccess('')
+        return
+      }
+      const val = validateCnpj(cleanAlnum)
+      if (!val.isValid) {
+        setDocumentError(val.error ?? CNPJ_INVALID_ERROR)
+        setDocumentSuccess('')
+      } else {
+        setDocumentError('')
+        setDocumentSuccess('✓ CNPJ válido')
+      }
+    }
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -166,6 +250,33 @@ export function PlanTrialSignupModal({
     if (companyName.trim().length < 2) {
       setError('Informe o nome da sua empresa ou negócio.')
       return
+    }
+
+    const cleanDocAlnum = documentNumber.toUpperCase().replace(/[^0-9A-Z]/g, '')
+    const onlyDocDigits = documentNumber.replace(/\D/g, '')
+    if (cleanDocAlnum) {
+      const isCpf = cleanDocAlnum === onlyDocDigits && onlyDocDigits.length <= 11
+      if (isCpf) {
+        if (cleanDocAlnum.length !== 11) {
+          setError('Informe o CPF completo com 11 dígitos ou deixe em branco.')
+          return
+        }
+        const val = validateCpf(cleanDocAlnum)
+        if (!val.isValid) {
+          setError(val.error ?? CPF_INVALID_ERROR)
+          return
+        }
+      } else {
+        if (cleanDocAlnum.length !== 14) {
+          setError('Informe o CNPJ completo com 14 caracteres ou deixe em branco.')
+          return
+        }
+        const val = validateCnpj(cleanDocAlnum)
+        if (!val.isValid) {
+          setError(val.error ?? CNPJ_INVALID_ERROR)
+          return
+        }
+      }
     }
 
     if (adminName.trim().length < 2) {
@@ -544,7 +655,7 @@ export function PlanTrialSignupModal({
                     1. Plano Selecionado
                   </label>
                   <span className="text-xs font-semibold text-blue-600">
-                    {includedMainModules.length} módulos + Suporte / Dúvidas liberados
+                    {includedMainModules.length} módulos liberados neste plano
                   </span>
                 </div>
 
@@ -686,11 +797,24 @@ export function PlanTrialSignupModal({
                     <input
                       type="text"
                       value={documentNumber}
-                      onChange={(e) => setDocumentNumber(formatCpfOrCnpj(e.target.value))}
+                      onChange={(e) => handleDocumentChange(e.target.value)}
+                      onBlur={handleDocumentBlur}
                       placeholder="00.000.000/0001-00 ou CPF"
                       maxLength={18}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none"
+                      className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none ${
+                        documentError
+                          ? 'border-rose-500 focus:border-rose-600'
+                          : documentSuccess
+                            ? 'border-emerald-500 focus:border-emerald-600'
+                            : 'border-slate-300 focus:border-blue-600'
+                      }`}
                     />
+                    {documentSuccess && (
+                      <p className="mt-1 text-xs font-medium text-emerald-600">{documentSuccess}</p>
+                    )}
+                    {documentError && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{documentError}</p>
+                    )}
                   </div>
 
                   <div>

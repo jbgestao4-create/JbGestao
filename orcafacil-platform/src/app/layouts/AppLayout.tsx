@@ -14,6 +14,7 @@ import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { SystemNotificationModal } from '@shared/components/SystemNotificationModal'
 import { OrganizationBillingBanner } from '@modules/organizations/components/OrganizationBillingBanner'
 import { OrganizationSuspensionGuard } from '@modules/organizations/components/OrganizationSuspensionGuard'
+import { TermsOfUseModal } from '@modules/dashboard/components/TermsOfUseModal'
 import { suggestionService } from '@modules/suggestions/services/suggestion.service'
 import { formatUnreadSuggestionCount } from '@modules/suggestions/utils/suggestion.utils'
 import { siteAccessTrackerService } from '@shared/services/site-access-tracker.service'
@@ -845,6 +846,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <FeedbackWidget />
               <SystemNotificationModal />
               <OrganizationSuspensionGuard />
+              <TermsOfUseModal />
             </div>
           </div>
         </div>

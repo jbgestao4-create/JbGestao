@@ -17,7 +17,6 @@ import {
   Search,
   Zap,
   Pencil,
-  AlertTriangle,
   Lock,
   Unlock,
   X,
@@ -36,7 +35,7 @@ export function MercadoPagoSettingsSection() {
     accessToken: '',
     publicKey: '',
     webhookSecret: '',
-    isSandbox: true,
+    isSandbox: false,
     notificationUrl: '',
     pixKey: '',
     autoActivateLicense: true,
@@ -80,6 +79,7 @@ export function MercadoPagoSettingsSection() {
       if (isMounted && res.success && res.data) {
         setSettings({
           ...res.data,
+          isSandbox: false,
           notificationUrl: res.data.notificationUrl || defaultWebhookUrl,
         })
       }
@@ -118,21 +118,22 @@ export function MercadoPagoSettingsSection() {
       return
     }
 
-    // 2. Validação de incompatibilidade entre modo e prefixo do token
-    if (!settings.isSandbox && rawToken.startsWith('TEST-')) {
-      const confirmChange = window.confirm(
-        'Você selecionou o Modo Produção Oficial, mas o seu Access Token começa com "TEST-" (credencial de teste).\n\n' +
-        'Deseja alterar automaticamente o ambiente para "Modo Sandbox (Testes)" para permitir a validação?'
+    // 2. Validação para Modo Produção Oficial
+    const cleanSettings: MercadoPagoSettings = {
+      ...settings,
+      isSandbox: false,
+    }
+
+    if (rawToken.startsWith('TEST-')) {
+      alert(
+        'Atenção: Seu Access Token começa com "TEST-". Como o sistema opera no Modo Produção Oficial, recomendamos utilizar o Access Token de Produção oficial (iniciado com "APP_USR-") obtido no painel de desenvolvedores do Mercado Pago.'
       )
-      if (confirmChange) {
-        settings.isSandbox = true
-      }
     }
 
     setIsSaving(true)
     setSaveSuccess(false)
 
-    const res = await mercadopagoService.saveSettings(settings)
+    const res = await mercadopagoService.saveSettings(cleanSettings)
     setIsSaving(false)
 
     if (res.success) {
@@ -208,15 +209,9 @@ export function MercadoPagoSettingsSection() {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                   Integração Mercado Pago • PIX Automático
                 </h2>
-                <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    settings.isSandbox
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
-                  }`}
-                >
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
                   <Zap className="w-3 h-3" />
-                  {settings.isSandbox ? 'Modo Sandbox (Testes)' : 'Modo Produção'}
+                  Modo Produção Oficial
                 </span>
                 <span
                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
@@ -330,47 +325,19 @@ export function MercadoPagoSettingsSection() {
 
         {/* Campos de Credenciais */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Seletor de Modo: Sandbox vs Produção */}
+          {/* Ambiente de Operação: Modo Produção Oficial */}
           <div className="space-y-2 lg:col-span-2">
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Ambiente de Operação:
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg">
-              <button
-                type="button"
-                disabled={!isEditing}
-                onClick={() => setSettings((s) => ({ ...s, isSandbox: true }))}
-                className={`p-3 rounded-2xl border text-left transition-all ${
-                  !isEditing ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'
-                } ${
-                  settings.isSandbox
-                    ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/40 text-amber-950 dark:text-amber-200 ring-2 ring-amber-400/50'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                <div className="font-bold text-sm">Modo Sandbox (Testes)</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Permite gerar cobranças com credenciais de teste sem transacionar dinheiro real.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={!isEditing}
-                onClick={() => setSettings((s) => ({ ...s, isSandbox: false }))}
-                className={`p-3 rounded-2xl border text-left transition-all ${
-                  !isEditing ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'
-                } ${
-                  !settings.isSandbox
-                    ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-400/50'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                <div className="font-bold text-sm">Modo Produção Oficial</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Cobranças reais via PIX com liquidação em conta corrente bancária.
-                </div>
-              </button>
+            <div className="max-w-lg p-3.5 rounded-2xl border border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Zap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                Modo Produção Oficial
+              </div>
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                Cobranças reais via PIX com liquidação em conta corrente bancária. Todas as transações são oficiais e automáticas.
+              </div>
             </div>
           </div>
 
@@ -413,22 +380,13 @@ export function MercadoPagoSettingsSection() {
               </div>
             )}
 
-            {settings.accessToken && !settings.accessToken.toUpperCase().startsWith('TESTUSER') && (
-              settings.isSandbox && settings.accessToken.startsWith('APP_USR-') ? (
-                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Aviso:</strong> Você colou um token de Produção (<code>APP_USR-...</code>), mas o ambiente acima está marcado como <strong>Modo Sandbox (Testes)</strong>. Para usar cobranças reais, selecione <strong>Modo Produção Oficial</strong> acima. Para testar sem dinheiro real, use o token que começa com <code>TEST-...</code> na aba "Credenciais de teste" do Mercado Pago.
-                  </div>
+            {settings.accessToken && !settings.accessToken.toUpperCase().startsWith('TESTUSER') && settings.accessToken.startsWith('TEST-') && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong>Aviso:</strong> Você colou um token que começa com <code>TEST-...</code>. O sistema opera exclusivamente em <strong>Modo Produção Oficial</strong>. Para processar pagamentos reais, obtenha o Access Token oficial na aba <strong>Credenciais de Produção</strong> (começando com <code>APP_USR-...</code>).
                 </div>
-              ) : !settings.isSandbox && settings.accessToken.startsWith('TEST-') ? (
-                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Aviso:</strong> Você colou um token de Testes (<code>TEST-...</code>), mas o ambiente acima está marcado como <strong>Modo Produção Oficial</strong>. Selecione <strong>Modo Sandbox (Testes)</strong> acima para validar pagamentos de teste.
-                  </div>
-                </div>
-              ) : null
+              </div>
             )}
           </div>
 

@@ -19,7 +19,6 @@ import { WhatsAppIcon } from '@shared/components/WhatsAppIcon'
 import { isSystemOwner } from '@shared/utils/system-owner'
 import { systemMaintenanceService } from '@shared/services/system-maintenance.service'
 import { SystemMaintenanceScreen } from '@shared/components/SystemMaintenanceScreen'
-import { termsAcceptanceService } from '@shared/services/terms-acceptance.service'
 import { userSessionService } from '@shared/services/user-session.service'
 import { calculateCompanyLicenseStatus } from '@modules/companies/utils/license.utils'
 import { PixPaymentCheckoutModal } from '@modules/companies/components/PixPaymentCheckoutModal'
@@ -85,7 +84,6 @@ export function LoginPage() {
     const res = await signIn({ email, password })
 
     if (res.success) {
-      void termsAcceptanceService.recordAcceptance(email, true)
       if (res.data.user.app_metadata.must_change_password === true) {
         navigate('/profile', { replace: true })
         setIsLoading(false)
@@ -210,9 +208,9 @@ export function LoginPage() {
               className="group mb-5 inline-block transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
             >
               <img
-                src="/controlesoft-logo.png"
+                src="/controlesoft-logo-full.jpg"
                 alt="ControleSoft"
-                className="h-20 sm:h-24 md:h-28 w-auto object-contain mx-auto drop-shadow-xl"
+                className="h-24 w-24 sm:h-28 sm:w-28 rounded-3xl object-cover bg-[#FAF9F6] shadow-xl shadow-black/30 ring-1 ring-white/20 mx-auto"
               />
             </Link>
             <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">

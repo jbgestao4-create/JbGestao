@@ -6,6 +6,11 @@ import { organizationService } from '@modules/organizations/services/organizatio
 import { isSystemOwner, registerSystemOwnerEmail } from '@shared/utils/system-owner'
 import type { DashboardModuleCode, ServiceResult, UUID } from '@shared/types/common'
 import { calculateNewLicenseExpiry } from '../utils/license.utils'
+import {
+  validateCnpj,
+  sanitizeCustomerDocument,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
 
 export interface ManagedCompany {
   id: UUID
@@ -45,8 +50,11 @@ export interface RegisterCompanyParams {
   adminName: string
   adminEmail: string
   adminPassword?: string
+  adminPhone?: string
   cnpj?: string
   address?: string
+  postalCode?: string
+  addressNumber?: string
   responsible?: string
   notes?: string
   modules: DashboardModuleCode[]
@@ -60,8 +68,11 @@ export interface UpdateCompanyDetailsParams {
   adminName?: string
   adminEmail?: string
   adminPassword?: string
+  adminPhone?: string
   cnpj?: string
   address?: string
+  postalCode?: string
+  addressNumber?: string
   responsible?: string
   notes?: string
   modules?: DashboardModuleCode[]
@@ -539,6 +550,13 @@ export const companyManagementService = {
     params: UpdateCompanyDetailsParams,
   ): Promise<ServiceResult<void>> {
     try {
+      if (params.cnpj && params.cnpj.trim()) {
+        const cnpjVal = validateCnpj(params.cnpj)
+        if (!cnpjVal.isValid) {
+          return { success: false, error: cnpjVal.error || CNPJ_INVALID_ERROR }
+        }
+      }
+
       const cleanName = params.name.trim()
       const cleanSlug = params.slug
         .trim()
@@ -559,7 +577,10 @@ export const companyManagementService = {
         return { success: false, error: 'Não foi possível carregar os dados atuais da empresa.' }
       }
 
-      const cleanCnpj = params.cnpj !== undefined ? params.cnpj.trim() : existingCompany.cnpj
+      const cleanCnpj =
+        params.cnpj !== undefined
+          ? (params.cnpj.trim() ? sanitizeCustomerDocument(params.cnpj, 'company') : '')
+          : existingCompany.cnpj
       const cleanAddress = params.address !== undefined ? params.address.trim() : existingCompany.address
       const cleanResponsible =
         params.responsible !== undefined ? params.responsible.trim() : existingCompany.responsible
@@ -641,6 +662,9 @@ export const companyManagementService = {
       if (cleanAdminName) updatePayload.admin_name = cleanAdminName
       if (params.cnpj !== undefined) updatePayload.cnpj = cleanCnpj
       if (params.address !== undefined) updatePayload.address = cleanAddress
+      if (params.postalCode !== undefined) updatePayload.address_postal_code = params.postalCode.trim() || null
+      if (params.addressNumber !== undefined) updatePayload.address_number = params.addressNumber.trim() || null
+      if (params.adminPhone !== undefined) updatePayload.whatsapp = params.adminPhone.trim() || null
       if (params.responsible !== undefined) updatePayload.responsible = cleanResponsible
       if (params.notes !== undefined) updatePayload.notes = cleanNotes
 
@@ -648,6 +672,14 @@ export const companyManagementService = {
         await supabase.from('organizations').update(updatePayload as any).eq('id', companyId)
       } catch {
         // Silently handled
+      }
+
+      if (cleanAdminEmail && params.adminPhone !== undefined) {
+        try {
+          await supabase.from('profiles').update({ phone: params.adminPhone.trim() || null } as any).eq('email', cleanAdminEmail)
+        } catch {
+          // ignore
+        }
       }
 
       // Garante vínculo de membro na tabela organization_members
@@ -1128,6 +1160,26 @@ export const companyManagementService = {
 
       const cleanEmail = params.adminEmail.trim().toLowerCase()
       const cleanAdminName = params.adminName.trim()
+      const cleanAdminPhone = params.adminPhone?.trim() || null
+
+      if (params.cnpj && params.cnpj.trim()) {
+        const cnpjVal = validateCnpj(params.cnpj)
+        if (!cnpjVal.isValid) {
+          return { success: false, error: cnpjVal.error || CNPJ_INVALID_ERROR }
+        }
+      }
+
+      const cleanCnpj = params.cnpj?.trim()
+        ? sanitizeCustomerDocument(params.cnpj, 'company')
+        : null
+
+      const fullAddress = [
+        params.address?.trim(),
+        params.addressNumber?.trim() ? `Nº ${params.addressNumber.trim()}` : '',
+        params.postalCode?.trim() ? `CEP: ${params.postalCode.trim()}` : '',
+      ]
+        .filter(Boolean)
+        .join(' - ') || params.address?.trim() || null
 
       // Criar usuário no Supabase Auth via cliente efêmero (sem deslogar a sessão do proprietário)
       // Isso garante que o Supabase GoTrue faça o hash bcrypt nativo (custo correto),
@@ -1147,6 +1199,7 @@ export const companyManagementService = {
           options: {
             data: {
               display_name: cleanAdminName,
+              phone: cleanAdminPhone,
             },
           },
         })
@@ -1159,7 +1212,9 @@ export const companyManagementService = {
         logger.warn('Aviso ao registrar usuário via ephemeral auth client', { error: String(e) })
       }
 
-      // 1. Tenta a RPC atômica completa
+      const trialEndsAtDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+
+      // 1. Tenta a RPC atômica completa (garantindo 30 dias de teste)
       const { data, error } = await supabase.rpc('admin_register_company_with_admin', {
         p_org_name: params.name.trim(),
         p_org_slug: cleanSlug,
@@ -1167,6 +1222,7 @@ export const companyManagementService = {
         p_admin_email: cleanEmail,
         p_admin_password: cleanPassword,
         p_modules: params.modules,
+        p_trial_days: 30,
       })
 
       // 2. Se a RPC não foi instalada no Supabase ainda (erro de schema cache), aciona o fallback resiliente
@@ -1239,13 +1295,25 @@ export const companyManagementService = {
           await supabase.from('organizations').update({
             admin_email: cleanEmail,
             admin_name: cleanAdminName,
-            cnpj: params.cnpj?.trim() || null,
-            address: params.address?.trim() || null,
+            cnpj: cleanCnpj,
+            address: fullAddress,
+            address_postal_code: params.postalCode?.trim() || null,
+            address_number: params.addressNumber?.trim() || null,
+            whatsapp: cleanAdminPhone,
             responsible: params.responsible?.trim() || null,
             notes: params.notes?.trim() || null,
+            trial_ends_at: trialEndsAtDate,
           } as any).eq('id', newOrgId)
         } catch {
           // ignore
+        }
+
+        if (cleanAdminPhone) {
+          try {
+            await supabase.from('profiles').update({ phone: cleanAdminPhone } as any).eq('email', cleanEmail)
+          } catch {
+            // ignore
+          }
         }
 
         // Salva módulos na tabela organization_dashboard_modules se ela existir
@@ -1278,15 +1346,26 @@ export const companyManagementService = {
       if (orgId) {
         try {
           await supabase.from('organizations').update({
-            cnpj: params.cnpj?.trim() || null,
-            address: params.address?.trim() || null,
+            cnpj: cleanCnpj,
+            address: fullAddress,
+            address_postal_code: params.postalCode?.trim() || null,
+            address_number: params.addressNumber?.trim() || null,
+            whatsapp: cleanAdminPhone,
             responsible: params.responsible?.trim() || null,
             notes: params.notes?.trim() || null,
+            trial_ends_at: trialEndsAtDate,
           } as any).eq('id', orgId)
         } catch {
           // ignore
         }
 
+        if (cleanAdminPhone) {
+          try {
+            await supabase.from('profiles').update({ phone: cleanAdminPhone } as any).eq('email', cleanEmail)
+          } catch {
+            // ignore
+          }
+        }
       }
 
       return {
@@ -1298,6 +1377,218 @@ export const companyManagementService = {
       }
     } catch (err: any) {
       logger.error('Exceção ao cadastrar empresa', err)
+      return { success: false, error: err?.message || 'Erro inesperado ao cadastrar empresa.' }
+    }
+  },
+
+  /**
+   * Auto-cadastro público de empresa com período de testes de 30 dias.
+   * Não exige autenticação prévia de proprietário, sendo aberto para visitantes em /cadastrar-empresa.
+   */
+  async publicRegisterCompanyWithAdmin(
+    params: RegisterCompanyParams & { planId?: string },
+  ): Promise<ServiceResult<{ organizationId: UUID; slug: string }>> {
+    try {
+      const cleanSlug = params.slug
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+
+      const cleanPassword =
+        params.adminPassword && params.adminPassword.length >= 6
+          ? params.adminPassword
+          : 'admin@123'
+
+      const cleanEmail = params.adminEmail.trim().toLowerCase()
+      const cleanAdminName = params.adminName.trim()
+      const cleanAdminPhone = params.adminPhone?.trim() || null
+
+      if (params.cnpj && params.cnpj.trim()) {
+        const cnpjVal = validateCnpj(params.cnpj)
+        if (!cnpjVal.isValid) {
+          return { success: false, error: cnpjVal.error || CNPJ_INVALID_ERROR }
+        }
+      }
+
+      const cleanCnpj = params.cnpj?.trim()
+        ? sanitizeCustomerDocument(params.cnpj, 'company')
+        : null
+
+      const fullAddress = [
+        params.address?.trim(),
+        params.addressNumber?.trim() ? `Nº ${params.addressNumber.trim()}` : '',
+        params.postalCode?.trim() ? `CEP: ${params.postalCode.trim()}` : '',
+      ]
+        .filter(Boolean)
+        .join(', ')
+
+      const trialEndsAtDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+
+      // 1. Tenta a RPC pública que aceita anon/authenticated
+      const { data, error } = await supabase.rpc('public_register_company_with_admin', {
+        p_org_name: params.name.trim(),
+        p_org_slug: cleanSlug,
+        p_admin_name: cleanAdminName,
+        p_admin_email: cleanEmail,
+        p_admin_password: cleanPassword,
+        p_modules: params.modules,
+        p_trial_days: 30,
+        p_cnpj: cleanCnpj,
+        p_responsible_name: params.responsible?.trim() || cleanAdminName,
+        p_whatsapp: cleanAdminPhone,
+        p_address_street: fullAddress || null,
+        p_address_number: params.addressNumber?.trim() || null,
+        p_address_postal_code: params.postalCode?.trim() || null,
+        p_notes: params.notes?.trim() || null,
+        p_plan_id: params.planId || null,
+      })
+
+      if (!error && data) {
+        const orgId = (data as any)?.organizationId || (data as any)?.organization_id
+        return {
+          success: true,
+          data: {
+            organizationId: orgId,
+            slug: (data as any)?.slug || cleanSlug,
+          },
+        }
+      }
+
+      // 2. Se a RPC não foi instalada ainda (erro de schema cache ou PGRST202), executa o fallback resiliente via Supabase Auth + OrganizationService
+      logger.warn('RPC public_register_company_with_admin indisponível no momento. Executando fallback resiliente...', {
+        error: error?.message,
+      })
+
+      // Cria/autentica o usuário pelo Auth client
+      let targetUserId: string | null = null
+
+      const signUpRes = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: cleanPassword,
+        options: {
+          data: {
+            display_name: cleanAdminName,
+            phone: cleanAdminPhone,
+          },
+        },
+      })
+
+      if (signUpRes.data?.user?.id) {
+        targetUserId = signUpRes.data.user.id
+      } else {
+        const signInRes = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: cleanPassword,
+        })
+        if (signInRes.data?.user?.id) {
+          targetUserId = signInRes.data.user.id
+        }
+      }
+
+      if (!targetUserId) {
+        const isAlreadyRegistered =
+          signUpRes.error?.message?.toLowerCase().includes('already registered') ||
+          signUpRes.error?.message?.toLowerCase().includes('user already exists') ||
+          (signUpRes.error as any)?.code === 'user_already_exists'
+
+        if (isAlreadyRegistered) {
+          return {
+            success: false,
+            error:
+              'Este e-mail já está cadastrado no sistema. Se esta conta pertence a você, informe a senha correta cadastrada anteriormente para vincular sua nova empresa, ou faça login primeiro.',
+          }
+        }
+
+        return {
+          success: false,
+          error:
+            signUpRes.error?.message ||
+            'Não foi possível cadastrar a conta de acesso. Verifique os dados.',
+        }
+      }
+
+      // Cria a organização vinculada ao usuário
+      const createOrgRes = await organizationService.createOrganization(
+        params.name.trim(),
+        cleanSlug,
+        targetUserId,
+      )
+
+      if (!createOrgRes.success) {
+        if (createOrgRes.error?.includes('42501') || createOrgRes.error?.includes('permission denied')) {
+          return {
+            success: false,
+            error:
+              'A criação pública de empresas requer a execução da migration 00138 no Supabase SQL Editor para liberar as permissões no banco de dados.',
+          }
+        }
+        return { success: false, error: createOrgRes.error || 'Erro ao criar organização.' }
+      }
+
+      if (!createOrgRes.data) {
+        return { success: false, error: 'Erro ao criar organização.' }
+      }
+
+      const newOrgId = createOrgRes.data
+
+      try {
+        await supabase
+          .from('organizations')
+          .update({
+            admin_email: cleanEmail,
+            admin_name: cleanAdminName,
+            cnpj: cleanCnpj,
+            address: fullAddress,
+            address_postal_code: params.postalCode?.trim() || null,
+            address_number: params.addressNumber?.trim() || null,
+            whatsapp: cleanAdminPhone,
+            responsible: params.responsible?.trim() || cleanAdminName,
+            notes: params.notes?.trim() || null,
+            trial_ends_at: trialEndsAtDate,
+            access_plan_id: params.planId || null,
+          } as any)
+          .eq('id', newOrgId)
+      } catch {
+        // ignore
+      }
+
+      try {
+        await supabase
+          .from('organization_members')
+          .upsert({
+            organization_id: newOrgId,
+            user_id: targetUserId,
+            role: 'admin',
+          } as any)
+      } catch {
+        // ignore
+      }
+
+      try {
+        await supabase
+          .from('organization_dashboard_modules' as any)
+          .delete()
+          .eq('organization_id', newOrgId)
+        if (params.modules.length > 0) {
+          await supabase.from('organization_dashboard_modules' as any).insert(
+            params.modules.map((m) => ({ organization_id: newOrgId, module_code: m })) as any,
+          )
+        }
+      } catch {
+        // ignore
+      }
+
+      return {
+        success: true,
+        data: {
+          organizationId: newOrgId,
+          slug: cleanSlug,
+        },
+      }
+    } catch (err: any) {
+      logger.error('Exceção no auto-cadastro de empresa', err)
       return { success: false, error: err?.message || 'Erro inesperado ao cadastrar empresa.' }
     }
   },

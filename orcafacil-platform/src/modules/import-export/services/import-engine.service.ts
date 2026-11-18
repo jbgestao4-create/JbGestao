@@ -5,6 +5,12 @@ import {
   formatPostalAddress,
   formatPostalCode,
 } from '@modules/customers/utils/postal-code'
+import {
+  validateCustomerDocument,
+  sanitizeCustomerDocument,
+  CPF_INVALID_ERROR,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
 import type {
   ImportOptions,
   ImportSummary,
@@ -97,7 +103,6 @@ export class ImportEngineService {
       const name = String(row['nome'] || row['nome_cliente'] || row['razao_social'] || '').trim()
       const rawPersonType = String(row['tipo_pessoa'] || row['tipo'] || 'F').toUpperCase().trim()
       const rawDoc = String(row['cpf_cnpj'] || row['documento'] || row['cpf'] || row['cnpj'] || '').trim()
-      const cleanDoc = rawDoc.replace(/\D/g, '')
 
       const identifier = name || rawDoc || `Linha ${rowNum}`
 
@@ -115,29 +120,38 @@ export class ImportEngineService {
       }
 
       const personType = rawPersonType.startsWith('J') ? 'company' : 'individual'
+      const cleanCustomerDoc = rawDoc ? sanitizeCustomerDocument(rawDoc, personType) : ''
 
-      if (cleanDoc) {
-        if (personType === 'individual' && cleanDoc.length !== 11) {
+      if (cleanCustomerDoc) {
+        const requiredLen = personType === 'individual' ? 11 : 14
+        if (cleanCustomerDoc.length !== requiredLen) {
+          const reason = personType === 'individual'
+            ? `CPF inválido. Deve conter 11 dígitos numéricos (recebido: ${cleanCustomerDoc.length}).`
+            : `CNPJ inválido. Deve conter 14 caracteres (recebido: ${cleanCustomerDoc.length}).`
           summary.errors.push({
             rowNumber: rowNum,
             recordIdentifier: identifier,
             field: 'cpf_cnpj',
             receivedValue: rawDoc,
-            reason: `CPF inválido. Deve conter 11 dígitos numéricos (recebido: ${cleanDoc.length}).`
+            reason
           })
           summary.errorCount++
-          summary.rejectedRowsData.push({ ...row, __erro_motivo: 'CPF inválido (deve ter 11 dígitos)' })
+          summary.rejectedRowsData.push({ ...row, __erro_motivo: reason })
           continue
-        } else if (personType === 'company' && cleanDoc.length !== 14) {
+        }
+
+        const mathValidation = validateCustomerDocument(cleanCustomerDoc, personType)
+        if (!mathValidation.isValid) {
+          const reason = mathValidation.error ?? (personType === 'individual' ? CPF_INVALID_ERROR : CNPJ_INVALID_ERROR)
           summary.errors.push({
             rowNumber: rowNum,
             recordIdentifier: identifier,
             field: 'cpf_cnpj',
             receivedValue: rawDoc,
-            reason: `CNPJ inválido. Deve conter 14 dígitos numéricos (recebido: ${cleanDoc.length}).`
+            reason
           })
           summary.errorCount++
-          summary.rejectedRowsData.push({ ...row, __erro_motivo: 'CNPJ inválido (deve ter 14 dígitos)' })
+          summary.rejectedRowsData.push({ ...row, __erro_motivo: reason })
           continue
         }
       }
@@ -172,7 +186,7 @@ export class ImportEngineService {
         organization_id: organizationId,
         name,
         person_type: personType,
-        document: cleanDoc || null,
+        document: cleanCustomerDoc || null,
         email: row['email'] ? String(row['email']).trim() : null,
         phone: row['telefone'] || row['celular'] ? String(row['telefone'] || row['celular']).trim() : null,
         postal_code: formattedPostalCode,
@@ -181,7 +195,7 @@ export class ImportEngineService {
         notes: row['observacoes'] || row['obs'] ? String(row['observacoes'] || row['obs']).trim() : null
       }
 
-      const existingId = cleanDoc ? docMap.get(cleanDoc) : null
+      const existingId = cleanCustomerDoc ? docMap.get(cleanCustomerDoc) : null
       if (existingId) {
         if (options.onDuplicate === 'reject') {
           summary.errors.push({

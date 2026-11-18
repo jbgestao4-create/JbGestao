@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
   BarChart3,
@@ -166,6 +166,7 @@ function getModuleIcon(code: string) {
 export function PresentationPage() {
   const { user } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
   const [plans, setPlans] = useState<AccessPlan[]>(SYSTEM_DEFAULT_ACCESS_PLANS)
@@ -281,29 +282,14 @@ export function PresentationPage() {
   }, [location.pathname, location.hash, searchParams, plans])
 
   const [detailsPlan, setDetailsPlan] = useState<AccessPlan | null>(null)
-  const [hoveredModulesPlanId, setHoveredModulesPlanId] = useState<string | null>(null)
   const [pinnedModulesPlanId, setPinnedModulesPlanId] = useState<string | null>(null)
 
-  const handleChoosePlanWhatsApp = (plan: AccessPlan) => {
-    const price = formatCurrency((plan.monthlyPrice ?? 149.9).toFixed(2))
-    const message =
-      `Olá! Tenho interesse no plano *${plan.name}* (${price}/mês) do ControleSoft. ` +
-      'Gostaria de mais informações para contratar.'
-    window.open(
-      `https://wa.me/5531986848490?text=${encodeURIComponent(message)}`,
-      '_blank',
-      'noopener,noreferrer',
-    )
-  }
-
   const handleChoosePlan = (plan?: AccessPlan) => {
-    const target =
-      plan ||
-      plans.find((p) => p.isActive && !p.isLocked && p.name.toLowerCase().includes('completo')) ||
-      plans.find((p) => p.isActive && !p.isLocked) ||
-      plans[0]
-    setSelectedPlanForSignup(target)
-    setIsSignupModalOpen(true)
+    if (plan?.id) {
+      navigate(`/cadastrar-empresa?plano=${plan.id}`)
+    } else {
+      navigate('/cadastrar-empresa')
+    }
   }
 
   const faqItems = [
@@ -1113,14 +1099,11 @@ export function PresentationPage() {
               const includedModulesList = ALL_PLATFORM_DASHBOARD_MODULES.filter(
                 (m) => codeSet.has(m.code) || m.subFeatures.some((s) => codeSet.has(s.code)),
               )
-              const isModulesOpen =
-                hoveredModulesPlanId === plan.id || pinnedModulesPlanId === plan.id
+              const isModulesOpen = pinnedModulesPlanId === plan.id
 
               return (
                 <div
                   key={plan.id}
-                  onMouseEnter={() => setHoveredModulesPlanId(plan.id)}
-                  onMouseLeave={() => setHoveredModulesPlanId(null)}
                   className={`relative flex flex-col justify-between rounded-3xl p-6 transition-all duration-200 ${
                     isModulesOpen ? 'z-30' : 'z-10'
                   } ${
@@ -1294,11 +1277,11 @@ export function PresentationPage() {
                           {isAvailable ? (
                             <button
                               type="button"
-                              onClick={() => handleChoosePlanWhatsApp(plan)}
+                              onClick={() => handleChoosePlan(plan)}
                               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 px-3 py-2 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"
                             >
                               <span>Escolher Plano</span>
-                              <MessageCircle className="h-3.5 w-3.5" />
+                              <Zap className="h-3.5 w-3.5" />
                             </button>
                           ) : (
                             <a
@@ -1330,7 +1313,7 @@ export function PresentationPage() {
                     {isAvailable ? (
                       <button
                         type="button"
-                        onClick={() => handleChoosePlanWhatsApp(plan)}
+                        onClick={() => handleChoosePlan(plan)}
                         className={`w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all cursor-pointer ${
                           isPopular
                             ? 'bg-[#2563EB] text-white shadow-md shadow-blue-600/25 hover:bg-blue-700'
@@ -1338,7 +1321,7 @@ export function PresentationPage() {
                         }`}
                       >
                         <span>Escolher Plano</span>
-                        <MessageCircle className="h-3.5 w-3.5" />
+                        <Zap className="h-3.5 w-3.5" />
                       </button>
                     ) : (
                       <a
@@ -1816,10 +1799,13 @@ export function PresentationPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleChoosePlanWhatsApp(detailsPlan)}
+                    onClick={() => {
+                      setDetailsPlan(null)
+                      handleChoosePlan(detailsPlan)
+                    }}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-700 cursor-pointer"
                   >
-                    <MessageCircle className="h-3.5 w-3.5" />
+                    <Zap className="h-3.5 w-3.5" />
                     <span>Escolher Plano</span>
                   </button>
                 </footer>

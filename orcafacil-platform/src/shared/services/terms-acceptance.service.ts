@@ -43,11 +43,49 @@ export const termsAcceptanceService = {
     return TERMS_VERSION
   },
 
+  hasAccepted(email?: string | null, userMetadata?: any): boolean {
+    if (!email) return false
+    const cleanEmail = email.trim().toLowerCase()
+
+    // 1. Verifica metadata do Supabase Auth (se o usuário já gravou o aceite na nuvem)
+    const metaAccepted = userMetadata?.terms_accepted_v2
+    if (metaAccepted?.acceptedAt && metaAccepted?.version === TERMS_VERSION) {
+      return true
+    }
+
+    // 2. Verifica localStorage estritamente vinculado a este e-mail
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`${STORAGE_KEY}_${cleanEmail}`)
+        if (raw) {
+          const parsed = JSON.parse(raw) as TermsAcceptanceRecord
+          if (parsed?.version === TERMS_VERSION && parsed?.acceptedAt) {
+            return true
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return false
+  },
+
   getLocalAcceptance(email?: string | null): TermsAcceptanceRecord | null {
     if (typeof window === 'undefined') return null
     try {
-      const key = email ? `${STORAGE_KEY}_${email.trim().toLowerCase()}` : STORAGE_KEY
-      const raw = localStorage.getItem(key) || localStorage.getItem(STORAGE_KEY)
+      if (email) {
+        const key = `${STORAGE_KEY}_${email.trim().toLowerCase()}`
+        const raw = localStorage.getItem(key)
+        if (raw) {
+          const parsed = JSON.parse(raw) as TermsAcceptanceRecord
+          if (parsed?.version === TERMS_VERSION && parsed?.acceptedAt) {
+            return parsed
+          }
+        }
+        return null
+      }
+      const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return null
       const parsed = JSON.parse(raw) as TermsAcceptanceRecord
       if (parsed?.version === TERMS_VERSION && parsed?.acceptedAt) {
@@ -65,12 +103,13 @@ export const termsAcceptanceService = {
     options?: RecordTermsAcceptanceOptions,
   ): Promise<TermsAcceptanceRecord> {
     const ip = await resolvePublicIp()
+    const cleanEmail = email?.trim().toLowerCase()
     const record: TermsAcceptanceRecord = {
       version: TERMS_VERSION,
       acceptedAt: new Date().toISOString(),
       ip,
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
-      email: email?.trim().toLowerCase() || undefined,
+      email: cleanEmail || undefined,
       selectedPlanId: options?.selectedPlanId,
       selectedPlanName: options?.selectedPlanName,
       agreedToTrialAndAutoSuspension: options?.agreedToTrialAndAutoSuspension ?? true,
@@ -78,10 +117,10 @@ export const termsAcceptanceService = {
 
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(record))
-        if (record.email) {
-          localStorage.setItem(`${STORAGE_KEY}_${record.email}`, JSON.stringify(record))
+        if (cleanEmail) {
+          localStorage.setItem(`${STORAGE_KEY}_${cleanEmail}`, JSON.stringify(record))
         }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(record))
       } catch {
         // ignore storage quota errors
       }

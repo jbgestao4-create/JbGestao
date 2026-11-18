@@ -1,6 +1,12 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { CustomerType, ServiceResult, UUID } from '@shared/types/common'
+import {
+  validateCustomerDocument,
+  sanitizeCustomerDocument,
+  CPF_INVALID_ERROR,
+  CNPJ_INVALID_ERROR,
+} from './document-validator.service'
 
 export interface Customer {
   id: UUID
@@ -43,6 +49,13 @@ export interface UpdateCustomerParams {
 }
 
 function getCustomerCreateErrorMessage(error: { code?: string; message?: string } | null) {
+  if (error?.message && (error.message.includes('CPF') || error.message.includes('CNPJ'))) {
+    return error.message
+  }
+
+  if (error?.code === '23514') {
+    return error.message || 'Documento inválido. Os dígitos verificadores não conferem.'
+  }
   if (error?.code === 'PGRST204' || error?.code === '42703') {
     return 'O esquema da tabela de clientes no Supabase está desatualizado. Sincronize as migrações e tente novamente.'
   }
@@ -155,13 +168,27 @@ export const customerService = {
     params: CreateCustomerParams,
   ): Promise<ServiceResult<Customer>> {
     try {
+      let cleanDocument: string | null = null
+      if (params.document && params.document.trim()) {
+        const validation = validateCustomerDocument(params.document, params.personType)
+        if (!validation.isValid) {
+          return {
+            success: false,
+            error:
+              validation.error ??
+              (params.personType === 'individual' ? CPF_INVALID_ERROR : CNPJ_INVALID_ERROR),
+          }
+        }
+        cleanDocument = sanitizeCustomerDocument(params.document, params.personType)
+      }
+
       const { data, error } = await supabase
         .from('customers')
         .insert({
           organization_id: organizationId,
           name: params.name.trim(),
           person_type: params.personType,
-          document: params.document?.replace(/\D/g, '') || null,
+          document: cleanDocument,
           phone: params.phone?.trim() || null,
           email: params.email?.trim() || null,
           address: params.address?.trim() || null,
@@ -217,13 +244,44 @@ export const customerService = {
     params: UpdateCustomerParams,
   ): Promise<ServiceResult<void>> {
     try {
+      let cleanDocument: string | null | undefined = undefined
+      if (params.document !== undefined) {
+        if (params.document === null || params.document.trim() === '') {
+          cleanDocument = null
+        } else {
+          let effectivePersonType = params.personType
+          if (!effectivePersonType) {
+            const currentCust = await customerService.getById(organizationId, customerId)
+            if (currentCust.success) {
+              effectivePersonType = currentCust.data.personType
+            }
+          }
+          const validation = validateCustomerDocument(
+            params.document,
+            effectivePersonType ?? 'individual',
+          )
+          if (!validation.isValid) {
+            return {
+              success: false,
+              error:
+                validation.error ??
+                (effectivePersonType === 'company' ? CNPJ_INVALID_ERROR : CPF_INVALID_ERROR),
+            }
+          }
+          cleanDocument = sanitizeCustomerDocument(
+            params.document,
+            effectivePersonType ?? 'individual',
+          )
+        }
+      }
+
       const { error } = await supabase
         .from('customers')
         .update({
           name: params.name?.trim(),
           ...(params.personType !== undefined && { person_type: params.personType }),
           ...(params.document !== undefined && {
-            document: params.document?.replace(/\D/g, '') || null,
+            document: cleanDocument,
           }),
           ...(params.phone !== undefined && { phone: params.phone?.trim() || null }),
           ...(params.email !== undefined && { email: params.email?.trim() || null }),

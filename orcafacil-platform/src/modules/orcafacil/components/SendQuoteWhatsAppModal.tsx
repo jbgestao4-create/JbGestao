@@ -20,7 +20,12 @@ import {
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
 import { customerService } from '@modules/customers/services/customer.service'
-import { formatCustomerDocument } from '@modules/customers/utils/customer-document'
+import {
+  formatCustomerDocument,
+  validateCustomerDocument,
+  CPF_INVALID_ERROR,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
 import type { QuoteDetail, QuoteListItem } from '../services/quote.service'
 import { customerPortalService } from '../services/customer-portal.service'
 import { buildQuoteWhatsAppMessage, openQuoteWhatsApp } from '../utils/quote-whatsapp'
@@ -184,9 +189,19 @@ function SendQuoteWhatsAppDialog({
   )
 
   const handleSaveDocument = async () => {
-    const cleanDigits = docInput.replace(/\D/g, '')
-    if (cleanDigits.length !== 11 && cleanDigits.length !== 14) {
+    const cleanDoc = docInput.toUpperCase().replace(/[.\-/ ]/g, '')
+    if (cleanDoc.length !== 11 && cleanDoc.length !== 14) {
       setDocError('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.')
+      return
+    }
+
+    const docType = cleanDoc.length === 11 ? 'individual' : 'company'
+    const validation = validateCustomerDocument(cleanDoc, docType)
+    if (!validation.isValid) {
+      setDocError(
+        validation.error ??
+          (docType === 'individual' ? CPF_INVALID_ERROR : CNPJ_INVALID_ERROR),
+      )
       return
     }
 
@@ -197,8 +212,8 @@ function SendQuoteWhatsAppDialog({
 
     try {
       const formattedDoc = formatCustomerDocument(
-        cleanDigits,
-        cleanDigits.length === 11 ? 'individual' : 'company',
+        cleanDoc,
+        docType,
       )
 
       const updateRes = await customerService.update(effectiveOrgId, effectiveCustId, {

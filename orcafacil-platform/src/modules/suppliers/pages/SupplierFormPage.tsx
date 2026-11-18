@@ -8,6 +8,12 @@ import { Input } from '@shared/components/ui/Input'
 import { supplierService, type SupplierParams } from '../services/supplier.service'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import {
+  validateCnpj,
+  formatCustomerDocument,
+  sanitizeCustomerDocument,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
+import {
   supplierInvoiceService,
   type SupplierInvoice,
   MAX_SUPPLIER_INVOICE_SIZE_BYTES,
@@ -28,14 +34,7 @@ const EMPTY_FORM: SupplierParams = {
 const ALLOWED_INVOICE_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 
 function formatDocument(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 14)
-  if (digits.length <= 2) return digits
-  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`
-  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`
-  if (digits.length <= 12) {
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`
-  }
-  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`
+  return formatCustomerDocument(value, 'company')
 }
 
 function formatFileSize(size: number) {
@@ -60,6 +59,8 @@ export function SupplierFormPage() {
   const [savedForm, setSavedForm] = useState<SupplierParams>(EMPTY_FORM)
   const [isDetailsEditing, setIsDetailsEditing] = useState(!isEditing)
   const [formError, setFormError] = useState('')
+  const [documentError, setDocumentError] = useState('')
+  const [documentSuccess, setDocumentSuccess] = useState('')
   const [loadedSupplierKey, setLoadedSupplierKey] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [invoices, setInvoices] = useState<SupplierInvoice[]>([])
@@ -108,6 +109,19 @@ export function SupplierFormPage() {
         setForm(supplierForm)
         setSavedForm(supplierForm)
         setIsDetailsEditing(false)
+        if (result.data.document) {
+          const val = validateCnpj(result.data.document)
+          if (val.isValid) {
+            setDocumentSuccess('✓ CNPJ válido')
+            setDocumentError('')
+          } else {
+            setDocumentSuccess('')
+            setDocumentError(val.error ?? CNPJ_INVALID_ERROR)
+          }
+        } else {
+          setDocumentSuccess('')
+          setDocumentError('')
+        }
       } else {
         setFormError(result.error)
       }
@@ -145,6 +159,56 @@ export function SupplierFormPage() {
     }
   }, [supplierKey, loadedSupplierKey, currentOrganization, supplierId])
 
+  const handleDocumentChange = (raw: string) => {
+    const formatted = formatDocument(raw)
+    setForm((prev) => ({ ...prev, document: formatted }))
+    const clean = sanitizeCustomerDocument(formatted, 'company')
+
+    if (clean.length === 0) {
+      setDocumentError('')
+      setDocumentSuccess('')
+      return
+    }
+
+    if (clean.length === 14) {
+      const result = validateCnpj(clean)
+      if (result.isValid) {
+        setDocumentError('')
+        setDocumentSuccess('✓ CNPJ válido')
+      } else {
+        setDocumentError(result.error ?? CNPJ_INVALID_ERROR)
+        setDocumentSuccess('')
+      }
+    } else {
+      setDocumentError('')
+      setDocumentSuccess('')
+    }
+  }
+
+  const handleDocumentBlur = () => {
+    const clean = sanitizeCustomerDocument(form.document, 'company')
+    if (!clean) {
+      setDocumentError('')
+      setDocumentSuccess('')
+      return
+    }
+
+    if (clean.length < 14) {
+      setDocumentError('Informe o CNPJ completo com 14 caracteres.')
+      setDocumentSuccess('')
+      return
+    }
+
+    const result = validateCnpj(clean)
+    if (!result.isValid) {
+      setDocumentError(result.error ?? CNPJ_INVALID_ERROR)
+      setDocumentSuccess('')
+    } else {
+      setDocumentError('')
+      setDocumentSuccess('✓ CNPJ válido')
+    }
+  }
+
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!currentOrganization) {
@@ -156,15 +220,22 @@ export function SupplierFormPage() {
       setFormError('Informe o nome ou a razão social do fornecedor.')
       return
     }
-    const documentDigits = form.document.replace(/\D/g, '')
-    if (documentDigits && documentDigits.length !== 14) {
-      setFormError('Informe o CNPJ com 14 dígitos ou deixe o campo em branco.')
-      return
+    const cleanDoc = sanitizeCustomerDocument(form.document, 'company')
+    if (cleanDoc) {
+      if (cleanDoc.length !== 14) {
+        setFormError('Informe o CNPJ completo com 14 caracteres ou deixe o campo em branco.')
+        return
+      }
+      const val = validateCnpj(cleanDoc)
+      if (!val.isValid) {
+        setFormError(val.error ?? CNPJ_INVALID_ERROR)
+        return
+      }
     }
 
     setIsSaving(true)
     setFormError('')
-    const params = { ...form, document: documentDigits }
+    const params = { ...form, document: cleanDoc }
     const result =
       isEditing && supplierId
         ? await supplierService.update(currentOrganization.id, supplierId, params)
@@ -311,14 +382,16 @@ export function SupplierFormPage() {
                 label="CNPJ"
                 placeholder="00.000.000/0000-00"
                 name="supplier-document"
-                inputMode="numeric"
+                inputMode="text"
                 autoComplete="off"
                 value={form.document}
                 disabled={!isDetailsEditing}
-                onChange={(event) => {
-                  setForm({ ...form, document: formatDocument(event.target.value) })
-                }}
-                helperText="Opcional. Informe 14 dígitos quando preencher."
+                onChange={(event) => handleDocumentChange(event.target.value)}
+                onBlur={handleDocumentBlur}
+                maxLength={18}
+                error={documentError}
+                success={documentSuccess}
+                helperText={!documentError && !documentSuccess ? "Opcional. Informe 14 caracteres quando preencher." : undefined}
               />
               <Input
                 label="Nome do contato"

@@ -1,6 +1,11 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult, Supplier, UUID } from '@shared/types/common'
+import {
+  validateCnpj,
+  sanitizeCustomerDocument,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
 
 export type { Supplier }
 
@@ -119,12 +124,21 @@ export const supplierService = {
 
   async create(organizationId: UUID, params: SupplierParams): Promise<ServiceResult<Supplier>> {
     try {
+      let cleanDocument: string | null = null
+      if (params.document && params.document.trim()) {
+        const val = validateCnpj(params.document)
+        if (!val.isValid) {
+          return { success: false, error: val.error || CNPJ_INVALID_ERROR }
+        }
+        cleanDocument = sanitizeCustomerDocument(params.document, 'company') || null
+      }
+
       const { data, error } = await supabase
         .from('suppliers')
         .insert({
           organization_id: organizationId,
           name: params.name.trim(),
-          document: params.document.replace(/\D/g, '') || null,
+          document: cleanDocument,
           contact_name: params.contactName.trim() || null,
           phone: params.phone.trim() || null,
           email: params.email.trim() || null,
@@ -154,11 +168,20 @@ export const supplierService = {
     params: SupplierParams,
   ): Promise<ServiceResult<void>> {
     try {
+      let cleanDocument: string | null = null
+      if (params.document && params.document.trim()) {
+        const val = validateCnpj(params.document)
+        if (!val.isValid) {
+          return { success: false, error: val.error || CNPJ_INVALID_ERROR }
+        }
+        cleanDocument = sanitizeCustomerDocument(params.document, 'company') || null
+      }
+
       const { data, error } = await supabase
         .from('suppliers')
         .update({
           name: params.name.trim(),
-          document: params.document.replace(/\D/g, '') || null,
+          document: cleanDocument,
           contact_name: params.contactName.trim() || null,
           phone: params.phone.trim() || null,
           email: params.email.trim() || null,

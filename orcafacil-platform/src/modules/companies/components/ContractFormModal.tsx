@@ -28,6 +28,23 @@ import {
   getInvoiceEffectiveStatus,
 } from '../services/contract.service'
 import { accessPlanService, type AccessPlan } from '../services/access-plan.service'
+import {
+  validateCpf,
+  validateCnpj,
+  formatCustomerDocument,
+  sanitizeCustomerDocument,
+  CPF_INVALID_ERROR,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
+
+function formatCpfOrCnpjDoc(value: string): string {
+  const cleanAlnum = value.toUpperCase().replace(/[^0-9A-Z]/g, '')
+  const onlyDigits = value.replace(/\D/g, '')
+  if (cleanAlnum === onlyDigits && onlyDigits.length <= 11) {
+    return formatCustomerDocument(onlyDigits, 'individual')
+  }
+  return formatCustomerDocument(cleanAlnum, 'company')
+}
 import type { ManagedCompany } from '../services/company-management.service'
 import { ContractInvoicePrintModal } from './ContractInvoicePrintModal'
 
@@ -107,15 +124,25 @@ export function ContractFormModal({
   const [clientTradeName, setClientTradeName] = useState(
     initialContract?.clientTradeName || '',
   )
-  const [clientDocument, setClientDocument] = useState(
-    initialContract?.clientDocument || prefillCompany?.cnpj || '',
+  const [clientDocument, setClientDocument] = useState(() =>
+    initialContract?.clientDocument
+      ? formatCpfOrCnpjDoc(initialContract.clientDocument)
+      : prefillCompany?.cnpj
+        ? formatCpfOrCnpjDoc(prefillCompany.cnpj)
+        : '',
   )
+  const [clientDocError, setClientDocError] = useState('')
+  const [clientDocSuccess, setClientDocSuccess] = useState('')
   const [clientResponsibleName, setClientResponsibleName] = useState(
     initialContract?.clientResponsibleName || prefillCompany?.responsible || prefillCompany?.adminName || '',
   )
-  const [clientResponsibleDocument, setClientResponsibleDocument] = useState(
-    initialContract?.clientResponsibleDocument || '',
+  const [clientResponsibleDocument, setClientResponsibleDocument] = useState(() =>
+    initialContract?.clientResponsibleDocument
+      ? formatCustomerDocument(initialContract.clientResponsibleDocument, 'individual')
+      : '',
   )
+  const [clientRespDocError, setClientRespDocError] = useState('')
+  const [clientRespDocSuccess, setClientRespDocSuccess] = useState('')
   const [clientResponsibleRole, setClientResponsibleRole] = useState(
     initialContract?.clientResponsibleRole || 'Sócio / Administrador',
   )
@@ -380,12 +407,179 @@ export function ContractFormModal({
     }
   }
 
+  const handleClientDocChange = (raw: string) => {
+    const formatted = formatCpfOrCnpjDoc(raw)
+    setClientDocument(formatted)
+
+    const cleanAlnum = formatted.toUpperCase().replace(/[^0-9A-Z]/g, '')
+    const onlyDigits = formatted.replace(/\D/g, '')
+    const isCpf = cleanAlnum === onlyDigits && onlyDigits.length <= 11
+
+    if (cleanAlnum.length === 0) {
+      setClientDocError('')
+      setClientDocSuccess('')
+      return
+    }
+
+    if (isCpf && cleanAlnum.length === 11) {
+      const val = validateCpf(cleanAlnum)
+      if (val.isValid) {
+        setClientDocError('')
+        setClientDocSuccess('✓ CPF válido')
+      } else {
+        setClientDocError(val.error ?? CPF_INVALID_ERROR)
+        setClientDocSuccess('')
+      }
+    } else if (!isCpf && cleanAlnum.length === 14) {
+      const val = validateCnpj(cleanAlnum)
+      if (val.isValid) {
+        setClientDocError('')
+        setClientDocSuccess('✓ CNPJ válido')
+      } else {
+        setClientDocError(val.error ?? CNPJ_INVALID_ERROR)
+        setClientDocSuccess('')
+      }
+    } else {
+      setClientDocError('')
+      setClientDocSuccess('')
+    }
+  }
+
+  const handleClientDocBlur = () => {
+    const cleanAlnum = clientDocument.toUpperCase().replace(/[^0-9A-Z]/g, '')
+    const onlyDigits = clientDocument.replace(/\D/g, '')
+    if (!cleanAlnum || clientDocument === 'Não informado') {
+      setClientDocError('')
+      setClientDocSuccess('')
+      return
+    }
+    const isCpf = cleanAlnum === onlyDigits && onlyDigits.length <= 11
+    if (isCpf) {
+      if (cleanAlnum.length < 11) {
+        setClientDocError('Informe o CPF completo com 11 dígitos.')
+        setClientDocSuccess('')
+        return
+      }
+      const val = validateCpf(cleanAlnum)
+      if (!val.isValid) {
+        setClientDocError(val.error ?? CPF_INVALID_ERROR)
+        setClientDocSuccess('')
+      } else {
+        setClientDocError('')
+        setClientDocSuccess('✓ CPF válido')
+      }
+    } else {
+      if (cleanAlnum.length < 14) {
+        setClientDocError('Informe o CNPJ completo com 14 caracteres.')
+        setClientDocSuccess('')
+        return
+      }
+      const val = validateCnpj(cleanAlnum)
+      if (!val.isValid) {
+        setClientDocError(val.error ?? CNPJ_INVALID_ERROR)
+        setClientDocSuccess('')
+      } else {
+        setClientDocError('')
+        setClientDocSuccess('✓ CNPJ válido')
+      }
+    }
+  }
+
+  const handleClientRespDocChange = (raw: string) => {
+    const formatted = formatCustomerDocument(raw, 'individual')
+    setClientResponsibleDocument(formatted)
+    const clean = sanitizeCustomerDocument(formatted, 'individual')
+
+    if (clean.length === 0) {
+      setClientRespDocError('')
+      setClientRespDocSuccess('')
+      return
+    }
+
+    if (clean.length === 11) {
+      const val = validateCpf(clean)
+      if (val.isValid) {
+        setClientRespDocError('')
+        setClientRespDocSuccess('✓ CPF válido')
+      } else {
+        setClientRespDocError(val.error ?? CPF_INVALID_ERROR)
+        setClientRespDocSuccess('')
+      }
+    } else {
+      setClientRespDocError('')
+      setClientRespDocSuccess('')
+    }
+  }
+
+  const handleClientRespDocBlur = () => {
+    const clean = sanitizeCustomerDocument(clientResponsibleDocument, 'individual')
+    if (!clean) {
+      setClientRespDocError('')
+      setClientRespDocSuccess('')
+      return
+    }
+    if (clean.length < 11) {
+      setClientRespDocError('Informe o CPF completo com 11 dígitos.')
+      setClientRespDocSuccess('')
+      return
+    }
+    const val = validateCpf(clean)
+    if (!val.isValid) {
+      setClientRespDocError(val.error ?? CPF_INVALID_ERROR)
+      setClientRespDocSuccess('')
+    } else {
+      setClientRespDocError('')
+      setClientRespDocSuccess('✓ CPF válido')
+    }
+  }
+
   const handleSubmit = async (printImmediately = false) => {
     setErrorMsg('')
     if (!clientName.trim()) {
       setErrorMsg('Informe a Razão Social ou Nome do Cliente / Contratante.')
       return
     }
+
+    const cleanDocAlnum = clientDocument.toUpperCase().replace(/[^0-9A-Z]/g, '')
+    const onlyDocDigits = clientDocument.replace(/\D/g, '')
+    if (cleanDocAlnum && clientDocument !== 'Não informado') {
+      const isCpf = cleanDocAlnum === onlyDocDigits && onlyDocDigits.length <= 11
+      if (isCpf) {
+        if (cleanDocAlnum.length !== 11) {
+          setErrorMsg('Informe o CPF do cliente completo com 11 dígitos.')
+          return
+        }
+        const val = validateCpf(cleanDocAlnum)
+        if (!val.isValid) {
+          setErrorMsg(val.error ?? CPF_INVALID_ERROR)
+          return
+        }
+      } else {
+        if (cleanDocAlnum.length !== 14) {
+          setErrorMsg('Informe o CNPJ do cliente completo com 14 caracteres.')
+          return
+        }
+        const val = validateCnpj(cleanDocAlnum)
+        if (!val.isValid) {
+          setErrorMsg(val.error ?? CNPJ_INVALID_ERROR)
+          return
+        }
+      }
+    }
+
+    if (clientResponsibleDocument.trim()) {
+      const cleanResp = sanitizeCustomerDocument(clientResponsibleDocument, 'individual')
+      if (cleanResp.length !== 11) {
+        setErrorMsg('Informe o CPF do responsável completo com 11 dígitos ou deixe em branco.')
+        return
+      }
+      const val = validateCpf(cleanResp)
+      if (!val.isValid) {
+        setErrorMsg(val.error ?? CPF_INVALID_ERROR)
+        return
+      }
+    }
+
     if (!clientResponsibleName.trim()) {
       setErrorMsg('Informe o Nome do Responsável pelo contrato.')
       return
@@ -571,9 +765,23 @@ export function ContractFormModal({
                   type="text"
                   placeholder="Ex: 00.000.000/0001-00 ou CPF"
                   value={clientDocument}
-                  onChange={(e) => setClientDocument(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  onChange={(e) => handleClientDocChange(e.target.value)}
+                  onBlur={handleClientDocBlur}
+                  maxLength={18}
+                  className={`w-full rounded-xl border bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none ${
+                    clientDocError
+                      ? 'border-rose-500'
+                      : clientDocSuccess
+                        ? 'border-emerald-500'
+                        : 'border-gray-200 dark:border-slate-700'
+                  }`}
                 />
+                {clientDocSuccess && (
+                  <p className="mt-1 text-xs font-medium text-emerald-600">{clientDocSuccess}</p>
+                )}
+                {clientDocError && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">{clientDocError}</p>
+                )}
               </div>
 
               <div>
@@ -647,9 +855,23 @@ export function ContractFormModal({
                   type="text"
                   placeholder="Ex: 000.000.000-00"
                   value={clientResponsibleDocument}
-                  onChange={(e) => setClientResponsibleDocument(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  onChange={(e) => handleClientRespDocChange(e.target.value)}
+                  onBlur={handleClientRespDocBlur}
+                  maxLength={14}
+                  className={`w-full rounded-xl border bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none ${
+                    clientRespDocError
+                      ? 'border-rose-500'
+                      : clientRespDocSuccess
+                        ? 'border-emerald-500'
+                        : 'border-gray-200 dark:border-slate-700'
+                  }`}
                 />
+                {clientRespDocSuccess && (
+                  <p className="mt-1 text-xs font-medium text-emerald-600">{clientRespDocSuccess}</p>
+                )}
+                {clientRespDocError && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">{clientRespDocError}</p>
+                )}
               </div>
 
               <div>

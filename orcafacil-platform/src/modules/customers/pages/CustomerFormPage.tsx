@@ -2,7 +2,13 @@ import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
 import { customerService } from '../services/customer.service'
-import { formatCustomerDocument } from '../utils/customer-document'
+import {
+  formatCustomerDocument,
+  validateCustomerDocument,
+  sanitizeCustomerDocument,
+  CPF_INVALID_ERROR,
+  CNPJ_INVALID_ERROR,
+} from '../utils/customer-document'
 import { formatPostalAddress, formatPostalCode, lookupPostalAddress } from '../utils/postal-code'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import type { CustomerType } from '@shared/types/common'
@@ -30,6 +36,8 @@ export function CustomerFormPage() {
   const [personType, setPersonType] = useState<CustomerType>('individual')
   const [name, setName] = useState('')
   const [document, setDocument] = useState('')
+  const [documentError, setDocumentError] = useState('')
+  const [documentSuccess, setDocumentSuccess] = useState('')
   const [phone, setPhone] = useState('')
   const [postalCode, setPostalCode] = useState('')
   const [skipPostalCode, setSkipPostalCode] = useState(false)
@@ -72,11 +80,25 @@ export function CustomerFormPage() {
       if (result.success) {
         setPersonType(result.data.personType)
         setName(result.data.name)
-        setDocument(
-          result.data.document
-            ? formatCustomerDocument(result.data.document, result.data.personType)
-            : '',
-        )
+        if (result.data.document) {
+          const formatted = formatCustomerDocument(result.data.document, result.data.personType)
+          setDocument(formatted)
+          const val = validateCustomerDocument(result.data.document, result.data.personType)
+          if (val.isValid) {
+            setDocumentSuccess(result.data.personType === 'individual' ? '✓ CPF válido' : '✓ CNPJ válido')
+            setDocumentError('')
+          } else {
+            setDocumentSuccess('')
+            setDocumentError(
+              val.error ??
+                (result.data.personType === 'individual' ? CPF_INVALID_ERROR : CNPJ_INVALID_ERROR),
+            )
+          }
+        } else {
+          setDocument('')
+          setDocumentSuccess('')
+          setDocumentError('')
+        }
         setPhone(formatPhoneNumber(result.data.phone ?? ''))
         setPostalCode(result.data.postalCode ? formatPostalCode(result.data.postalCode) : '')
         setSkipPostalCode(!result.data.postalCode)
@@ -93,6 +115,71 @@ export function CustomerFormPage() {
       isActive = false
     }
   }, [customerId, currentOrganization])
+
+  const handleDocumentChange = (rawValue: string, targetPersonType: CustomerType = personType) => {
+    const formatted = formatCustomerDocument(rawValue, targetPersonType)
+    setDocument(formatted)
+
+    const clean = sanitizeCustomerDocument(formatted, targetPersonType)
+    const requiredLength = targetPersonType === 'individual' ? 11 : 14
+
+    if (clean.length === 0) {
+      setDocumentError('')
+      setDocumentSuccess('')
+      return
+    }
+
+    // Se completou a quantidade de caracteres requerida, valida matematicamente na hora
+    if (clean.length === requiredLength) {
+      const result = validateCustomerDocument(clean, targetPersonType)
+      if (result.isValid) {
+        setDocumentError('')
+        setDocumentSuccess(targetPersonType === 'individual' ? '✓ CPF válido' : '✓ CNPJ válido')
+      } else {
+        setDocumentError(
+          result.error ??
+            (targetPersonType === 'individual' ? CPF_INVALID_ERROR : CNPJ_INVALID_ERROR),
+        )
+        setDocumentSuccess('')
+      }
+    } else {
+      // Enquanto o usuário ainda preenche, limpa os avisos
+      setDocumentSuccess('')
+      setDocumentError('')
+    }
+  }
+
+  const handleDocumentBlur = () => {
+    const clean = sanitizeCustomerDocument(document, personType)
+    if (!clean) {
+      setDocumentError('')
+      setDocumentSuccess('')
+      return
+    }
+
+    const requiredLength = personType === 'individual' ? 11 : 14
+    if (clean.length < requiredLength) {
+      setDocumentError(
+        personType === 'individual'
+          ? 'Informe o CPF completo com 11 dígitos.'
+          : 'Informe o CNPJ completo com 14 caracteres.',
+      )
+      setDocumentSuccess('')
+      return
+    }
+
+    const result = validateCustomerDocument(clean, personType)
+    if (!result.isValid) {
+      setDocumentError(
+        result.error ??
+          (personType === 'individual' ? CPF_INVALID_ERROR : CNPJ_INVALID_ERROR),
+      )
+      setDocumentSuccess('')
+    } else {
+      setDocumentError('')
+      setDocumentSuccess(personType === 'individual' ? '✓ CPF válido' : '✓ CNPJ válido')
+    }
+  }
 
   const handlePostalCodeChange = (value: string) => {
     const formattedPostalCode = formatPostalCode(value)
@@ -133,13 +220,28 @@ export function CustomerFormPage() {
       return
     }
 
+    const cleanDocument = sanitizeCustomerDocument(document, personType)
     const requiredDocumentLength = personType === 'individual' ? 11 : 14
-    if (document.replace(/\D/g, '').length !== requiredDocumentLength) {
-      setFormError(
+    if (cleanDocument.length !== requiredDocumentLength) {
+      const lengthMessage =
         personType === 'individual'
           ? 'Informe o CPF completo com 11 dígitos.'
-          : 'Informe o CNPJ completo com 14 dígitos.',
-      )
+          : 'Informe o CNPJ completo com 14 caracteres.'
+      setFormError(lengthMessage)
+      setDocumentError(lengthMessage)
+      setDocumentSuccess('')
+      return
+    }
+
+    // Validação matemática obrigatória dos dígitos verificadores
+    const documentValidation = validateCustomerDocument(cleanDocument, personType)
+    if (!documentValidation.isValid) {
+      const validationError =
+        documentValidation.error ??
+        (personType === 'individual' ? CPF_INVALID_ERROR : CNPJ_INVALID_ERROR)
+      setFormError(validationError)
+      setDocumentError(validationError)
+      setDocumentSuccess('')
       return
     }
 
@@ -158,7 +260,7 @@ export function CustomerFormPage() {
     const params = {
       personType,
       name: name.trim(),
-      document: document.trim(),
+      document: cleanDocument,
       phone: phone.trim(),
       postalCode: skipPostalCode ? null : postalCode.replace(/\D/g, ''),
       address: address.trim(),
@@ -171,6 +273,10 @@ export function CustomerFormPage() {
         void navigate('/orcafacil/customers/search')
       } else {
         setFormError(result.error)
+        if (result.error.includes('CPF') || result.error.includes('CNPJ')) {
+          setDocumentError(result.error)
+          setDocumentSuccess('')
+        }
       }
     } else {
       const result = await customerService.create(currentOrganization.id, params)
@@ -187,6 +293,10 @@ export function CustomerFormPage() {
         }
       } else {
         setFormError(result.error)
+        if (result.error.includes('CPF') || result.error.includes('CNPJ')) {
+          setDocumentError(result.error)
+          setDocumentSuccess('')
+        }
       }
     }
     setIsSaving(false)
@@ -246,7 +356,7 @@ export function CustomerFormPage() {
                   aria-pressed={personType === 'individual'}
                   onClick={() => {
                     setPersonType('individual')
-                    setDocument((current) => formatCustomerDocument(current, 'individual'))
+                    handleDocumentChange(document, 'individual')
                   }}
                   className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
                     personType === 'individual'
@@ -262,7 +372,7 @@ export function CustomerFormPage() {
                   aria-pressed={personType === 'company'}
                   onClick={() => {
                     setPersonType('company')
-                    setDocument((current) => formatCustomerDocument(current, 'company'))
+                    handleDocumentChange(document, 'company')
                   }}
                   className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
                     personType === 'company'
@@ -301,11 +411,14 @@ export function CustomerFormPage() {
                 }
                 value={document}
                 onChange={(event) => {
-                  setDocument(formatCustomerDocument(event.target.value, personType))
+                  handleDocumentChange(event.target.value)
                 }}
-                inputMode="numeric"
+                onBlur={handleDocumentBlur}
+                inputMode={personType === 'individual' ? 'numeric' : 'text'}
                 maxLength={personType === 'individual' ? 14 : 18}
                 required
+                error={documentError}
+                success={documentSuccess}
               />
             </div>
 

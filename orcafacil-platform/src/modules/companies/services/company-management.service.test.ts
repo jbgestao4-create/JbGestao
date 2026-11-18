@@ -328,7 +328,7 @@ describe('companyManagementService', () => {
     const result = await companyManagementService.updateCompanyDetails('org-extended-1', {
       name: 'Auto Mecânica VIP',
       slug: 'auto-mecanica-vip',
-      cnpj: '12.345.678/0001-90',
+      cnpj: '00.000.000/0001-91',
       address: 'Rua das Flores, 123, Bairro Centro',
       responsible: 'José Carlos',
       notes: 'Cliente especial da rede',
@@ -343,7 +343,7 @@ describe('companyManagementService', () => {
         p_org_id: 'org-extended-1',
         p_name: 'Auto Mecânica VIP',
         p_slug: 'auto-mecanica-vip',
-        p_cnpj: '12.345.678/0001-90',
+        p_cnpj: '00000000000191',
         p_address: 'Rua das Flores, 123, Bairro Centro',
         p_responsible: 'José Carlos',
         p_notes: 'Cliente especial da rede',
@@ -552,5 +552,61 @@ describe('companyManagementService', () => {
       'carlos@empresa.com',
     )
     expect(res.success).toBe(true)
+  })
+
+  it('deve rejeitar cadastro de empresa com CNPJ matematicamente inválido', async () => {
+    const res = await companyManagementService.registerCompanyWithAdmin({
+      name: 'Empresa Teste Inválida',
+      slug: 'empresa-teste-invalida',
+      cnpj: '12.345.678/0001-99', // Dígitos verificadores incorretos
+      adminName: 'Admin Teste',
+      adminEmail: 'admin@teste.com',
+      modules: [],
+    })
+
+    expect(res.success).toBe(false)
+    if (!res.success) {
+      expect(res.error).toBe('CNPJ inválido. Os dígitos verificadores não conferem.')
+    }
+  })
+
+  it('deve aceitar cadastro de empresa com CNPJ válido matematicamente (numérico e alfanumérico)', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: { organizationId: 'new-org-123' },
+      error: null,
+    } as any)
+
+    const query = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+    }
+    vi.mocked(supabase.from).mockReturnValue(query as never)
+
+    const resNumeric = await companyManagementService.registerCompanyWithAdmin({
+      name: 'Empresa Teste Válida',
+      slug: 'empresa-teste-valida',
+      cnpj: '00.000.000/0001-91',
+      adminName: 'Admin Teste',
+      adminEmail: 'admin@teste.com',
+      adminPhone: '(31) 99999-9999',
+      postalCode: '30130-010',
+      addressNumber: '100',
+      modules: [],
+    })
+
+    expect(resNumeric.success).toBe(true)
+  })
+
+  it('deve rejeitar atualização de empresa com CNPJ matematicamente inválido', async () => {
+    const res = await companyManagementService.updateCompanyDetails('org-123', {
+      name: 'Empresa Teste',
+      slug: 'empresa-teste',
+      cnpj: '11.222.333/0001-00', // Inválido
+    })
+
+    expect(res.success).toBe(false)
+    if (!res.success) {
+      expect(res.error).toBe('CNPJ inválido. Os dígitos verificadores não conferem.')
+    }
   })
 })

@@ -6,6 +6,7 @@ import type { Supplier } from '@shared/types/common'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
+import { formatCNPJ } from '@shared/utils/cnpj'
 import { ConfirmActionDialog } from '@shared/components/ConfirmActionDialog'
 import {
   ArrowLeft,
@@ -31,9 +32,8 @@ function getSupplierInitials(name: string) {
 }
 
 function formatDocument(document: string | null) {
-  const digits = document?.replace(/\D/g, '') ?? ''
-  if (digits.length !== 14) return document || 'Não informado'
-  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  if (!document) return 'Não informado'
+  return formatCNPJ(document)
 }
 
 function formatRegistrationDate(value: string) {

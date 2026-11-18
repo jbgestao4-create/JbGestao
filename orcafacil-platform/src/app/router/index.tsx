@@ -50,6 +50,7 @@ import {
   SystemUpdatesAdminPage,
   PrivacyPolicyPage,
   PresentationPage,
+  RegisterCompanyPublicPage,
   SiteAccessAnalyticsPage,
   PixPaymentCheckoutPage,
 } from './lazy-pages'
@@ -109,8 +110,12 @@ export const router = createBrowserRouter([
     element: <Navigate to="/politica-de-privacidade?tab=terms" replace />,
   },
   {
+    path: '/cadastrar-empresa',
+    element: <RegisterCompanyPublicPage />,
+  },
+  {
     path: '/register',
-    element: <PresentationPage />,
+    element: <RegisterCompanyPublicPage />,
   },
   {
     path: '/forgot-password',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react'
 import {
   AlertTriangle,
   Building2,
@@ -15,7 +15,17 @@ import {
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { Input } from '@shared/components/ui/Input'
-import { formatCNPJ } from '@shared/utils/cnpj'
+import {
+  validateCnpj,
+  formatCustomerDocument,
+  sanitizeCustomerDocument,
+  CNPJ_INVALID_ERROR,
+} from '@modules/customers/utils/customer-document'
+import {
+  formatPostalAddress,
+  formatPostalCode,
+  lookupPostalAddress,
+} from '@modules/customers/utils/postal-code'
 import { SYSTEM_OWNER_TEST_ORGANIZATION_SLUG } from '@shared/utils/system-owner'
 import {
   companyManagementService,
@@ -66,8 +76,21 @@ function EditCompanyForm({
   // 1. Dados da Empresa
   const [name, setName] = useState(company.name)
   const [slug, setSlug] = useState(company.slug)
-  const [cnpj, setCnpj] = useState(company.cnpj ? formatCNPJ(company.cnpj) : '')
+  const [cnpj, setCnpj] = useState(() =>
+    company.cnpj ? formatCustomerDocument(company.cnpj, 'company') : '',
+  )
+  const [cnpjError, setCnpjError] = useState('')
+  const [cnpjSuccess, setCnpjSuccess] = useState(() => {
+    if (!company.cnpj) return ''
+    const val = validateCnpj(company.cnpj)
+    return val.isValid ? '✓ CNPJ válido' : ''
+  })
   const [responsible, setResponsible] = useState(company.responsible || '')
+  const [postalCode, setPostalCode] = useState('')
+  const [skipPostalCode, setSkipPostalCode] = useState(false)
+  const [postalCodeError, setPostalCodeError] = useState('')
+  const [isLookingUpPostalCode, setIsLookingUpPostalCode] = useState(false)
+  const postalLookupController = useRef<AbortController | null>(null)
   const [address, setAddress] = useState(company.address || '')
   const [notes, setNotes] = useState(company.notes || '')
   const [isActive, setIsActive] = useState<boolean>(company.isActive)
@@ -131,6 +154,88 @@ function EditCompanyForm({
     return true
   }
 
+  const handleCnpjChange = (val: string) => {
+    const formatted = formatCustomerDocument(val, 'company')
+    setCnpj(formatted)
+    const clean = sanitizeCustomerDocument(formatted, 'company')
+
+    if (clean.length === 0) {
+      setCnpjError('')
+      setCnpjSuccess('')
+      return
+    }
+
+    if (clean.length === 14) {
+      const result = validateCnpj(clean)
+      if (result.isValid) {
+        setCnpjError('')
+        setCnpjSuccess('✓ CNPJ válido')
+      } else {
+        setCnpjError(result.error ?? CNPJ_INVALID_ERROR)
+        setCnpjSuccess('')
+      }
+    } else {
+      setCnpjError('')
+      setCnpjSuccess('')
+    }
+  }
+
+  const handleCnpjBlur = () => {
+    const clean = sanitizeCustomerDocument(cnpj, 'company')
+    if (!clean) {
+      setCnpjError('')
+      setCnpjSuccess('')
+      return
+    }
+
+    if (clean.length < 14) {
+      setCnpjError('Informe o CNPJ completo com 14 caracteres.')
+      setCnpjSuccess('')
+      return
+    }
+
+    const result = validateCnpj(clean)
+    if (!result.isValid) {
+      setCnpjError(result.error ?? CNPJ_INVALID_ERROR)
+      setCnpjSuccess('')
+    } else {
+      setCnpjError('')
+      setCnpjSuccess('✓ CNPJ válido')
+    }
+  }
+
+  const handlePostalCodeChange = (value: string) => {
+    const formattedPostalCode = formatPostalCode(value)
+    const digits = formattedPostalCode.replace(/\D/g, '')
+    setPostalCode(formattedPostalCode)
+    setPostalCodeError('')
+    postalLookupController.current?.abort()
+
+    if (digits.length !== 8) {
+      setIsLookingUpPostalCode(false)
+      return
+    }
+
+    const controller = new AbortController()
+    postalLookupController.current = controller
+    setIsLookingUpPostalCode(true)
+    void lookupPostalAddress(digits, controller.signal)
+      .then((result) => {
+        setAddress(formatPostalAddress(result))
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return
+        setPostalCodeError(
+          err instanceof Error
+            ? err.message
+            : 'Não foi possível consultar o CEP. Preencha o endereço manualmente.',
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLookingUpPostalCode(false)
+      })
+  }
+
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     const cleanName = name.trim()
@@ -144,6 +249,19 @@ function EditCompanyForm({
     if (!/^[a-z0-9-]+$/.test(cleanSlug)) {
       setError('O identificador deve conter apenas letras minúsculas, números e hífens.')
       return
+    }
+
+    const cleanCnpj = sanitizeCustomerDocument(cnpj, 'company')
+    if (cleanCnpj) {
+      if (cleanCnpj.length !== 14) {
+        setError('Informe o CNPJ completo com 14 caracteres ou deixe em branco.')
+        return
+      }
+      const val = validateCnpj(cleanCnpj)
+      if (!val.isValid) {
+        setError(val.error ?? CNPJ_INVALID_ERROR)
+        return
+      }
     }
 
     let finalTrialEndsAt: string | null = null
@@ -169,7 +287,7 @@ function EditCompanyForm({
     const result = await companyManagementService.updateCompanyDetails(company.id, {
       name: cleanName,
       slug: cleanSlug,
-      cnpj: cnpj.trim(),
+      cnpj: cleanCnpj,
       address: address.trim(),
       responsible: responsible.trim(),
       notes: notes.trim(),
@@ -273,9 +391,12 @@ function EditCompanyForm({
                 name="company-cnpj"
                 placeholder="00.000.000/0000-00"
                 value={cnpj}
-                onChange={(event) => setCnpj(formatCNPJ(event.target.value))}
+                onChange={(event) => handleCnpjChange(event.target.value)}
+                onBlur={handleCnpjBlur}
                 maxLength={18}
                 autoComplete="off"
+                error={cnpjError}
+                success={cnpjSuccess}
               />
               <Input
                 label="Responsável Legal"
@@ -288,17 +409,55 @@ function EditCompanyForm({
               />
             </div>
 
-            <div className="mt-4">
-              <Input
-                label="Endereço Completo"
-                name="company-address"
-                placeholder="Ex: Av. Brasil, 1500, Centro - São Paulo/SP - CEP 01000-000"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                maxLength={255}
-                autoComplete="off"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+              <div>
+                <Input
+                  label="CEP"
+                  placeholder="00000-000"
+                  value={postalCode}
+                  onChange={(e) => handlePostalCodeChange(e.target.value)}
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={9}
+                  disabled={skipPostalCode}
+                  helperText={isLookingUpPostalCode ? 'Consultando CEP...' : undefined}
+                />
+                <label className="mt-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={skipPostalCode}
+                    onChange={(e) => {
+                      const shouldSkip = e.target.checked
+                      setSkipPostalCode(shouldSkip)
+                      setPostalCodeError('')
+                      if (shouldSkip) {
+                        postalLookupController.current?.abort()
+                        setIsLookingUpPostalCode(false)
+                        setPostalCode('')
+                      }
+                    }}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                  />
+                  Sem CEP
+                </label>
+              </div>
+              <div className="sm:col-span-2">
+                <Input
+                  label="Endereço Completo"
+                  name="company-address"
+                  placeholder="Ex: Av. Brasil, 1500, Centro - São Paulo/SP - CEP 01000-000"
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                  maxLength={255}
+                  autoComplete="street-address"
+                />
+              </div>
             </div>
+            {postalCodeError && (
+              <div className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                {postalCodeError}
+              </div>
+            )}
 
             <div className="mt-4">
               <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">

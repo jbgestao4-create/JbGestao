@@ -8,6 +8,11 @@ export const PresentationPage = lazy(() =>
     default: module.PresentationPage,
   })),
 )
+export const RegisterCompanyPublicPage = lazy(() =>
+  import('@modules/auth/pages/RegisterCompanyPublicPage').then((module) => ({
+    default: module.RegisterCompanyPublicPage,
+  })),
+)
 export const ForgotPasswordPage = lazy(() =>
   import('@modules/auth/pages/ForgotPasswordPage').then((module) => ({
     default: module.ForgotPasswordPage,

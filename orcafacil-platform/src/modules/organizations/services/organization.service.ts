@@ -190,16 +190,22 @@ export const organizationService = {
       })
 
       if (error) {
-        logger.warn('Erro ao criar organização', { message: error.message })
+        logger.warn('Erro ao criar organização', { message: error.message, code: (error as any)?.code })
         if (error.message.includes('unique') || error.message.includes('slug')) {
           return {
             success: false,
             error: 'Este identificador (slug) já está em uso por outra organização.',
           }
         }
+        if (error.message.includes('permission denied') || (error as any)?.code === '42501') {
+          return {
+            success: false,
+            error: 'Permissão negada (42501): execute a migration 00138 no Supabase SQL Editor para liberar a criação de empresas.',
+          }
+        }
         return {
           success: false,
-          error: 'Não foi possível criar a organização. Verifique os dados.',
+          error: error.message || 'Não foi possível criar a organização. Verifique os dados.',
         }
       }
 
