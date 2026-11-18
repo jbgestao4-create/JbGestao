@@ -35,6 +35,7 @@ import { ALL_PLATFORM_DASHBOARD_MODULES } from '@modules/companies/services/comp
 import {
   accessPlanService,
   SYSTEM_DEFAULT_ACCESS_PLANS,
+  getPlanSlug,
   type AccessPlan,
 } from '@modules/companies/services/access-plan.service'
 import { BrandLogo } from '@shared/components/BrandLogo'
@@ -285,8 +286,8 @@ export function PresentationPage() {
   const [pinnedModulesPlanId, setPinnedModulesPlanId] = useState<string | null>(null)
 
   const handleChoosePlan = (plan?: AccessPlan) => {
-    if (plan?.id) {
-      navigate(`/cadastrar-empresa?plano=${plan.id}`)
+    if (plan) {
+      navigate(`/cadastrar-empresa?plano=${getPlanSlug(plan)}`)
     } else {
       navigate('/cadastrar-empresa')
     }

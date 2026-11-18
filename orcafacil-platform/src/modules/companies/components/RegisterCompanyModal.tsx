@@ -57,7 +57,6 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
   const [adminName, setAdminName] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
   const [adminPhone, setAdminPhone] = useState('')
-  const [isEmailManuallyEdited, setIsEmailManuallyEdited] = useState(false)
   const [isAdminNameManuallyEdited, setIsAdminNameManuallyEdited] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -90,7 +89,6 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       setAdminName('')
       setAdminEmail('')
       setAdminPhone('')
-      setIsEmailManuallyEdited(false)
       setIsAdminNameManuallyEdited(false)
       setAdminPassword('')
       setShowPassword(false)
@@ -126,21 +124,11 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
     setName(val)
     const generatedSlug = generateSlugFromName(val)
     setSlug(generatedSlug)
-
-    // Puxa o e-mail do administrador automaticamente a partir do slug
-    if (!isEmailManuallyEdited) {
-      setAdminEmail(generatedSlug ? `admin@${generatedSlug}.com` : '')
-    }
   }
 
   const handleSlugChange = (val: string) => {
     const cleanSlug = val.toLowerCase().replace(/\s+/g, '-')
     setSlug(cleanSlug)
-
-    // Atualiza o e-mail puxado automaticamente caso não tenha sido editado manualmente
-    if (!isEmailManuallyEdited) {
-      setAdminEmail(cleanSlug ? `admin@${cleanSlug}.com` : '')
-    }
   }
 
   const handleResponsibleChange = (val: string) => {
@@ -532,24 +520,14 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
               />
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
-                    E-mail de Login
-                  </label>
-                  {adminEmail && !isEmailManuallyEdited && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                      <Check className="h-3 w-3" /> Puxado
-                    </span>
-                  )}
-                </div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+                  E-mail de Login
+                </label>
                 <Input
                   type="email"
                   placeholder="admin@empresa.com"
                   value={adminEmail}
-                  onChange={(e) => {
-                    setIsEmailManuallyEdited(true)
-                    setAdminEmail(e.target.value)
-                  }}
+                  onChange={(e) => setAdminEmail(e.target.value)}
                   autoComplete="new-password"
                   required
                 />

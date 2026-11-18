@@ -24,6 +24,82 @@ export interface SaveAccessPlanParams {
 
 const PUBLIC_PLANS_CACHE_KEY = 'jb_public_access_plans_cache'
 
+export const PLAN_SHORT_SLUGS: Record<string, string> = {
+  '00000000-0000-4000-8000-000000000001': 'basico',
+  '00000000-0000-4000-8000-000000000002': 'basico-pdv',
+  '00000000-0000-4000-8000-000000000003': 'completo',
+  '00000000-0000-4000-8000-000000000004': 'completo-fiscal',
+  '00000000-0000-4000-8000-000000000005': 'pdv-fiscal',
+}
+
+/**
+ * Mapeamento bidirecional de slugs/números amigáveis para os IDs de plano
+ */
+export const PLAN_ALIAS_TO_ID: Record<string, string> = {
+  'basico': '00000000-0000-4000-8000-000000000001',
+  'basic': '00000000-0000-4000-8000-000000000001',
+  '1': '00000000-0000-4000-8000-000000000001',
+
+  'basico-pdv': '00000000-0000-4000-8000-000000000002',
+  'pdv': '00000000-0000-4000-8000-000000000002',
+  '2': '00000000-0000-4000-8000-000000000002',
+
+  'completo': '00000000-0000-4000-8000-000000000003',
+  'pro': '00000000-0000-4000-8000-000000000003',
+  'full': '00000000-0000-4000-8000-000000000003',
+  '3': '00000000-0000-4000-8000-000000000003',
+
+  'completo-fiscal': '00000000-0000-4000-8000-000000000004',
+  'fiscal': '00000000-0000-4000-8000-000000000004',
+  'nfe': '00000000-0000-4000-8000-000000000004',
+  '4': '00000000-0000-4000-8000-000000000004',
+
+  'pdv-fiscal': '00000000-0000-4000-8000-000000000005',
+  '5': '00000000-0000-4000-8000-000000000005',
+}
+
+/**
+ * Retorna o slug amigável e curto para um plano (ex: 'basico-pdv' em vez de UUID extenso).
+ */
+export function getPlanSlug(plan: AccessPlan | string): string {
+  const planId = typeof plan === 'string' ? plan : plan.id
+  if (PLAN_SHORT_SLUGS[planId]) {
+    return PLAN_SHORT_SLUGS[planId]
+  }
+  if (typeof plan !== 'string' && plan.name) {
+    const norm = plan.name.toLowerCase()
+    if (norm.includes('completo') && norm.includes('emissão')) return 'completo-fiscal'
+    if (norm.includes('completo')) return 'completo'
+    if (norm.includes('pdv') && norm.includes('emissão')) return 'pdv-fiscal'
+    if (norm.includes('pdv')) return 'basico-pdv'
+    if (norm.includes('básico') || norm.includes('basico')) return 'basico'
+  }
+  return planId
+}
+
+/**
+ * Resolve um plano a partir de slug curto, número ou UUID.
+ */
+export function resolvePlanFromSlugOrId(query: string, plans: AccessPlan[]): AccessPlan | null {
+  if (!query) return null
+  const clean = query.trim().toLowerCase()
+  const resolvedId = PLAN_ALIAS_TO_ID[clean] || clean
+
+  // 1. Busca por ID exato
+  const byId = plans.find((p) => p.id.toLowerCase() === resolvedId.toLowerCase())
+  if (byId) return byId
+
+  // 2. Busca por slug
+  const bySlug = plans.find((p) => getPlanSlug(p) === clean)
+  if (bySlug) return bySlug
+
+  // 3. Busca por inclusão de nome
+  const byName = plans.find((p) => p.name.toLowerCase().includes(clean))
+  if (byName) return byName
+
+  return null
+}
+
 const DEFAULT_PLAN_PRICES_BY_ID: Record<string, number> = {
   '00000000-0000-4000-8000-000000000001': 99.9,
   '00000000-0000-4000-8000-000000000002': 129.9,

@@ -35,12 +35,14 @@ import {
 import {
   accessPlanService,
   SYSTEM_DEFAULT_ACCESS_PLANS,
+  getPlanSlug,
+  resolvePlanFromSlugOrId,
   type AccessPlan,
 } from '@modules/companies/services/access-plan.service'
 
 export function RegisterCompanyPublicPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { signIn } = useAuth()
 
   // 1. Dados da Empresa
@@ -77,7 +79,22 @@ export function RegisterCompanyPublicPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Carrega planos disponíveis
+  // Garante que o e-mail e senha comecem rigorosamente em branco e desativa autofill indesejado
+  useEffect(() => {
+    setAdminEmail('')
+    setAdminPassword('')
+    setAdminConfirmPassword('')
+
+    const timer = setTimeout(() => {
+      setAdminEmail('')
+      setAdminPassword('')
+      setAdminConfirmPassword('')
+    }, 100)
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Carrega planos disponíveis e resolve slug curto/alias amigável na URL
   useEffect(() => {
     let isMounted = true
     setIsLoadingPlans(true)
@@ -86,40 +103,44 @@ export function RegisterCompanyPublicPage() {
       const validPlans = loadedPlans.length > 0 ? loadedPlans : SYSTEM_DEFAULT_ACCESS_PLANS
       setPlans(validPlans)
 
-      const requestedPlanId = searchParams.get('plano') || searchParams.get('plan')
-      if (requestedPlanId) {
-        const found = validPlans.find(
-          (p) =>
-            p.id === requestedPlanId ||
-            p.name.toLowerCase().includes(requestedPlanId.toLowerCase()),
-        )
-        if (found) {
-          setSelectedPlan(found)
-          setIsLoadingPlans(false)
-          return
+      const requestedParam = searchParams.get('plano') || searchParams.get('plan')
+      let targetPlan: AccessPlan | null = null
+
+      if (requestedParam) {
+        targetPlan = resolvePlanFromSlugOrId(requestedParam, validPlans)
+      }
+
+      if (!targetPlan) {
+        // Plano padrão: Completo sem emissão ou primeiro plano ativo disponível
+        targetPlan =
+          validPlans.find(
+            (p) =>
+              p.isActive &&
+              !p.isLocked &&
+              p.name.toLowerCase().includes('completo') &&
+              !p.name.toLowerCase().includes('com emissão'),
+          ) ||
+          validPlans.find((p) => p.isActive && !p.isLocked) ||
+          validPlans[0] ||
+          null
+      }
+
+      if (targetPlan) {
+        setSelectedPlan(targetPlan)
+        const shortSlug = getPlanSlug(targetPlan)
+        // Se a URL estiver usando UUID ou formato longo, encurta automaticamente a URL exibida no navegador
+        if (requestedParam !== shortSlug) {
+          setSearchParams({ plano: shortSlug }, { replace: true })
         }
       }
 
-      // Plano padrão: Completo sem emissão ou primeiro plano ativo disponível
-      const defaultPlan =
-        validPlans.find(
-          (p) =>
-            p.isActive &&
-            !p.isLocked &&
-            p.name.toLowerCase().includes('completo') &&
-            !p.name.toLowerCase().includes('com emissão'),
-        ) ||
-        validPlans.find((p) => p.isActive && !p.isLocked) ||
-        validPlans[0]
-
-      setSelectedPlan(defaultPlan || null)
       setIsLoadingPlans(false)
     })
 
     return () => {
       isMounted = false
     }
-  }, [searchParams])
+  }, [searchParams, setSearchParams])
 
   const generateSlugFromName = (val: string) => {
     return val
@@ -419,7 +440,15 @@ export function RegisterCompanyPublicPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} autoComplete="off" className="space-y-6">
+              {/* Campos decoy para prevenir autofill indesejado de credenciais pelo navegador */}
+              <div
+                aria-hidden="true"
+                style={{ position: 'absolute', opacity: 0, height: 0, width: 0, overflow: 'hidden', zIndex: -1 }}
+              >
+                <input type="text" name="decoy_username" tabIndex={-1} autoComplete="off" />
+                <input type="password" name="decoy_password" tabIndex={-1} autoComplete="off" />
+              </div>
               {/* 1. DADOS DA EMPRESA */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
@@ -649,6 +678,11 @@ export function RegisterCompanyPublicPage() {
                     </label>
                     <Input
                       type="email"
+                      name="company_admin_registration_email"
+                      id="company_admin_registration_email"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       required
                       placeholder="seu.email@exemplo.com"
                       value={adminEmail}
@@ -664,6 +698,9 @@ export function RegisterCompanyPublicPage() {
                     <div className="relative">
                       <Input
                         type={showPassword ? 'text' : 'password'}
+                        name="company_admin_registration_password"
+                        id="company_admin_registration_password"
+                        autoComplete="new-password"
                         required
                         placeholder="Mínimo 6 caracteres"
                         value={adminPassword}
@@ -688,6 +725,9 @@ export function RegisterCompanyPublicPage() {
                     <div className="relative">
                       <Input
                         type={showConfirmPassword ? 'text' : 'password'}
+                        name="company_admin_registration_confirm_password"
+                        id="company_admin_registration_confirm_password"
+                        autoComplete="new-password"
                         required
                         placeholder="Confirme sua senha"
                         value={adminConfirmPassword}
@@ -783,7 +823,10 @@ export function RegisterCompanyPublicPage() {
                           value={selectedPlan.id}
                           onChange={(e) => {
                             const found = plans.find((p) => p.id === e.target.value)
-                            if (found) setSelectedPlan(found)
+                            if (found) {
+                              setSelectedPlan(found)
+                              setSearchParams({ plano: getPlanSlug(found) }, { replace: true })
+                            }
                           }}
                           className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs focus:border-blue-500 focus:outline-hidden"
                         >

@@ -1,7 +1,10 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
 import type { ServiceResult } from '@shared/types/common'
-import { SYSTEM_DEFAULT_ACCESS_PLANS } from '@modules/companies/services/access-plan.service'
+import {
+  SYSTEM_DEFAULT_ACCESS_PLANS,
+  PLAN_ALIAS_TO_ID,
+} from '@modules/companies/services/access-plan.service'
 
 export interface PlanTermConfig {
   planId: string
@@ -243,13 +246,16 @@ export const planTermsService = {
       return all.default || DEFAULT_PLAN_TERMS.default
     }
 
-    // 1. Busca por ID direto
+    const search = planIdOrName.trim().toLowerCase()
+    const resolvedId = PLAN_ALIAS_TO_ID[search] || planIdOrName
+
+    // 1. Busca por ID direto ou alias resolvido
+    if (all[resolvedId]) {
+      return all[resolvedId]
+    }
     if (all[planIdOrName]) {
       return all[planIdOrName]
     }
-
-    // 2. Busca por correspondência no nome do plano
-    const search = planIdOrName.trim().toLowerCase()
     const foundEntry = Object.values(all).find((t) => {
       const tName = t.planName.trim().toLowerCase()
       return tName === search || tName.includes(search) || search.includes(tName)
