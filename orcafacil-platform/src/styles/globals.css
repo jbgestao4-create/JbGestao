@@ -474,6 +474,108 @@ html.dark * {
 }
 
 /* ==========================================================================
+   OTIMIZAÇÃO EXCLUSIVA PARA DISPOSITIVOS MOBILE (320px - 767.98px)
+   Nenhuma regra abaixo afeta a visualização Web/Desktop (>= 768px).
+   ========================================================================== */
+@media (max-width: 767.98px) {
+  html,
+  body,
+  #root {
+    max-width: 100vw !important;
+    overflow-x: clip !important;
+  }
+
+  /* Evita estouro lateral em flex/grid children no mobile */
+  main,
+  section,
+  article,
+  .grid > *,
+  .flex > * {
+    min-width: 0;
+  }
+
+  /* Qualquer tabela passa a rolar apenas dentro do próprio container, nunca na página inteira */
+  div:has(> table) {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Campos de formulário adaptados à largura mobile e protegidos contra zoom/teclado */
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    max-width: 100%;
+    font-size: 16px;
+    scroll-margin-bottom: 120px;
+  }
+
+  /* Gráficos, imagens e mídias nunca ultrapassam a tela */
+  img,
+  svg,
+  canvas,
+  video,
+  .recharts-wrapper {
+    max-width: 100%;
+  }
+
+  /* Barra de abas com rolagem horizontal suave por toque */
+  [role='tablist'],
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 575.98px) {
+  /* Títulos e textos principais proporcionais em telas 320px–430px */
+  main h1 {
+    font-size: clamp(1.125rem, 5vw, 1.5rem);
+    line-height: 1.28;
+    word-break: break-word;
+  }
+
+  /* Modais confortáveis e roláveis em smartphones */
+  .fixed.inset-0.z-50 {
+    padding: 0.5rem !important;
+  }
+
+  .fixed.inset-0.z-50 > div {
+    max-width: 100% !important;
+    max-height: 94dvh !important;
+  }
+
+  /* Barras de botões em formulários e rodapés quebram linha sem cortar ou sobrepor */
+  form .flex.items-center.justify-end,
+  .border-t.flex.items-center.justify-end {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Tabelas compactas em telas pequenas */
+  .report-fit-table th,
+  .report-fit-table td {
+    padding: 0.375rem 0.4rem;
+    font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 430px) {
+  /* Em telas estreitas (320px–430px), botões de ação em linha ocupam largura confortável */
+  form .flex.items-center.justify-end > button,
+  .fixed.inset-0.z-50 .border-t.flex.items-center.justify-end > button {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  /* Reduz paddings horizontais excessivos de cards em 320px–390px */
+  main {
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
+  }
+}
+
+/* ==========================================================================
    ESTILOS GLOBAIS DE IMPRESSÃO PROFISSIONAL (PRINT MEDIA)
    Garante relatórios perfeitamente organizados, com nova logo,
    sem cabeçalhos, sem barras laterais, sem botões e sem dark mode.
