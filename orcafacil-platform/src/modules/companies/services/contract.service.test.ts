@@ -243,8 +243,46 @@ describe('contractService', () => {
     expect(dez.nextDueDate).toBe('2027-01-15')
   })
 
-  it('deve gerar nova fatura automaticamente 3 dias antes do vencimento com o mesmo valor da anterior', async () => {
-    // 1. Cria contrato ativo
+  it('deve gerar nova fatura automaticamente 5 dias antes do vencimento (e não antes de 5 dias)', async () => {
+    const formatLocalDate = (daysOffset: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() + daysOffset)
+      const yyyy = d.getFullYear()
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      return `${yyyy}-${mm}-${dd}`
+    }
+
+    // 1. Cria contrato ativo com fatura vencendo em 6 dias -> NÃO deve gerar ainda
+    const c6Res = await contractService.saveContract({
+      contractNumber: 'CTR-RENEW-6D',
+      clientName: 'Cliente 6 Dias',
+      clientResponsibleName: 'Gestor 6D',
+      planName: 'Plano Controle Mensal',
+      monthlyAmount: 180.0,
+      billingDay: 10,
+      startDate: '2026-11-01',
+      durationMonths: 12,
+      status: 'active',
+    })
+    expect(c6Res.success).toBe(true)
+    if (!c6Res.success) return
+
+    await contractService.saveInvoice({
+      contractId: c6Res.data.id,
+      clientName: c6Res.data.clientName,
+      amount: 180.0,
+      dueDate: formatLocalDate(6),
+      referenceMonth: '11/2026',
+      status: 'pending',
+    })
+
+    const runAt6Days = await contractService.autoGenerateInvoicesDueSoon()
+    expect(runAt6Days.success).toBe(true)
+    if (!runAt6Days.success) return
+    expect(runAt6Days.data.length).toBe(0)
+
+    // 2. Cria contrato ativo com fatura vencendo em 5 dias -> DEVE gerar
     const contractRes = await contractService.saveContract({
       contractNumber: 'CTR-RENEW-001',
       clientName: 'Cliente Renovação Automática',
@@ -260,16 +298,11 @@ describe('contractService', () => {
     if (!contractRes.success) return
     const contract = contractRes.data
 
-    // 2. Cria fatura com vencimento daqui a 2 dias (dentro do gatilho de <= 3 dias)
-    const twoDaysFromNow = new Date()
-    twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2)
-    const dueDateStr = twoDaysFromNow.toISOString().split('T')[0]
-
     const initialInvoice = await contractService.saveInvoice({
       contractId: contract.id,
       clientName: contract.clientName,
       amount: 180.0,
-      dueDate: dueDateStr,
+      dueDate: formatLocalDate(5),
       referenceMonth: '11/2026',
       status: 'pending',
     })
@@ -294,5 +327,75 @@ describe('contractService', () => {
     expect(secondRun.success).toBe(true)
     if (!secondRun.success) return
     expect(secondRun.data.length).toBe(0)
+  })
+
+  it('deve gerar o primeiro boleto pago exatamente 5 dias antes do término do período de teste', async () => {
+    const formatLocalDate = (daysOffset: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() + daysOffset)
+      const yyyy = d.getFullYear()
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      return `${yyyy}-${mm}-${dd}`
+    }
+
+    // 1. Contrato em teste terminando em 6 dias -> NÃO deve gerar boleto pago ainda
+    const trial6Res = await contractService.saveContract({
+      contractNumber: 'CTR-TRIAL-6D',
+      clientName: 'Empresa Teste 6 Dias',
+      clientResponsibleName: 'Resp 6D',
+      planName: 'Plano Completo',
+      monthlyAmount: 249.9,
+      billingDay: 15,
+      startDate: formatLocalDate(-24),
+      durationMonths: 12,
+      hasTrialPeriod: true,
+      trialDurationMonths: 1,
+      trialEndsAt: formatLocalDate(6),
+      status: 'active',
+    })
+    expect(trial6Res.success).toBe(true)
+    if (!trial6Res.success) return
+
+    const init6 = await contractService.ensureInitialInvoice(trial6Res.data)
+    expect(init6.success).toBe(true)
+    expect(init6.success && init6.data?.amount).toBe(0)
+    expect(init6.success && init6.data?.status).toBe('paid')
+
+    const gen6 = await contractService.autoGenerateInvoicesDueSoon()
+    expect(gen6.success).toBe(true)
+    if (!gen6.success) return
+    expect(gen6.data.length).toBe(0)
+
+    // 2. Contrato em teste terminando em 5 dias -> DEVE gerar o primeiro boleto pago
+    const trial5Res = await contractService.saveContract({
+      contractNumber: 'CTR-TRIAL-5D',
+      clientName: 'Empresa Teste 5 Dias',
+      clientResponsibleName: 'Resp 5D',
+      planName: 'Plano Completo',
+      monthlyAmount: 249.9,
+      billingDay: 15,
+      startDate: formatLocalDate(-25),
+      durationMonths: 12,
+      hasTrialPeriod: true,
+      trialDurationMonths: 1,
+      trialEndsAt: formatLocalDate(5),
+      status: 'active',
+    })
+    expect(trial5Res.success).toBe(true)
+    if (!trial5Res.success) return
+
+    const init5 = await contractService.ensureInitialInvoice(trial5Res.data)
+    expect(init5.success).toBe(true)
+    expect(init5.success && init5.data?.amount).toBe(0)
+
+    const gen5 = await contractService.autoGenerateInvoicesDueSoon()
+    expect(gen5.success).toBe(true)
+    if (!gen5.success) return
+    expect(gen5.data.length).toBe(1)
+    expect(gen5.data[0].contractId).toBe(trial5Res.data.id)
+    expect(gen5.data[0].amount).toBe(249.9)
+    expect(gen5.data[0].status).toBe('pending')
+    expect(gen5.data[0].dueDate.endsWith('-15')).toBe(true)
   })
 })

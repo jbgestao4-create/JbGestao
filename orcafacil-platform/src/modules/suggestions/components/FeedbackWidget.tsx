@@ -209,82 +209,6 @@ export function FeedbackWidget() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, close])
 
-  // Posição flutuante arrastável do BOTÃO DE SUPORTE
-  const [buttonPos, setButtonPos] = useState<{ x: number; y: number } | null>(() => {
-    if (typeof window === 'undefined') return null
-    try {
-      const saved = localStorage.getItem('controlesoft_support_btn_pos')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-          return parsed
-        }
-      }
-    } catch {}
-    return null
-  })
-
-  const isDraggingBtnRef = useRef(false)
-  const dragBtnStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number; moved: boolean }>({
-    startX: 0,
-    startY: 0,
-    initX: 0,
-    initY: 0,
-    moved: false,
-  })
-
-  const handleButtonPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    const rect = e.currentTarget.getBoundingClientRect()
-    isDraggingBtnRef.current = true
-    dragBtnStartRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      initX: buttonPos?.x ?? rect.left,
-      initY: buttonPos?.y ?? rect.top,
-      moved: false,
-    }
-  }
-
-  const handleButtonPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isDraggingBtnRef.current) return
-    const { startX, startY, initX, initY } = dragBtnStartRef.current
-    const dx = e.clientX - startX
-    const dy = e.clientY - startY
-    if (Math.hypot(dx, dy) > 4) {
-      dragBtnStartRef.current.moved = true
-    }
-    const btnWidth = e.currentTarget.offsetWidth || 130
-    const btnHeight = e.currentTarget.offsetHeight || 48
-    const maxX = Math.max(8, window.innerWidth - btnWidth - 8)
-    const maxY = Math.max(8, window.innerHeight - btnHeight - 8)
-    const newX = Math.min(Math.max(8, initX + dx), maxX)
-    const newY = Math.min(Math.max(8, initY + dy), maxY)
-    setButtonPos({ x: newX, y: newY })
-  }
-
-  const handleButtonPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isDraggingBtnRef.current) return
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {}
-    const wasMoved = dragBtnStartRef.current.moved
-    isDraggingBtnRef.current = false
-    if (!wasMoved) {
-      handleOpenModal()
-    } else {
-      setButtonPos((current) => {
-        if (current) {
-          try {
-            localStorage.setItem('controlesoft_support_btn_pos', JSON.stringify(current))
-          } catch {}
-        }
-        return current
-      })
-    }
-  }
-
   // Posição flutuante arrastável da JANELA DE SUPORTE
   const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null)
   const isDraggingWindowRef = useRef(false)
@@ -344,18 +268,9 @@ export function FeedbackWidget() {
     isDraggingWindowRef.current = false
   }
 
-  // Ajusta posições ao redimensionar tela
+  // Ajusta posição do modal ao redimensionar tela
   useEffect(() => {
     const handleResize = () => {
-      setButtonPos((prev) => {
-        if (!prev) return null
-        const maxX = Math.max(8, window.innerWidth - 140)
-        const maxY = Math.max(8, window.innerHeight - 60)
-        return {
-          x: Math.min(prev.x, maxX),
-          y: Math.min(prev.y, maxY),
-        }
-      })
       setWindowPos((prev) => {
         if (!prev) return null
         const modalWidth = Math.min(672, window.innerWidth - 32)
@@ -434,36 +349,20 @@ export function FeedbackWidget() {
         </div>
       )}
 
-      {/* BOTÃO FLUTUANTE DE SUPORTE ARRASTÁVEL */}
+      {/* BOTÃO FIXO DE SUPORTE (APENAS FONE NO CANTO INFERIOR ESQUERDO) */}
       <button
         type="button"
-        onPointerDown={handleButtonPointerDown}
-        onPointerMove={handleButtonPointerMove}
-        onPointerUp={handleButtonPointerUp}
-        style={
-          buttonPos
-            ? {
-                position: 'fixed',
-                left: `${buttonPos.x}px`,
-                top: `${buttonPos.y}px`,
-                bottom: 'auto',
-                right: 'auto',
-                touchAction: 'none',
-              }
-            : {
-                position: 'fixed',
-                bottom: '1rem',
-                right: '1rem',
-                touchAction: 'none',
-              }
-        }
-        className="z-[60] inline-flex min-h-12 items-center gap-2 rounded-full bg-blue-700 px-4 text-sm font-semibold text-white shadow-xl transition-colors hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 cursor-grab active:cursor-grabbing select-none"
-        aria-label="Abrir Suporte (Arraste para mover)"
-        title="Arraste para arredar ou clique para abrir o suporte"
+        onClick={handleOpenModal}
+        style={{
+          position: 'fixed',
+          bottom: '1rem',
+          left: '1rem',
+        }}
+        className="print:hidden z-[60] inline-flex h-11 w-11 items-center justify-center rounded-full bg-blue-700 text-white shadow-xl transition-colors hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 cursor-pointer select-none"
+        aria-label="Abrir Suporte"
+        title="Abrir Suporte"
       >
-        <GripHorizontal className="h-4 w-4 text-blue-200 pointer-events-none" />
         <Headset aria-hidden="true" className="h-5 w-5 pointer-events-none" />
-        <span className="pointer-events-none">Suporte</span>
 
         {/* NOTIFICAÇÃO DE RESPOSTA DO PROPRIETÁRIO */}
         {unreadRepliesCount > 0 && (

@@ -247,6 +247,12 @@ export const ContractAcceptanceAuditAdminPage = lazy(() =>
   })),
 )
 
+export const AuditLogsPage = lazy(() =>
+  import('@modules/companies/pages/AuditLogsPage').then((module) => ({
+    default: module.AuditLogsPage,
+  })),
+)
+
 
 
 

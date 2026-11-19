@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Building2,
+  Calendar,
   Check,
   CheckCircle2,
   Clock,
@@ -40,6 +41,8 @@ import {
   type AccessPlan,
 } from '@modules/companies/services/access-plan.service'
 import { validatePasswordStrength } from '@shared/utils/password-validator'
+import { contractService } from '@modules/companies/services/contract.service'
+import { planTermsService } from '@shared/services/plan-terms.service'
 
 function PasswordRequirementsChecklist({ password }: { password: string }) {
   const result = validatePasswordStrength(password)
@@ -110,6 +113,7 @@ export function RegisterCompanyPublicPage() {
   const [plans, setPlans] = useState<AccessPlan[]>(SYSTEM_DEFAULT_ACCESS_PLANS)
   const [selectedPlan, setSelectedPlan] = useState<AccessPlan | null>(null)
   const [isLoadingPlans, setIsLoadingPlans] = useState(true)
+  const [preferredBillingDay, setPreferredBillingDay] = useState<number>(10)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -348,6 +352,9 @@ export function RegisterCompanyPublicPage() {
 
     setIsLoading(true)
 
+    const billingPreferenceNote = `Melhor data de pagamento da fatura (se continuar após o teste): Dia ${String(preferredBillingDay).padStart(2, '0')}`
+    const combinedNotes = [notes.trim(), billingPreferenceNote].filter(Boolean).join('\n')
+
     // 1. Cadastra a empresa e o usuário administrador com 30 dias de trial via endpoint público
     const res = await companyManagementService.publicRegisterCompanyWithAdmin({
       name: name.trim(),
@@ -357,7 +364,7 @@ export function RegisterCompanyPublicPage() {
       postalCode: postalCode.trim(),
       addressNumber: addressNumber.trim(),
       responsible: responsible.trim(),
-      notes: notes.trim(),
+      notes: combinedNotes,
       adminName: adminName.trim(),
       adminEmail: adminEmail.trim(),
       adminPhone: adminPhone.trim(),
@@ -390,6 +397,39 @@ export function RegisterCompanyPublicPage() {
       email: adminEmail.trim().toLowerCase(),
       password: adminPassword.trim(),
     })
+
+    if (loginRes.success) {
+      try {
+        const planTerm = await planTermsService.getTermForPlan(selectedPlan.id)
+        const trialEndDate = new Date()
+        trialEndDate.setDate(trialEndDate.getDate() + 30)
+        await contractService.saveContract({
+          companyId: res.data.organizationId,
+          contractNumber: contractService.generateContractNumber(),
+          clientName: name.trim(),
+          clientTradeName: name.trim(),
+          clientDocument: cnpj.trim() || 'Documento em cadastro',
+          clientResponsibleName: responsible.trim() || adminName.trim(),
+          clientResponsibleRole: 'Administrador / Responsável',
+          clientEmail: adminEmail.trim(),
+          clientPhone: adminPhone.trim() || null,
+          planName: selectedPlan.name,
+          monthlyAmount: selectedPlan.monthlyPrice || 0,
+          billingDay: preferredBillingDay,
+          paymentMethod: 'PIX / Boleto Bancário',
+          startDate: new Date().toISOString().split('T')[0],
+          durationMonths: 12,
+          hasTrialPeriod: true,
+          trialDurationMonths: 1,
+          trialEndsAt: trialEndDate.toISOString().split('T')[0],
+          isSigned: false,
+          status: 'active',
+          customTerms: planTerm.content,
+        })
+      } catch {
+        // non-blocking
+      }
+    }
 
     setIsLoading(false)
 
@@ -887,6 +927,34 @@ export function RegisterCompanyPublicPage() {
                 ) : (
                   <div className="text-xs text-rose-600">Nenhum plano selecionado.</div>
                 )}
+              </div>
+
+              {/* Melhor data de pagamento da fatura */}
+              <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-4 space-y-2">
+                <label
+                  htmlFor="preferredBillingDay"
+                  className="flex items-center gap-2 text-xs font-bold text-slate-800"
+                >
+                  <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
+                  <span>
+                    Caso queira continuar com nosso sistema, qual a melhor data de pagamento da fatura?
+                  </span>
+                </label>
+                <select
+                  id="preferredBillingDay"
+                  value={preferredBillingDay}
+                  onChange={(e) => setPreferredBillingDay(Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-2xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden"
+                >
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>
+                      Todo dia {String(day).padStart(2, '0')} de cada mês
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Você terá 30 dias gratuitos para testar sem compromisso. Esta data será utilizada apenas se decidir continuar após o período de teste.
+                </p>
               </div>
 
               {/* Botão de Finalização */}

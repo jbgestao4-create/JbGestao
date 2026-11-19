@@ -226,6 +226,83 @@ export function InventoryFormPage() {
   }))
   const [barcodeUnavailable, setBarcodeUnavailable] = useState(false)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [availableCategories, setAvailableCategories] = useState<string[]>([])
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+
+  useEffect(() => {
+    if (!organizationId) return
+    let active = true
+    const storageKey = `inventory_custom_categories_${organizationId}`
+
+    const loadCategories = async () => {
+      const catSet = new Set<string>()
+      try {
+        const raw = localStorage.getItem(storageKey)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) {
+            for (const c of parsed) {
+              if (typeof c === 'string' && c.trim()) catSet.add(c.trim())
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      const res = await inventoryService.list(organizationId)
+      if (active && res.success && res.data) {
+        for (const item of res.data) {
+          if (item.category?.trim()) catSet.add(item.category.trim())
+        }
+      }
+
+      if (active) {
+        setAvailableCategories(Array.from(catSet).sort((a, b) => a.localeCompare(b)))
+      }
+    }
+
+    void loadCategories()
+    return () => {
+      active = false
+    }
+  }, [organizationId])
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set(availableCategories)
+    if (form.category?.trim()) {
+      set.add(form.category.trim())
+    }
+    return Array.from(set)
+      .sort((a, b) => a.localeCompare(b))
+      .map((cat) => ({ value: cat, label: cat }))
+  }, [availableCategories, form.category])
+
+  const handleSaveNewCategory = () => {
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return
+    if (organizationId) {
+      const storageKey = `inventory_custom_categories_${organizationId}`
+      try {
+        const raw = localStorage.getItem(storageKey)
+        const existing: string[] = raw ? JSON.parse(raw) : []
+        if (!existing.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+          localStorage.setItem(storageKey, JSON.stringify([...existing, trimmed]))
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setAvailableCategories((prev) =>
+      prev.some((c) => c.toLowerCase() === trimmed.toLowerCase())
+        ? prev
+        : [...prev, trimmed].sort((a, b) => a.localeCompare(b)),
+    )
+    updateForm('category', trimmed)
+    setNewCategoryName('')
+    setIsAddCategoryOpen(false)
+  }
   const [currentQuantity, setCurrentQuantity] = useState('0')
   const [formError, setFormError] = useState('')
   const [supplierError, setSupplierError] = useState('')
@@ -866,14 +943,33 @@ export function InventoryFormPage() {
                 }}
                 options={STANDARD_UNITS.map(([value, label]) => ({ value, label }))}
               />
-              <Input
-                label="Categoria"
-                placeholder="Ex.: Material elétrico"
-                value={form.category}
-                onChange={(event) => {
-                  updateForm('category', event.target.value)
-                }}
-              />
+              <div className="flex items-end gap-2">
+                <div className="flex-1 min-w-0">
+                  <ListBox
+                    label="Categoria"
+                    placeholder="Selecione uma categoria..."
+                    searchPlaceholder="Buscar categoria..."
+                    searchable
+                    value={form.category}
+                    onChange={(value) => {
+                      updateForm('category', typeof value === 'string' ? value : (value[0] ?? ''))
+                    }}
+                    options={categoryOptions}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setNewCategoryName('')
+                    setIsAddCategoryOpen(true)
+                  }}
+                  title="Cadastrar nova categoria"
+                  className="h-10 px-3 shrink-0 border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
               <Input
                 label="Subcategoria"
                 placeholder="Ex.: Cabos"
@@ -1670,6 +1766,53 @@ export function InventoryFormPage() {
           setPreviewImage(null)
         }}
       />
+
+      {isAddCategoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                Cadastrar Nova Categoria
+              </h3>
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                Informe o nome da categoria para vinculá-la a este produto e disponibilizá-la nos filtros.
+              </p>
+            </div>
+            <Input
+              label="Nome da Categoria"
+              placeholder="Ex.: Material elétrico, Bebidas, Ferramentas..."
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleSaveNewCategory()
+                }
+              }}
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsAddCategoryOpen(false)
+                  setNewCategoryName('')
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={!newCategoryName.trim()}
+                onClick={handleSaveNewCategory}
+              >
+                Salvar Categoria
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -38,7 +38,6 @@ import { AdjustCompanyLicenseModal } from '../components/AdjustCompanyLicenseMod
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
 import { ManageAccessPlansModal } from '../components/ManageAccessPlansModal'
 import { ContractsManagementSection } from '../components/ContractsManagementSection'
-import { CompanyAcceptedContractModal } from '../components/CompanyAcceptedContractModal'
 import { formatLastAccess } from '@shared/services/screen-time.service'
 import {
   contractService,
@@ -53,7 +52,8 @@ export function CompanyManagementPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const activeTab = (searchParams.get('tab') as 'companies' | 'contracts' | 'invoices') || 'companies'
+  const activeTab: 'companies' | 'invoices' =
+    searchParams.get('tab') === 'invoices' ? 'invoices' : 'companies'
   const prefillCompanyId = searchParams.get('companyId') || undefined
 
   const [companies, setCompanies] = useState<ManagedCompany[]>([])
@@ -70,7 +70,6 @@ export function CompanyManagementPage() {
   const [selectedCompanyForEdit, setSelectedCompanyForEdit] = useState<ManagedCompany | null>(null)
   const [selectedCompanyForUsers, setSelectedCompanyForUsers] = useState<ManagedCompany | null>(null)
   const [selectedCompanyForLicense, setSelectedCompanyForLicense] = useState<ManagedCompany | null>(null)
-  const [selectedCompanyForContract, setSelectedCompanyForContract] = useState<ManagedCompany | null>(null)
   const [isManagePlansModalOpen, setIsManagePlansModalOpen] = useState(false)
 
   // Diálogo de confirmação para desativar/ativar
@@ -135,11 +134,6 @@ export function CompanyManagementPage() {
     }
     return ids
   }, [invoices])
-
-  const prefillCompanyForContract = useMemo(() => {
-    if (!prefillCompanyId || companies.length === 0) return null
-    return companies.find((c) => c.id === prefillCompanyId) || null
-  }, [prefillCompanyId, companies])
 
   const filteredCompanies = useMemo(() => {
     return companies.filter((c) => {
@@ -270,7 +264,7 @@ export function CompanyManagementPage() {
             Gerenciamento de Empresas Cadastradas & Licenças
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Gerencie as empresas cadastradas, gere contratos, acompanhe as mensalidades e controle os pagamentos financeiros.
+            Gerencie as empresas cadastradas, acompanhe as mensalidades e controle os pagamentos financeiros.
           </p>
         </div>
 
@@ -326,19 +320,6 @@ export function CompanyManagementPage() {
 
           <button
             type="button"
-            onClick={() => setSearchParams({ tab: 'contracts' })}
-            className={`py-3 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
-              activeTab === 'contracts'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-slate-400 dark:hover:text-slate-300'
-            }`}
-          >
-            <FileSignature className="h-4 w-4" />
-            Contratos de Licença
-          </button>
-
-          <button
-            type="button"
             onClick={() => setSearchParams({ tab: 'invoices' })}
             className={`py-3 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
               activeTab === 'invoices'
@@ -373,19 +354,6 @@ export function CompanyManagementPage() {
         </div>
       )}
 
-      {/* Conteúdo Aba Contratos */}
-      {activeTab === 'contracts' && (
-        <ContractsManagementSection
-          existingCompanies={companies}
-          initialTab="contracts"
-          hideSubTabs={true}
-          hideBanner={true}
-          initialCompanyId={prefillCompanyId}
-          prefillCompanyForNewContract={prefillCompanyForContract}
-          onSelectTab={(tab) => setSearchParams({ tab: tab === 'payments' ? 'invoices' : 'contracts' })}
-        />
-      )}
-
       {/* Conteúdo Aba Pagamentos Realizados & Financeiro */}
       {activeTab === 'invoices' && (
         <ContractsManagementSection
@@ -394,7 +362,7 @@ export function CompanyManagementPage() {
           hideSubTabs={true}
           hideBanner={true}
           initialCompanyId={prefillCompanyId}
-          onSelectTab={(tab) => setSearchParams({ tab: tab === 'payments' ? 'invoices' : 'contracts' })}
+          onSelectTab={() => setSearchParams({ tab: 'invoices' })}
         />
       )}
 
@@ -752,26 +720,6 @@ export function CompanyManagementPage() {
                       {/* Ações */}
                       <td className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedCompanyForContract(comp)
-                            }}
-                            className={`gap-1.5 text-xs font-semibold ${
-                              overdueCompanyIds.has(comp.id)
-                                ? 'text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 dark:text-rose-300 dark:border-rose-800 dark:bg-rose-950/40'
-                                : 'text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-900/60 dark:text-purple-400 dark:hover:bg-purple-950/50'
-                            }`}
-                            title={
-                              overdueCompanyIds.has(comp.id)
-                                ? 'Empresa com mensalidade vencida. Clique para consultar o contrato e termo aceito pelo cliente'
-                                : 'Consultar contrato vinculado ao termo de adesão aceito pelo cliente'
-                            }
-                          >
-                            <FileSignature className="h-3.5 w-3.5" />
-                            {overdueCompanyIds.has(comp.id) ? 'Contrato (Vencida)' : 'Contrato'}
-                          </Button>
 
                           {/* Botão de Ajustar Dias de Licença (Aumentar / Diminuir) - À frente do botão Usuários */}
                           <Button
@@ -1051,18 +999,6 @@ export function CompanyManagementPage() {
             </div>
           </div>
         </div>
-      )}
-      {/* Modal de Contrato Vinculado ao Termo Aceito */}
-      {selectedCompanyForContract && (
-        <CompanyAcceptedContractModal
-          company={selectedCompanyForContract}
-          isOpen={Boolean(selectedCompanyForContract)}
-          onClose={() => setSelectedCompanyForContract(null)}
-          onOpenInvoices={(comp) => {
-            setSelectedCompanyForContract(null)
-            setSearchParams({ tab: 'invoices', companyId: comp.id })
-          }}
-        />
       )}
     </div>
   )

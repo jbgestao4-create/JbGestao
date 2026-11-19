@@ -40,6 +40,7 @@ import { cashSessionService } from '../services/cash-session.service';
 import type { CashBill } from '../services/cash-bills.service';
 import { cashBillsService } from '../services/cash-bills.service';
 import { salesService, type SaleListItem } from '@modules/sales/services/sales.service';
+import { inventoryService } from '@modules/inventory/services/inventory.service';
 
 
 import { CashClosureModal } from '../components/CashClosureModal';
@@ -75,6 +76,9 @@ export function CashManagementPage() {
   const [allOrgMovements, setAllOrgMovements] = useState<CashSessionMovement[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [activeExtratoTab, setActiveExtratoTab] = useState<'movements' | 'sales'>('movements');
+  const [salesCategoryFilter, setSalesCategoryFilter] = useState<string>('all');
+  const [productCategories, setProductCategories] = useState<string[]>([]);
+  const [saleCategoriesMap, setSaleCategoriesMap] = useState<Record<string, string[]>>({});
   const [historySessions, setHistorySessions] = useState<CashSession[]>([]);
   const [, setIsLoadingSession] = useState<boolean>(true);
 
@@ -184,6 +188,71 @@ export function CashManagementPage() {
       setIsLoadingSession(false);
     }
   }, [currentOrganization]);
+
+  // Carrega categorias de produtos e mapeia quais categorias foram vendidas em cada venda da sessão
+  useEffect(() => {
+    if (!currentOrganization?.id) return;
+    let active = true;
+
+    const loadSaleCategories = async () => {
+      try {
+        const invRes = await inventoryService.list(currentOrganization.id);
+        const itemCategoryMap = new Map<string, string>();
+        const catSet = new Set<string>();
+
+        if (invRes.success && invRes.data) {
+          for (const item of invRes.data) {
+            const cat = item.category?.trim();
+            if (cat) {
+              itemCategoryMap.set(item.id, cat);
+              catSet.add(cat);
+            }
+          }
+        }
+
+        const nextSaleMap: Record<string, string[]> = {};
+        if (sessionSales.length > 0) {
+          const saleIds = sessionSales.map((s) => s.id);
+          const { data: items } = await supabase
+            .from('quote_items')
+            .select('quote_id, inventory_item_id')
+            .in('quote_id', saleIds);
+
+          if (Array.isArray(items)) {
+            for (const row of items) {
+              const qid = (row as any).quote_id as string;
+              const invId = (row as any).inventory_item_id as string | null;
+              if (!qid || !invId) continue;
+              const cat = itemCategoryMap.get(invId);
+              if (cat) {
+                if (!nextSaleMap[qid]) nextSaleMap[qid] = [];
+                if (!nextSaleMap[qid].includes(cat)) {
+                  nextSaleMap[qid].push(cat);
+                }
+              }
+            }
+          }
+        }
+
+        if (active) {
+          setProductCategories(Array.from(catSet).sort((a, b) => a.localeCompare(b)));
+          setSaleCategoriesMap(nextSaleMap);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    void loadSaleCategories();
+    return () => {
+      active = false;
+    };
+  }, [currentOrganization?.id, sessionSales]);
+
+  const filteredSessionSales = useMemo(() => {
+    if (salesCategoryFilter === 'all') return sessionSales;
+    return sessionSales.filter((s) => (saleCategoriesMap[s.id] || []).includes(salesCategoryFilter));
+  }, [sessionSales, salesCategoryFilter, saleCategoriesMap]);
 
   // Carrega histórico de caixas (apenas Caixa Geral)
   const loadHistory = useCallback(async () => {
@@ -1233,16 +1302,52 @@ export function CashManagementPage() {
                   {/* ABA: Tabela Detalhada de Vendas */}
                   {activeExtratoTab === 'sales' && (
                     <>
-                      {sessionSales.length === 0 ? (
+                      <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 p-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                            Filtrar por Categoria do Produto:
+                          </label>
+                          <select
+                            value={salesCategoryFilter}
+                            onChange={(e) => setSalesCategoryFilter(e.target.value)}
+                            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+                          >
+                            <option value="all">Todas as Categorias ({sessionSales.length})</option>
+                            {productCategories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                          {filteredSessionSales.length}{' '}
+                          {filteredSessionSales.length === 1 ? 'venda' : 'vendas'} • Total:{' '}
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(
+                              filteredSessionSales.reduce(
+                                (acc, s) => acc + (parseFloat(s.total) || 0),
+                                0,
+                              ),
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {filteredSessionSales.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-400">
                           <ShoppingCart className="h-10 w-10 stroke-1" />
-                          <p className="mt-2 text-sm font-medium">Nenhuma venda registrada na sessão aberta.</p>
+                          <p className="mt-2 text-sm font-medium">
+                            {salesCategoryFilter === 'all'
+                              ? 'Nenhuma venda registrada na sessão aberta.'
+                              : `Nenhuma venda encontrada para a categoria "${salesCategoryFilter}".`}
+                          </p>
                           <p className="text-xs">
                             Vendas concluídas na &quot;Nova Venda&quot; e no &quot;PDV&quot; serão listadas aqui automaticamente.
                           </p>
                         </div>
                       ) : (
-                        <div className="mt-4 overflow-x-auto">
+                        <div className="mt-3 overflow-x-auto">
                           <table className="w-full text-left text-xs">
                             <thead className="bg-zinc-50 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 font-semibold">
                               <tr>
@@ -1256,7 +1361,7 @@ export function CashManagementPage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                              {sessionSales.map((sale) => {
+                              {filteredSessionSales.map((sale) => {
                                 const isNovaVenda = !sale.isPdv;
                                 const methodLabels: Record<string, string> = {
                                   money: 'Dinheiro',

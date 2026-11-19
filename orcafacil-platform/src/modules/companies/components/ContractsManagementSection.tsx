@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   DollarSign,
   FileSignature,
   FileText,
+  KeyRound,
   Pencil,
   Plus,
   Printer,
@@ -16,6 +17,7 @@ import {
   Receipt,
   AlertTriangle,
   RotateCcw,
+  X,
 } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { formatCurrency } from '@shared/utils/monetary'
@@ -66,6 +68,9 @@ export function ContractsManagementSection({
 
   // Filtros de Faturas / Pagamentos
   const [selectedClientFilter, setSelectedClientFilter] = useState<string>('')
+  const [companyListSearch, setCompanyListSearch] = useState('')
+  const [isCompanySearchOpen, setIsCompanySearchOpen] = useState(false)
+  const companySearchContainerRef = useRef<HTMLDivElement | null>(null)
   const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('')
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<'all' | 'paid' | 'unpaid' | 'overdue'>('all')
 
@@ -116,6 +121,20 @@ export function ContractsManagementSection({
     }
   }, [initialTab])
 
+  // Fecha a lista de busca de empresas ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        companySearchContainerRef.current &&
+        !companySearchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsCompanySearchOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   // Se houver uma empresa pré-selecionada via URL para visualizar faturas ou contrato
   useEffect(() => {
     if (initialCompanyId && existingCompanies.length > 0) {
@@ -134,28 +153,6 @@ export function ContractsManagementSection({
       setIsFormModalOpen(true)
     }
   }, [prefillCompanyForNewContract])
-
-  // Lista única de clientes para o seletor da aba de faturas
-  const clientOptions = useMemo(() => {
-    const map = new Map<string, { total: number; paid: number; unpaid: number }>()
-    for (const inv of invoices) {
-      const name = inv.clientName || 'Cliente'
-      const stat = map.get(name) || { total: 0, paid: 0, unpaid: 0 }
-      stat.total++
-      if (getInvoiceEffectiveStatus(inv) === 'paid') {
-        stat.paid++
-      } else {
-        stat.unpaid++
-      }
-      map.set(name, stat)
-    }
-    for (const c of contracts) {
-      if (!map.has(c.clientName)) {
-        map.set(c.clientName, { total: 0, paid: 0, unpaid: 0 })
-      }
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-  }, [invoices, contracts])
 
   // Dados do cliente selecionado no filtro de faturas
   const selectedClientContract = useMemo(() => {
@@ -231,10 +228,23 @@ export function ContractsManagementSection({
     }
   }, [invoices])
 
+  const selectedCompanyObj = useMemo(() => {
+    if (!selectedClientFilter) return null
+    return (
+      existingCompanies.find(
+        (c) => c.name.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase(),
+      ) || null
+    )
+  }, [existingCompanies, selectedClientFilter])
+
   // Contagens contextuais para os botões de filtro da aba de faturas (baseadas no cliente selecionado se houver)
   const currentTabCounts = useMemo(() => {
     const list = selectedClientFilter
-      ? invoices.filter((i) => i.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase())
+      ? invoices.filter(
+          (i) =>
+            (selectedCompanyObj && i.companyId === selectedCompanyObj.id) ||
+            i.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase(),
+        )
       : invoices
 
     let paid = 0
@@ -290,7 +300,8 @@ export function ContractsManagementSection({
     return invoices.filter((inv) => {
       const matchClient = !selectedClientFilter
         ? true
-        : inv.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase()
+        : (selectedCompanyObj && inv.companyId === selectedCompanyObj.id) ||
+          inv.clientName.trim().toLowerCase() === selectedClientFilter.trim().toLowerCase()
 
       const matchSearch =
         inv.clientName.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
@@ -953,59 +964,163 @@ export function ContractsManagementSection({
       {/* CONTEÚDO DA ABA 2: PAGAMENTOS & FATURAS (CONTROLE FINANCEIRO) */}
       {activeTab === 'payments' && (
         <div className="space-y-6">
-          {/* Seletor de Cliente para Visualização de Faturas */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-            <div className="flex-1">
-              <label className="block text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400 mb-1.5 flex items-center gap-1.5">
-                <Receipt className="h-4 w-4 text-emerald-600" />
-                <span>Selecionar Cliente para Visualizar Faturas (Pagas e Não Pagas)</span>
-              </label>
-              <select
-                value={selectedClientFilter}
-                onChange={(e) => {
-                  setSelectedClientFilter(e.target.value)
-                  setInvoiceStatusFilter('all')
-                }}
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50/80 dark:bg-slate-800 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:border-emerald-500 focus:outline-none"
-              >
-                <option value="">🏢 Todos os Clientes (Visão Geral da Carteira - {invoices.length} faturas)</option>
-                {clientOptions.map(([clientName, stat]) => (
-                  <option key={clientName} value={clientName}>
-                    {clientName} — {stat.total} {stat.total === 1 ? 'fatura' : 'faturas'} ({stat.paid} pagas / {stat.unpaid} não pagas)
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Busca de Empresas Cadastradas para Listar Boletos */}
+          <div
+            ref={companySearchContainerRef}
+            className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs space-y-3"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Receipt className="h-4 w-4 text-emerald-600" />
+                  <span>Buscar Empresa Cadastrada para Listar Boletos / Faturas</span>
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                  Clique no campo abaixo para ver a lista de empresas cadastradas ou digite para filtrar por nome, CNPJ, slug ou e-mail.
+                </p>
+              </div>
 
-            {selectedClientFilter ? (
-              <div className="flex items-center gap-2 self-start md:self-end">
-                {selectedClientContract && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setEditingContract(selectedClientContract)
-                      setIsFormModalOpen(true)
-                    }}
-                    className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                    title="Emitir novas faturas / carnê para este cliente"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Gerar Faturas / Carnê
-                  </Button>
-                )}
+              {selectedClientFilter && (
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
                     setSelectedClientFilter('')
+                    setCompanyListSearch('')
+                    setIsCompanySearchOpen(false)
                     setInvoiceStatusFilter('all')
                   }}
-                  className="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-slate-300"
+                  className="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-slate-300 shrink-0"
                 >
-                  Ver Todos os Clientes
+                  Ver Todas ({invoices.length})
                 </Button>
+              )}
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={companyListSearch}
+                onFocus={() => setIsCompanySearchOpen(true)}
+                onClick={() => setIsCompanySearchOpen(true)}
+                onChange={(e) => {
+                  setCompanyListSearch(e.target.value)
+                  setIsCompanySearchOpen(true)
+                }}
+                placeholder="Clique para listar ou digite nome, CNPJ, slug ou e-mail da empresa..."
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50/80 dark:bg-slate-800 pl-9 pr-9 py-2.5 text-sm text-gray-900 dark:text-white focus:border-emerald-500 focus:outline-none"
+              />
+              {companyListSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompanyListSearch('')
+                    setIsCompanySearchOpen(true)
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-slate-200"
+                  title="Limpar busca"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {!isCompanySearchOpen && companyListSearch.trim().length === 0 ? (
+              <div className="text-xs text-gray-500 dark:text-slate-400 py-1">
+                {selectedClientFilter
+                  ? `Exibindo boletos da empresa selecionada: ${selectedClientFilter}. Clique no campo acima para escolher outra empresa.`
+                  : 'Clique no campo acima para abrir a lista de empresas cadastradas ou digite para filtrar.'}
               </div>
-            ) : null}
+            ) : (() => {
+              const q = companyListSearch.trim().toLowerCase()
+              const matches = existingCompanies.filter((comp) => {
+                if (!q) return true
+                return (
+                  comp.name.toLowerCase().includes(q) ||
+                  comp.slug.toLowerCase().includes(q) ||
+                  (comp.cnpj && comp.cnpj.toLowerCase().includes(q)) ||
+                  (comp.adminEmail && comp.adminEmail.toLowerCase().includes(q)) ||
+                  (comp.responsible && comp.responsible.toLowerCase().includes(q))
+                )
+              })
+
+              if (matches.length === 0) {
+                return (
+                  <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl px-3 py-2.5">
+                    Nenhuma empresa cadastrada encontrada para &ldquo;{companyListSearch.trim()}&rdquo;.
+                  </div>
+                )
+              }
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto pr-1">
+                  {matches.map((comp) => {
+                    const compInvoices = invoices.filter(
+                      (inv) =>
+                        inv.companyId === comp.id ||
+                        inv.clientName.trim().toLowerCase() === comp.name.trim().toLowerCase(),
+                    )
+                    const paidCount = compInvoices.filter(
+                      (inv) => getInvoiceEffectiveStatus(inv) === 'paid',
+                    ).length
+                    const overdueCount = compInvoices.filter(
+                      (inv) => getInvoiceEffectiveStatus(inv) === 'overdue',
+                    ).length
+                    const pendingCount = compInvoices.filter(
+                      (inv) => getInvoiceEffectiveStatus(inv) === 'pending',
+                    ).length
+                    const isSelected =
+                      selectedClientFilter.trim().toLowerCase() === comp.name.trim().toLowerCase()
+
+                    return (
+                      <button
+                        key={comp.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedClientFilter(isSelected ? '' : comp.name)
+                          setIsCompanySearchOpen(false)
+                          setInvoiceStatusFilter('all')
+                        }}
+                        className={`text-left rounded-xl border p-3 transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? 'border-emerald-500 bg-emerald-50/90 ring-2 ring-emerald-500/20 dark:border-emerald-500 dark:bg-emerald-950/40'
+                            : 'border-gray-200 bg-gray-50/60 hover:border-emerald-300 hover:bg-white dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm text-gray-900 dark:text-white truncate">
+                            {comp.name}
+                          </div>
+                          <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
+                            {comp.cnpj || comp.slug}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="rounded-full bg-slate-200/80 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                            {compInvoices.length} {compInvoices.length === 1 ? 'boleto' : 'boletos'}
+                          </span>
+                          {overdueCount > 0 ? (
+                            <span className="rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 px-2 py-0.5 text-[10px] font-bold">
+                              {overdueCount} vencido(s)
+                            </span>
+                          ) : pendingCount > 0 ? (
+                            <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold">
+                              {pendingCount} em aberto
+                            </span>
+                          ) : paidCount > 0 ? (
+                            <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
+                              {paidCount} pago(s)
+                            </span>
+                          ) : null}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Banner em Destaque do Cliente Selecionado */}
@@ -1348,15 +1463,27 @@ export function ContractsManagementSection({
                                   Desfazer pagamento
                                 </Button>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  onClick={() => void handleToggleInvoicePaid(inv)}
-                                  className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                                  title="Registrar recebimento desta mensalidade manualmente"
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  Dar Baixa
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setSelectedMercadoPagoInvoice(inv)}
+                                    className="gap-1 text-xs font-bold text-blue-700 border-blue-200 hover:bg-blue-50 dark:text-blue-300 dark:border-blue-900/50 dark:hover:bg-blue-950/40"
+                                    title="Gerar chave PIX (Copia e Cola / QR Code) válida para pagamento desta fatura"
+                                  >
+                                    <KeyRound className="h-3.5 w-3.5" />
+                                    {inv.pixKey ? 'Nova Chave' : 'Gerar Chave'}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => void handleToggleInvoicePaid(inv)}
+                                    className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                                    title="Registrar recebimento desta mensalidade manualmente"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Dar Baixa
+                                  </Button>
+                                </>
                               )}
 
                               <Button

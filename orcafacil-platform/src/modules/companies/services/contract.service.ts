@@ -653,17 +653,22 @@ export const contractService = {
       return { success: true, data: null }
     }
 
-    const startDate = contract.startDate ? new Date(`${contract.startDate}T00:00:00`) : new Date()
-    const yyyy = startDate.getFullYear()
-    const mm = String(startDate.getMonth() + 1).padStart(2, '0')
+    const isTrial = Boolean(contract.hasTrialPeriod)
+    const trialEndStr = isTrial && contract.trialEndsAt ? contract.trialEndsAt.slice(0, 10) : null
+
+    const baseDate = trialEndStr
+      ? new Date(`${trialEndStr}T00:00:00`)
+      : contract.startDate
+        ? new Date(`${contract.startDate}T00:00:00`)
+        : new Date()
+    const yyyy = baseDate.getFullYear()
+    const mm = String(baseDate.getMonth() + 1).padStart(2, '0')
     const refMonth = `${mm}/${yyyy}`
 
     const billingDay = Math.min(contract.billingDay || 10, 28)
     const dayStr = String(billingDay).padStart(2, '0')
-    const dueDate = `${yyyy}-${mm}-${dayStr}`
+    const dueDate = trialEndStr || `${yyyy}-${mm}-${dayStr}`
     const invNum = this.generateInvoiceNumber(contract.contractNumber, 1)
-
-    const isTrial = Boolean(contract.hasTrialPeriod)
 
     const saveRes = await this.saveInvoice({
       contractId: contract.id,
@@ -687,8 +692,8 @@ export const contractService = {
 
   /**
    * Rotina Automática:
-   * Identifica faturas que estejam a 3 dias ou menos do vencimento (ou vencidas)
-   * e gera automaticamente a nova fatura do próximo ciclo no mesmo valor da anterior.
+   * Identifica faturas/períodos de teste que estejam a 5 dias ou menos do vencimento/término
+   * e gera automaticamente a nova fatura do próximo ciclo no mesmo valor do contrato.
    */
   async autoGenerateInvoicesDueSoon(): Promise<ServiceResult<ContractInvoice[]>> {
     const generated: ContractInvoice[] = []
@@ -716,13 +721,18 @@ export const contractService = {
       const sorted = [...contractInvoices].sort((a, b) => b.dueDate.localeCompare(a.dueDate))
       const latestInvoice = sorted[0]
 
-      // Condição: 3 dias ou menos antes do vencimento
-      const diffDays = getDiffDaysFromToday(latestInvoice.dueDate)
+      const referenceDueDate =
+        latestInvoice.amount === 0 && contract.hasTrialPeriod && contract.trialEndsAt
+          ? contract.trialEndsAt.slice(0, 10)
+          : latestInvoice.dueDate
 
-      if (diffDays <= 3) {
+      // Condição: 5 dias ou menos antes do vencimento (ou término do período de teste)
+      const diffDays = getDiffDaysFromToday(referenceDueDate)
+
+      if (diffDays <= 5) {
         const { nextRefMonth, nextDueDate } = getNextCycleInfo(
           latestInvoice.referenceMonth,
-          latestInvoice.dueDate,
+          referenceDueDate,
           contract.billingDay,
         )
 

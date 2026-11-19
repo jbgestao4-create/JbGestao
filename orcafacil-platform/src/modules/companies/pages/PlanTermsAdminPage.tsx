@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -28,10 +28,38 @@ import {
   SYSTEM_DEFAULT_ACCESS_PLANS,
 } from '@modules/companies/services/access-plan.service'
 import { formatCurrency } from '@shared/utils/monetary'
+import { ContractAcceptanceAuditAdminPage } from './ContractAcceptanceAuditAdminPage'
 
-export function PlanTermsAdminPage() {
+export type TermsModuleTab = 'terms' | 'acceptance-audit'
+
+export interface PlanTermsAdminPageProps {
+  initialTab?: TermsModuleTab
+}
+
+export function PlanTermsAdminPage({ initialTab = 'terms' }: PlanTermsAdminPageProps = {}) {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const tabParam = searchParams.get('tab')
+  const resolvedInitialTab: TermsModuleTab =
+    tabParam === 'acceptance-audit' || tabParam === 'terms' ? tabParam : initialTab
+  const [activeTab, setActiveTab] = useState<TermsModuleTab>(resolvedInitialTab)
+
+  useEffect(() => {
+    if (tabParam === 'acceptance-audit' || tabParam === 'terms') {
+      setActiveTab(tabParam)
+    } else {
+      setActiveTab(initialTab)
+    }
+  }, [tabParam, initialTab])
+
+  const handleTabChange = (tab: TermsModuleTab) => {
+    setActiveTab(tab)
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', tab)
+    setSearchParams(next, { replace: true })
+  }
 
   const [availablePlans, setAvailablePlans] = useState<AccessPlan[]>(SYSTEM_DEFAULT_ACCESS_PLANS)
   const [termsByPlan, setTermsByPlan] = useState<Record<string, PlanTermConfig>>({})
@@ -224,48 +252,81 @@ export function PlanTermsAdminPage() {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Scale className="w-4 h-4" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <Scale className="w-4 h-4" />
+                  </div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                    Termos de Adesão & Registros de Aceites
+                  </h1>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                    Superadmin
+                  </span>
                 </div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                  Termos de Adesão por Plano
-                </h1>
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                  Superadmin
-                </span>
+                <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-3xl">
+                  Gerencie as cláusulas contratuais por plano e consulte a trilha jurídica de aceites e evidências digitais (SHA-256).
+                </p>
               </div>
-              <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-3xl">
-                Ajuste e personalize as cláusulas e condições de licenciamento atribuídas a cada plano. Quando uma empresa
-                realizar a assinatura ou solicitar a alteração de plano, o sistema exibirá este termo para aceite obrigatório,
-                e vinculará o documento ao botão de Contrato em <strong>Empresas Cadastradas</strong>.
-              </p>
             </div>
+
+            {activeTab === 'terms' && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsPreviewOpen(true)}
+                  className="gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+                >
+                  <Eye className="w-4 h-4 text-blue-600" />
+                  Pré-visualizar Aceite
+                </Button>
+                <Button
+                  type="button"
+                  disabled={isSaving || isLoading}
+                  onClick={handleSave}
+                  className="gap-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                >
+                  <Save className="w-4 h-4" />
+                  {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                </Button>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
+          {/* Abas do Módulo */}
+          <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
+            <button
               type="button"
-              variant="outline"
-              onClick={() => setIsPreviewOpen(true)}
-              className="gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+              onClick={() => handleTabChange('terms')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                activeTab === 'terms'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800'
+              }`}
             >
-              <Eye className="w-4 h-4 text-blue-600" />
-              Pré-visualizar Aceite
-            </Button>
-            <Button
+              <Scale className="w-4 h-4" />
+              Termos de Adesão
+            </button>
+            <button
               type="button"
-              disabled={isSaving || isLoading}
-              onClick={handleSave}
-              className="gap-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+              onClick={() => handleTabChange('acceptance-audit')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                activeTab === 'acceptance-audit'
+                  ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800'
+              }`}
             >
-              <Save className="w-4 h-4" />
-              {isSaving ? 'Salvando...' : 'Salvar Alterações'}
-            </Button>
+              <FileSignature className="w-4 h-4" />
+              Registros de Aceites
+            </button>
           </div>
         </div>
-      </div>
+
+      {activeTab === 'acceptance-audit' ? (
+        <ContractAcceptanceAuditAdminPage embedded />
+      ) : (
+        <>
 
       {/* Alerta de Feedback */}
       {feedbackMsg && (
@@ -610,6 +671,8 @@ export function PlanTermsAdminPage() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )

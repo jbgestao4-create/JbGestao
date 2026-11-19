@@ -10,7 +10,7 @@ import { supplierService, type Supplier } from '@modules/suppliers/services/supp
 import { organizationService } from '@modules/organizations/services/organization.service'
 import { serviceService, type ServiceListItem } from '@modules/services/services/service.service'
 import { supabase } from '@app/config/supabase'
-import type { CashSession } from '@modules/cash/domain/cash-session'
+import type { CashSession, CashSessionMovement } from '@modules/cash/domain/cash-session'
 import type { CashEntry } from '@modules/cash/domain/cash-management'
 import type { InventoryItem, OrganizationMemberDetail, UUID } from '@shared/types/common'
 
@@ -109,6 +109,7 @@ export interface ReportsDataset {
   bills: CashBill[]
   cashEntries: CashEntry[]
   cashSessions: CashSession[]
+  cashMovements: CashSessionMovement[]
   quotes: QuoteListItem[]
   serviceOrders: ServiceOrderListItem[]
   customers: Customer[]
@@ -272,6 +273,7 @@ export const reportsService = {
       billsRes,
       entriesRes,
       sessionsRes,
+      movementsRes,
       quotesRes,
       osRes,
       customersRes,
@@ -285,6 +287,7 @@ export const reportsService = {
       cashBillsService.listBills(organizationId),
       cashService.listEntries(organizationId),
       cashSessionService.listHistory(organizationId),
+      cashSessionService.listAllMovements(organizationId).catch(() => ({ success: false, data: [] as CashSessionMovement[] })),
       quoteService.listQuotes(organizationId),
       serviceOrderService.list(organizationId),
       customerService.list(organizationId),
@@ -310,6 +313,7 @@ export const reportsService = {
       bills: billsRes.success ? billsRes.data : [],
       cashEntries: entriesRes.success ? entriesRes.data : [],
       cashSessions: sessionsRes.success && sessionsRes.data ? sessionsRes.data : [],
+      cashMovements: movementsRes && 'success' in movementsRes && movementsRes.success && movementsRes.data ? movementsRes.data : [],
       quotes: quotesRes.success ? quotesRes.data : [],
       serviceOrders: osRes.success ? osRes.data : [],
       customers: customersRes.success ? customersRes.data : [],

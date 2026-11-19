@@ -31,7 +31,13 @@ import {
   type IntegrityCheckResult,
 } from '@shared/services/contract-acceptance-audit.service'
 
-export function ContractAcceptanceAuditAdminPage() {
+export interface ContractAcceptanceAuditAdminPageProps {
+  embedded?: boolean
+}
+
+export function ContractAcceptanceAuditAdminPage({
+  embedded = false,
+}: ContractAcceptanceAuditAdminPageProps = {}) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -222,52 +228,73 @@ export function ContractAcceptanceAuditAdminPage() {
   }
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className={embedded ? 'space-y-6' : 'space-y-6 pb-16'}>
       {/* HEADER DA PÁGINA */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <button
-              type="button"
-              onClick={() => void navigate('/admin/developer-settings')}
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition shrink-0"
-              title="Voltar para Desenvolvedor"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-4 h-4" />
+      {!embedded ? (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <button
+                type="button"
+                onClick={() => void navigate('/admin/developer-settings')}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition shrink-0"
+                title="Voltar para Desenvolvedor"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                    Registros de Aceites e Evidências Digitais
+                  </h1>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                    Trilha Jurídica Imutável
+                  </span>
                 </div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                  Registros de Aceites e Evidências Digitais
-                </h1>
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
-                  Trilha Jurídica Imutável
-                </span>
+                <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-3xl">
+                  Auditoria completa de manifestação de vontade, hashes criptográficos SHA-256, telemetria de conexão,
+                  não-repúdio e emissão de Dossiês Periciais conforme a MP nº 2.200-2/2001, Lei nº 14.063/2020 e LGPD.
+                </p>
               </div>
-              <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-3xl">
-                Auditoria completa de manifestação de vontade, hashes criptográficos SHA-256, telemetria de conexão,
-                não-repúdio e emissão de Dossiês Periciais conforme a MP nº 2.200-2/2001, Lei nº 14.063/2020 e LGPD.
-              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={loadRecords}
+                disabled={isLoading}
+                className="gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                Atualizar Registros
+              </Button>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={loadRecords}
-              disabled={isLoading}
-              className="gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              Atualizar Registros
-            </Button>
-          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl px-5 py-3.5 shadow-xs">
+          <div className="flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-300">
+            <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+            <span>
+              <strong>Trilha Jurídica Imutável:</strong> hashes SHA-256, telemetria de conexão e Dossiês Periciais (MP nº 2.200-2/2001 e LGPD).
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={loadRecords}
+            disabled={isLoading}
+            className="gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Atualizar Registros
+          </Button>
+        </div>
+      )}
 
       {/* CARDS DE MÉTRICAS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

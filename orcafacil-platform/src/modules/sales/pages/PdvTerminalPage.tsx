@@ -1401,11 +1401,19 @@ export function PdvTerminalPage() {
           className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0 flex items-center justify-center"
           aria-hidden="true"
         >
-          {/* Marca d'água grande cobrindo o fundo de todo o PDV */}
+          {/* Modo claro: plano de fundo personalizado do PDV (ou logo) */}
           <div
-            className="absolute inset-0 bg-center bg-no-repeat opacity-[0.12] dark:opacity-[0.09] transition-opacity duration-500 pointer-events-none"
+            className="absolute inset-0 bg-center bg-no-repeat opacity-[0.12] dark:hidden transition-opacity duration-500 pointer-events-none"
             style={{
               backgroundImage: `url("${pdvBackgroundUrl}")`,
+              backgroundSize: 'min(920px, 75vw)',
+            }}
+          />
+          {/* Modo escuro: remove o plano de fundo personalizado e mantém apenas a logo */}
+          <div
+            className="hidden dark:block absolute inset-0 bg-center bg-no-repeat opacity-[0.09] transition-opacity duration-500 pointer-events-none"
+            style={{
+              backgroundImage: `url("${currentOrganization?.logoUrl || '/controlesoft-logo.png'}")`,
               backgroundSize: 'min(920px, 75vw)',
             }}
           />

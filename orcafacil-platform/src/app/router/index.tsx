@@ -54,7 +54,7 @@ import {
   SiteAccessAnalyticsPage,
   PixPaymentCheckoutPage,
   PlanTermsAdminPage,
-  ContractAcceptanceAuditAdminPage,
+  AuditLogsPage,
 } from './lazy-pages'
 
 function RootRoute() {
@@ -174,7 +174,17 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <RequireOwner>
-          <ContractAcceptanceAuditAdminPage />
+          <PlanTermsAdminPage initialTab="acceptance-audit" />
+        </RequireOwner>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/audit-logs',
+    element: (
+      <ProtectedRoute>
+        <RequireOwner>
+          <AuditLogsPage />
         </RequireOwner>
       </ProtectedRoute>
     ),

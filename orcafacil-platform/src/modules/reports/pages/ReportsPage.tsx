@@ -33,14 +33,16 @@ import {
   Truck,
   UserCheck,
   Users,
+  Wallet,
   Wrench,
 } from 'lucide-react'
 import { ReportPrintHeader } from '../components/ReportPrintHeader'
 import { ReportPrintFooter } from '../components/ReportPrintFooter'
 import { ReportActionBar } from '../components/ReportActionBar'
+import { CashManagementReportView } from '../components/CashManagementReportView'
 
 // Tipos principais de relatórios conforme solicitado pelo usuário
-export type ReportView = 'home' | 'registrations' | 'financial' | 'inventory_services'
+export type ReportView = 'home' | 'registrations' | 'financial' | 'inventory_services' | 'cash_management'
 
 // Abas de cada tipo de relatório
 export type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
@@ -84,7 +86,9 @@ export function ReportsPage() {
             rawView === 'estoque' ||
             rawView === 'servicos'
           ? 'inventory_services'
-          : 'home'
+          : rawView === 'cash_management' || rawView === 'caixa'
+            ? 'cash_management'
+            : 'home'
 
   // ============================================================================
   // 1. RELATÓRIOS CADASTRAIS (Usuários, Funcionários, Fornecedores, Clientes)
@@ -166,6 +170,7 @@ export function ReportsPage() {
     bills: [],
     cashEntries: [],
     cashSessions: [],
+    cashMovements: [],
     quotes: [],
     serviceOrders: [],
     customers: [],
@@ -181,6 +186,7 @@ export function ReportsPage() {
   const isWideReport = useMemo(() => {
     if (currentView === 'financial') return true
     if (currentView === 'inventory_services') return true
+    if (currentView === 'cash_management') return true
     if (currentView === 'registrations') {
       return registrationsTab === 'customers' || registrationsTab === 'suppliers'
     }
@@ -1090,7 +1096,7 @@ export function ReportsPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
             {/* 1. MÓDULO: RELATÓRIOS CADASTRAIS */}
             <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
               <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
@@ -1210,6 +1216,48 @@ export function ReportsPage() {
                     <span className="inline-flex items-center gap-2">
                       <Boxes className="h-4 w-4" />
                       Abrir Estoque e Serviços
+                    </span>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 4. MÓDULO: GERENCIAMENTO DE CAIXA */}
+            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
+              <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/60 p-3 text-emerald-600 dark:text-emerald-400">
+                      <Wallet className="h-6 w-6" />
+                    </div>
+                    <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                      MÓDULO 4
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
+                    GERENCIAMENTO DE CAIXA
+                  </h3>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
+                    Relatórios por dia, semana, mês e por funcionário, além do Livro do Caixa detalhado e completo com entradas, saídas e saldo acumulado.
+                  </p>
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
+                    <span>Sessões: <b className="text-slate-900 dark:text-white">{dataset.cashSessions.length}</b></span>
+                    <span>Mov. Caixa: <b className="text-slate-900 dark:text-white">{dataset.cashMovements.length}</b></span>
+                    <span>Lançamentos: <b className="text-slate-900 dark:text-white">{dataset.cashEntries.length}</b></span>
+                    <span>Vendas PDV: <b className="text-slate-900 dark:text-white">{dataset.sales.length}</b></span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    onClick={() => navigateToView('cash_management')}
+                    className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Wallet className="h-4 w-4" />
+                      Abrir Relatório de Caixa
                     </span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -2594,6 +2642,25 @@ export function ReportsPage() {
           emissionTime={emissionTime}
         />
       </div>
+    )
+  }
+
+  // ============================================================================
+  // VIEW: 4. RELATÓRIOS DE GERENCIAMENTO DE CAIXA
+  // ============================================================================
+  if (currentView === 'cash_management') {
+    return (
+      <CashManagementReportView
+        dataset={dataset}
+        organizationName={currentOrganization?.name}
+        organizationLogoUrl={currentOrganization?.logoUrl}
+        isRefreshing={isLoading}
+        onRefresh={() => void loadData()}
+        onBack={() => navigateToView('home')}
+        printOrientationMode={printOrientationMode}
+        effectiveOrientation={effectiveOrientation}
+        onPrintOrientationChange={setPrintOrientationMode}
+      />
     )
   }
 

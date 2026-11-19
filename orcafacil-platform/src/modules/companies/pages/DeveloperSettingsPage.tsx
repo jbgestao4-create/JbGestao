@@ -12,7 +12,6 @@ import {
   Settings,
   Activity,
   Scale,
-  FileSignature,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -234,13 +233,13 @@ export function DeveloperSettingsPage() {
       accentColor: 'blue',
     },
     {
-      id: 'plan-terms',
-      title: 'Termos de Adesão por Plano',
-      badge: 'Personalizável por Plano',
+      id: 'terms-and-acceptance',
+      title: 'Termos de Adesão & Registros de Aceites',
+      badge: 'Termos & Auditoria SHA-256',
       badgeColor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold',
       description:
-        'Ajuste, personalize e publique os termos e cláusulas contratuais de cada plano (Básico, PDV, Completo...). Ao assinar ou trocar de plano, o cliente aceita o termo configurado.',
-      actionText: 'Gerenciar Termos dos Planos',
+        'Gerencie os termos e cláusulas de adesão de cada plano e consulte a trilha de registros de aceites e evidências digitais (hashes SHA-256, telemetria de IP e dossiês em PDF/JSON) em abas separadas.',
+      actionText: 'Acessar Termos e Aceites',
       path: '/admin/terms',
       icon: Scale,
       iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-400',
@@ -248,18 +247,18 @@ export function DeveloperSettingsPage() {
       accentColor: 'emerald',
     },
     {
-      id: 'acceptance-audit',
-      title: 'Registros de Aceites & Evidências Digitais',
-      badge: 'Auditoria Jurídica & SHA-256',
-      badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 font-semibold',
+      id: 'audit-logs',
+      title: 'Logs de Auditoria (Audit Logs)',
+      badge: 'Imutável • LGPD',
+      badgeColor: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold',
       description:
-        'Consulte a trilha de auditoria digital com evidências forenses de todos os contratos aceitos, hashes SHA-256, telemetria de IP, geolocalização e emita o Dossiê de Evidências em PDF e JSON.',
-      actionText: 'Painel de Evidências Digitais',
-      path: '/admin/acceptance-audit',
-      icon: FileSignature,
-      iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/70 dark:text-purple-400',
-      cardHoverBorder: 'hover:border-purple-400 dark:hover:border-purple-600',
-      accentColor: 'purple',
+        'Consulte ações, cliques críticos e alterações de dados filtradas por empresa, funcionário, módulo e período, com comparação visual Antes/Depois e exportação CSV.',
+      actionText: 'Consultar Logs de Auditoria',
+      path: '/admin/audit-logs',
+      icon: ShieldCheck,
+      iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400',
+      cardHoverBorder: 'hover:border-blue-400 dark:hover:border-blue-600',
+      accentColor: 'blue',
     },
     {
       id: 'system-settings',

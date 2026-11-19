@@ -1,5 +1,6 @@
 import { supabase } from '@app/config/supabase'
 import { logger } from '@shared/lib/logger'
+import { emitAuditLog } from '@shared/services/audit-logger.service'
 import type {
   InventoryItem,
   InventoryMovement,
@@ -805,6 +806,20 @@ export const inventoryService = {
         params,
       )
       if (!supplierResult.success) return supplierResult
+      void emitAuditLog({
+        empresaId: organizationId,
+        modulo: 'ESTOQUE',
+        acao: 'CRIACAO',
+        descricao: `Cadastrou o produto "${params.name.trim()}"`,
+        entidade: 'inventory_items',
+        entidadeId: data.id,
+        dadosNovos: {
+          name: params.name.trim(),
+          unit_price: params.unitPrice.trim() || '0',
+          quantity_on_hand: params.quantityOnHand.trim() || '0',
+          category: params.category.trim() || null,
+        },
+      })
       return { success: true, data: mapInventoryItem(data) }
     } catch (error) {
       logger.error('Exceção ao cadastrar material no estoque', error)
@@ -905,6 +920,20 @@ export const inventoryService = {
         params,
       )
       if (!supplierResult.success) return supplierResult
+      void emitAuditLog({
+        empresaId: organizationId,
+        modulo: 'ESTOQUE',
+        acao: 'EDICAO',
+        descricao: `Editou o produto "${params.name.trim()}"`,
+        entidade: 'inventory_items',
+        entidadeId: inventoryItemId,
+        dadosNovos: {
+          name: params.name.trim(),
+          unit_price: params.unitPrice.trim() || '0',
+          quantity_on_hand: params.quantityOnHand.trim() || '0',
+          category: params.category.trim() || null,
+        },
+      })
       return { success: true, data: undefined }
     } catch (error) {
       logger.error('Exceção ao atualizar material do estoque', error)
@@ -965,6 +994,14 @@ export const inventoryService = {
           p_reason: trimmedReason,
         })
         if (!rpcError) {
+          void emitAuditLog({
+            empresaId: organizationId,
+            modulo: 'ESTOQUE',
+            acao: 'EXCLUSAO',
+            descricao: `Excluiu produto do estoque (Motivo: ${trimmedReason})`,
+            entidade: 'inventory_items',
+            entidadeId: inventoryItemId,
+          })
           return { success: true, data: undefined }
         }
       } catch {

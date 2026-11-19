@@ -7,6 +7,7 @@ import { ModuleAccessProvider } from '@modules/access-control/context/ModuleAcce
 import { ThemeProvider } from '@shared/context/ThemeContext'
 import { ThemeColorProvider } from '@shared/context/ThemeColorContext'
 import { BrandLoadingScreen } from '@shared/components/BrandLoadingScreen'
+import { AuditLoggerProvider } from '@shared/hooks/useAuditLogger'
 
 export function App() {
   return (
@@ -15,9 +16,11 @@ export function App() {
         <ThemeColorProvider>
           <OrganizationProvider>
             <ModuleAccessProvider>
-              <Suspense fallback={<BrandLoadingScreen message="Carregando aplicação..." />}>
-                <RouterProvider router={router} />
-              </Suspense>
+              <AuditLoggerProvider>
+                <Suspense fallback={<BrandLoadingScreen message="Carregando aplicação..." />}>
+                  <RouterProvider router={router} />
+                </Suspense>
+              </AuditLoggerProvider>
             </ModuleAccessProvider>
           </OrganizationProvider>
         </ThemeColorProvider>

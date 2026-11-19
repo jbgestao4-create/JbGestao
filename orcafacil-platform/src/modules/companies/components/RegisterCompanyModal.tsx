@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   Building2,
+  Calendar,
+  CreditCard,
   Eye,
   EyeOff,
   FileText,
@@ -16,9 +18,11 @@ import { formatCurrency } from '@shared/utils/monetary'
 import { formatPhoneNumber } from '@shared/utils/phone'
 import {
   validateCnpj,
+  validateCpf,
   formatCustomerDocument,
   sanitizeCustomerDocument,
   CNPJ_INVALID_ERROR,
+  CPF_INVALID_ERROR,
 } from '@modules/customers/utils/customer-document'
 import {
   formatPostalAddress,
@@ -66,6 +70,17 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
   const [isLoadingPlans, setIsLoadingPlans] = useState(false)
 
+  // 4. Responsável pelo Contrato & Mensalidade
+  const [contractResponsibleName, setContractResponsibleName] = useState('')
+  const [contractResponsibleCpf, setContractResponsibleCpf] = useState('')
+  const [contractResponsibleCpfError, setContractResponsibleCpfError] = useState('')
+  const [contractResponsibleRole, setContractResponsibleRole] = useState('Sócio / Administrador')
+  const [billingDay, setBillingDay] = useState<number>(10)
+  const [setupFee, setSetupFee] = useState<string>('0.00')
+  const [paymentMethod, setPaymentMethod] = useState<string>('PIX / Boleto Bancário')
+  const [hasTrialPeriod, setHasTrialPeriod] = useState<boolean>(true)
+  const [contractNotes, setContractNotes] = useState<string>('')
+
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -93,6 +108,15 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       setAdminPassword('')
       setShowPassword(false)
       setSelectedPlanId('')
+      setContractResponsibleName('')
+      setContractResponsibleCpf('')
+      setContractResponsibleCpfError('')
+      setContractResponsibleRole('Sócio / Administrador')
+      setBillingDay(10)
+      setSetupFee('0.00')
+      setPaymentMethod('PIX / Boleto Bancário')
+      setHasTrialPeriod(true)
+      setContractNotes('')
       setError(null)
       setIsLoading(false)
 
@@ -269,6 +293,19 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       return
     }
 
+    if (contractResponsibleCpf.trim()) {
+      const cpfValidation = validateCpf(contractResponsibleCpf)
+      if (!cpfValidation.isValid) {
+        const msg = cpfValidation.error ?? CPF_INVALID_ERROR
+        setContractResponsibleCpfError(msg)
+        setError(`CPF do responsável pelo contrato inválido: ${msg}`)
+        return
+      }
+    }
+
+    const parsedBillingDay = Math.min(Math.max(Number(billingDay) || 10, 1), 28)
+    const parsedSetupFee = Math.max(parseFloat(setupFee) || 0, 0)
+
     setIsLoading(true)
     const res = await companyManagementService.registerCompanyWithAdmin({
       name: name.trim(),
@@ -286,34 +323,59 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       modules: selectedPlan ? selectedPlan.modules : [],
     })
 
-    if (res.success && res.data?.organizationId && selectedPlan) {
-      await accessPlanService.assignToCompany(res.data.organizationId, selectedPlan)
+    if (res.success && res.data?.organizationId) {
+      const trialEndDate = new Date()
+      trialEndDate.setDate(trialEndDate.getDate() + 30)
+      const trialEndsAtIso = hasTrialPeriod ? trialEndDate.toISOString() : null
+
       try {
-        const planTerm = await planTermsService.getTermForPlan(selectedPlan.id)
-        await contractService.saveContract({
-          companyId: res.data.organizationId,
-          contractNumber: contractService.generateContractNumber(),
-          clientName: name.trim(),
-          clientTradeName: name.trim(),
-          clientDocument: cnpj.trim() || 'Documento em cadastro',
-          clientResponsibleName: adminName.trim(),
-          clientResponsibleRole: 'Administrador / Responsável',
-          clientEmail: adminEmail.trim(),
-          clientPhone: adminPhone.trim() || null,
-          planName: selectedPlan.name,
-          monthlyAmount: selectedPlan.monthlyPrice || 149.9,
-          billingDay: 10,
-          paymentMethod: 'PIX / Boleto Bancário',
-          startDate: new Date().toISOString().split('T')[0],
-          durationMonths: 12,
-          hasTrialPeriod: true,
-          trialDurationMonths: 1,
-          isSigned: false, // Será assinado eletronicamente no primeiro acesso/aceite do cliente
-          status: 'active',
-          customTerms: planTerm.content,
-        })
+        await companyManagementService.setTrialPeriod(res.data.organizationId, trialEndsAtIso)
       } catch {
         // non-blocking
+      }
+
+      if (selectedPlan) {
+        await accessPlanService.assignToCompany(res.data.organizationId, selectedPlan)
+        try {
+          const planTerm = await planTermsService.getTermForPlan(selectedPlan.id)
+          const combinedTerms = contractNotes.trim()
+            ? `${planTerm.content ? planTerm.content + '\n\n' : ''}OBSERVAÇÕES DO CONTRATO:\n${contractNotes.trim()}`
+            : planTerm.content
+
+          const contractRes = await contractService.saveContract({
+            companyId: res.data.organizationId,
+            contractNumber: contractService.generateContractNumber(),
+            clientName: name.trim(),
+            clientTradeName: name.trim(),
+            clientDocument: cnpj.trim() || 'Documento em cadastro',
+            clientResponsibleName:
+              contractResponsibleName.trim() || responsible.trim() || adminName.trim(),
+            clientResponsibleDocument: contractResponsibleCpf.trim() || null,
+            clientResponsibleRole:
+              contractResponsibleRole.trim() || 'Administrador / Responsável',
+            clientEmail: adminEmail.trim(),
+            clientPhone: adminPhone.trim() || null,
+            planName: selectedPlan.name,
+            monthlyAmount: selectedPlan.monthlyPrice || 0,
+            setupFee: parsedSetupFee,
+            billingDay: parsedBillingDay,
+            paymentMethod: paymentMethod || 'PIX / Boleto Bancário',
+            startDate: new Date().toISOString().split('T')[0],
+            durationMonths: 12,
+            hasTrialPeriod,
+            trialDurationMonths: hasTrialPeriod ? 1 : 0,
+            trialEndsAt: trialEndsAtIso ? trialEndsAtIso.split('T')[0] : null,
+            isSigned: false, // Será assinado eletronicamente no primeiro acesso/aceite do cliente
+            status: 'active',
+            customTerms: combinedTerms,
+          })
+
+          if (contractRes.success && contractRes.data) {
+            await contractService.ensureInitialInvoice(contractRes.data)
+          }
+        } catch {
+          // non-blocking
+        }
       }
     }
 
@@ -326,6 +388,21 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
       setError(res.error)
     }
   }
+
+  const handleContractCpfChange = (val: string) => {
+    const formatted = formatCustomerDocument(val, 'individual')
+    setContractResponsibleCpf(formatted)
+    setContractResponsibleCpfError('')
+    const digits = sanitizeCustomerDocument(formatted, 'individual')
+    if (digits.length === 11) {
+      const validation = validateCpf(formatted)
+      if (!validation.isValid) {
+        setContractResponsibleCpfError(validation.error ?? CPF_INVALID_ERROR)
+      }
+    }
+  }
+
+  const currentSelectedPlan = accessPlans.find((p) => p.id === selectedPlanId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -632,6 +709,161 @@ export function RegisterCompanyModal({ isOpen, onClose, onSuccess }: RegisterCom
                 })}
               </div>
             )}
+          </div>
+
+          {/* Seção 4: Responsável pelo Contrato */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> 4. Responsável pelo Contrato
+            </h3>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="sm:col-span-1">
+                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  Nome do Responsável
+                </label>
+                <Input
+                  value={contractResponsibleName}
+                  onChange={(e) => setContractResponsibleName(e.target.value)}
+                  placeholder={responsible || adminName || 'Nome completo'}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  CPF do Responsável
+                </label>
+                <Input
+                  value={contractResponsibleCpf}
+                  onChange={(e) => handleContractCpfChange(e.target.value)}
+                  placeholder="000.000.000-00"
+                  maxLength={14}
+                />
+                {contractResponsibleCpfError && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">
+                    {contractResponsibleCpfError}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  Cargo
+                </label>
+                <Input
+                  value={contractResponsibleRole}
+                  onChange={(e) => setContractResponsibleRole(e.target.value)}
+                  placeholder="Ex: Sócio / Administrador"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 5: Informações da Mensalidade e Aluguel do Sistema */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 flex items-center gap-1.5">
+              <CreditCard className="h-3.5 w-3.5" /> 5. Informações da Mensalidade e Aluguel do Sistema
+            </h3>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  Valor da Mensalidade (Plano Selecionado)
+                </label>
+                <Input
+                  value={
+                    currentSelectedPlan
+                      ? formatCurrency(currentSelectedPlan.monthlyPrice || 0)
+                      : 'Selecione um plano'
+                  }
+                  readOnly
+                  disabled
+                  className="bg-gray-100 font-semibold text-gray-700 cursor-not-allowed dark:bg-slate-800 dark:text-slate-200"
+                />
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+                  Puxado automaticamente do plano escolhido (sem opção de alteração).
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  <Calendar className="mr-1 inline h-3.5 w-3.5" />
+                  Data de Vencimento Mensal
+                </label>
+                <select
+                  value={billingDay}
+                  onChange={(e) => setBillingDay(Number(e.target.value))}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                >
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>
+                      Todo dia {String(day).padStart(2, '0')} de cada mês
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  Taxa de Adesão (R$)
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={setupFee}
+                  onChange={(e) => setSetupFee(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  Forma de Pagamento
+                </label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                >
+                  <option value="PIX / Boleto Bancário">PIX / Boleto Bancário</option>
+                  <option value="PIX">PIX</option>
+                  <option value="Boleto Bancário">Boleto Bancário</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                  <option value="Transferência Bancária">Transferência Bancária</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Opção 30 dias de teste */}
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 transition-colors hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+              <input
+                type="checkbox"
+                checked={hasTrialPeriod}
+                onChange={(e) => setHasTrialPeriod(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div>
+                <span className="block text-sm font-semibold text-emerald-900 dark:text-emerald-300">
+                  Liberar 30 dias de teste gratuito
+                </span>
+                <span className="mt-0.5 block text-xs text-emerald-700 dark:text-emerald-400">
+                  Quando marcado, a empresa terá 30 dias de acesso gratuito e o boleto/fatura será gerado automaticamente 7 dias antes da data de vencimento selecionada.
+                </span>
+              </div>
+            </label>
+
+            {/* Campo de Observação */}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                Observações do Contrato / Cobrança
+              </label>
+              <textarea
+                rows={3}
+                value={contractNotes}
+                onChange={(e) => setContractNotes(e.target.value)}
+                placeholder="Condições especiais, observações de faturamento ou detalhes acordados com o cliente..."
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+            </div>
           </div>
 
           {/* Footer Actions */}
