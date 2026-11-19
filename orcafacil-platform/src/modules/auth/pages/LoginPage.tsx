@@ -3,6 +3,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   CheckCircle2,
   Clock,
+  Eye,
+  EyeOff,
   Lock,
   QrCode,
   ShieldAlert,
@@ -42,6 +44,7 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isMaintenanceActive, setIsMaintenanceActive] = useState(false)
@@ -49,6 +52,14 @@ export function LoginPage() {
   const [isFullMaintenanceBlocked, setIsFullMaintenanceBlocked] = useState(false)
 
   useEffect(() => {
+    // Garante que a tela de login inicie sempre limpa, sem credenciais pré-preenchidas por navegadores
+    setEmail('')
+    setPassword('')
+    const timer = setTimeout(() => {
+      setEmail('')
+      setPassword('')
+    }, 120)
+
     // Sempre que acessar a tela de login do zero, limpa qualquer dispensa anterior de alertas de boletos
     cashBillsService.clearAllAlertDismissals()
 
@@ -62,6 +73,8 @@ export function LoginPage() {
         setMaintenanceMessage(res.data.message)
       }
     })
+
+    return () => clearTimeout(timer)
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -458,26 +471,64 @@ export function LoginPage() {
                 </div>
               )}
 
-              <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
+              <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5" autoComplete="off">
+                {/* Campos fictícios invisíveis para absorver preenchimento automático forçado de navegadores como Chrome/Edge */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    opacity: 0,
+                    height: 0,
+                    width: 0,
+                    overflow: 'hidden',
+                    pointerEvents: 'none',
+                  }}
+                  tabIndex={-1}
+                  aria-hidden="true"
+                >
+                  <input type="text" name="chrome_dummy_username" tabIndex={-1} autoComplete="off" />
+                  <input type="password" name="chrome_dummy_password" tabIndex={-1} autoComplete="off" />
+                </div>
+
                 <Input
                   label="E-mail"
                   type="email"
-                  autoComplete="email"
+                  name="app_auth_login_user_email"
+                  id="app_auth_login_user_email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu@email.com"
                   required
                 />
 
-                <Input
-                  label="Senha"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Digite sua senha"
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    label="Senha"
+                    type={showPassword ? 'text' : 'password'}
+                    name="app_auth_login_user_password"
+                    id="app_auth_login_user_password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Digite sua senha"
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-[34px] text-gray-400 hover:text-gray-600 cursor-pointer"
+                    tabIndex={-1}
+                    title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
 
                 <div className="flex justify-end">
                   <Link

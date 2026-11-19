@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Building2,
+  Check,
   CheckCircle2,
   Clock,
   Eye,
@@ -38,6 +39,41 @@ import {
   resolvePlanFromSlugOrId,
   type AccessPlan,
 } from '@modules/companies/services/access-plan.service'
+import { validatePasswordStrength } from '@shared/utils/password-validator'
+
+function PasswordRequirementsChecklist({ password }: { password: string }) {
+  const result = validatePasswordStrength(password)
+  const items = [
+    { label: 'Mínimo de 8 caracteres', ok: result.hasMinLength },
+    { label: 'Pelo menos uma letra maiúscula (A-Z)', ok: result.hasUpperCase },
+    { label: 'Pelo menos uma letra minúscula (a-z)', ok: result.hasLowerCase },
+    { label: 'Pelo menos um número (0-9)', ok: result.hasNumber },
+    { label: 'Pelo menos um caractere especial (!@#$%...)', ok: result.hasSpecialChar },
+  ]
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-xs space-y-1.5 mt-1">
+      <p className="font-semibold text-slate-700">A senha deve conter:</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+        {items.map((it, idx) => (
+          <div
+            key={idx}
+            className={`flex items-center gap-1.5 ${
+              it.ok ? 'text-emerald-600 font-medium' : 'text-slate-500'
+            }`}
+          >
+            {it.ok ? (
+              <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            ) : (
+              <X className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            )}
+            <span>{it.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function RegisterCompanyPublicPage() {
   const navigate = useNavigate()
@@ -287,8 +323,16 @@ export function RegisterCompanyPublicPage() {
       return
     }
 
-    if (adminPassword.trim().length < 6) {
-      setError('A senha deve conter no mínimo 6 caracteres.')
+    if (!adminPassword || !adminConfirmPassword) {
+      setError('Por favor, informe e confirme a senha de acesso do administrador.')
+      return
+    }
+
+    const passwordStrength = validatePasswordStrength(adminPassword)
+    if (!passwordStrength.isValid) {
+      setError(
+        'A senha deve ter no mínimo 8 caracteres, contendo pelo menos uma letra maiúscula, uma minúscula, um número e um caractere especial.'
+      )
       return
     }
 
@@ -698,7 +742,7 @@ export function RegisterCompanyPublicPage() {
                         id="company_admin_registration_password"
                         autoComplete="new-password"
                         required
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder="Ex: SenhaForte@2026"
                         value={adminPassword}
                         onChange={(e) => setAdminPassword(e.target.value)}
                         className="pr-10 text-xs"
@@ -739,6 +783,11 @@ export function RegisterCompanyPublicPage() {
                         {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
+                  </div>
+
+                  {/* Checklist visual de força de senha igual ao /profile */}
+                  <div className="sm:col-span-2">
+                    <PasswordRequirementsChecklist password={adminPassword} />
                   </div>
                 </div>
               </div>
