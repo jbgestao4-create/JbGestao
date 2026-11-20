@@ -305,6 +305,11 @@ export function InventoryFormPage() {
   }
   const [currentQuantity, setCurrentQuantity] = useState('0')
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [missingFields, setMissingFields] = useState<
+    Array<{ label: string; message: string; fieldId?: string }>
+  >([])
+  const formErrorRef = useRef<HTMLDivElement>(null)
   const [supplierError, setSupplierError] = useState('')
   const [draftStorageWarning, setDraftStorageWarning] = useState('')
   const [draftHydratedKey, setDraftHydratedKey] = useState<string | null>(null)
@@ -498,10 +503,46 @@ export function InventoryFormPage() {
     [form.purchasePrice, form.unitPrice],
   )
 
+  const expirationWarning = useMemo(() => {
+    const hasNoExp = form.attributes?.has_no_expiration === 'true'
+    const expDate = form.attributes?.expiration_date ?? ''
+    if (hasNoExp || !expDate) return null
+
+    const [y, m, d] = expDate.slice(0, 10).split('-').map(Number)
+    if (!y || !m || !d) return null
+    const target = new Date(y, m - 1, d)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    target.setHours(0, 0, 0, 0)
+    const diff = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    if (diff > 5) return null
+
+    const formattedDate = expDate.slice(0, 10).split('-').reverse().join('/')
+    if (diff < 0) {
+      return `Este produto encontra-se vencido desde ${formattedDate}.`
+    }
+    if (diff === 0) {
+      return `Este produto encontra-se prestes a vencer (vence hoje, ${formattedDate}).`
+    }
+    return `Este produto encontra-se prestes a vencer (validade ${formattedDate} — faltam ${diff} ${diff === 1 ? 'dia' : 'dias'}).`
+  }, [form.attributes?.expiration_date, form.attributes?.has_no_expiration])
+
   const updateFormFields = (changes: Partial<InventoryItemParams>) => {
     const updatedForm = { ...form, ...changes }
     setForm(updatedForm)
     persistDraft(updatedForm)
+    const changedKeys = Object.keys(changes)
+    if (changedKeys.length > 0) {
+      setFieldErrors((prev) => {
+        const hasAny = changedKeys.some((key) => key in prev)
+        if (!hasAny) return prev
+        const next = { ...prev }
+        for (const key of changedKeys) {
+          delete next[key]
+        }
+        return next
+      })
+    }
   }
 
   const updateForm = <K extends keyof InventoryItemParams>(
@@ -574,65 +615,116 @@ export function InventoryFormPage() {
 
     const submittedForm = normalizeInventoryItemParams(form)
     if (!submittedForm) {
+      setMissingFields([])
       setFormError('Os dados do formulário estão inválidos. Revise os campos e tente novamente.')
       return
     }
 
-    if (submittedForm.name.trim().length < 2 || !submittedForm.unit.trim()) {
-      setFormError('Informe o nome do material e sua unidade de medida.')
-      return
+    const nextFieldErrors: Record<string, string> = {}
+    const issues: Array<{ label: string; message: string; fieldId?: string }> = []
+
+    if (submittedForm.name.trim().length < 2) {
+      const msg = 'Informe o nome do produto (mínimo de 2 caracteres).'
+      nextFieldErrors.name = msg
+      issues.push({ label: 'Nome do produto', message: msg, fieldId: 'inventory-name' })
+    }
+    if (!submittedForm.unit.trim()) {
+      const msg = 'Selecione a unidade usada no saldo.'
+      nextFieldErrors.unit = msg
+      issues.push({ label: 'Unidade usada no saldo', message: msg, fieldId: 'inventory-unit' })
     }
     if (!isValidBarcode(submittedForm.barcode)) {
-      setFormError(
-        'Confira o código de barras. EAN-8, UPC e EAN-13 precisam ter dígito verificador válido.',
-      )
-      return
+      const msg = 'EAN-8, UPC e EAN-13 precisam ter dígito verificador válido.'
+      nextFieldErrors.barcode = msg
+      issues.push({ label: 'Código de barras', message: msg, fieldId: 'inventory-barcode' })
     }
-    const nonNegativeFields = [
-      submittedForm.quantityOnHand,
-      submittedForm.minimumQuantity,
-      submittedForm.maximumQuantity,
-      submittedForm.idealRestockQuantity,
-      submittedForm.unitPrice,
-      submittedForm.purchasePrice,
-      submittedForm.extraPurchaseCost,
-      submittedForm.promotionalPrice,
-      submittedForm.targetMarginPercent,
-      submittedForm.minimumSalePrice,
-      submittedForm.leadTimeDays,
-    ].filter((value) => value.trim() !== '')
-    if (nonNegativeFields.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
-      setFormError('Quantidades, prazos e valores devem ser números iguais ou maiores que zero.')
-      return
+
+    const nonNegativeChecks: Array<{
+      key: keyof InventoryItemParams
+      label: string
+      value: string
+      fieldId?: string
+    }> = [
+      { key: 'quantityOnHand', label: 'Saldo atual', value: submittedForm.quantityOnHand },
+      { key: 'minimumQuantity', label: 'Estoque mínimo', value: submittedForm.minimumQuantity, fieldId: 'inventory-min-qty' },
+      { key: 'maximumQuantity', label: 'Estoque máximo', value: submittedForm.maximumQuantity, fieldId: 'inventory-max-qty' },
+      { key: 'idealRestockQuantity', label: 'Quantidade ideal para reposição', value: submittedForm.idealRestockQuantity },
+      { key: 'unitPrice', label: 'Preço de venda', value: submittedForm.unitPrice },
+      { key: 'purchasePrice', label: 'Preço de compra', value: submittedForm.purchasePrice },
+      { key: 'extraPurchaseCost', label: 'Custo adicional de compra', value: submittedForm.extraPurchaseCost },
+      { key: 'promotionalPrice', label: 'Preço promocional', value: submittedForm.promotionalPrice },
+      { key: 'targetMarginPercent', label: 'Margem alvo (%)', value: submittedForm.targetMarginPercent },
+      { key: 'minimumSalePrice', label: 'Preço mínimo de venda', value: submittedForm.minimumSalePrice },
+      { key: 'leadTimeDays', label: 'Prazo médio de reposição (dias)', value: submittedForm.leadTimeDays, fieldId: 'inventory-lead-time' },
+    ]
+    for (const check of nonNegativeChecks) {
+      if (check.value.trim() !== '' && (!Number.isFinite(Number(check.value)) || Number(check.value) < 0)) {
+        const msg = 'Deve ser um número igual ou maior que zero.'
+        nextFieldErrors[check.key] = msg
+        issues.push({ label: check.label, message: msg, fieldId: check.fieldId })
+      }
     }
+
     if (
       Number(submittedForm.maximumQuantity) > 0 &&
       Number(submittedForm.minimumQuantity) > Number(submittedForm.maximumQuantity)
     ) {
-      setFormError('O estoque máximo não pode ser menor que o estoque mínimo.')
-      return
+      const msg = 'O estoque máximo não pode ser menor que o estoque mínimo.'
+      nextFieldErrors.maximumQuantity = msg
+      issues.push({ label: 'Estoque máximo', message: msg, fieldId: 'inventory-max-qty' })
     }
     if (Number(currentQuantity) < 0 && !form.allowNegativeStock) {
-      setFormError(
-        'Ajuste o saldo para zero ou positivo antes de desativar a permissão de estoque negativo.',
-      )
-      return
+      const msg =
+        'Ajuste o saldo para zero ou positivo antes de desativar a permissão de estoque negativo.'
+      nextFieldErrors.quantityOnHand = msg
+      issues.push({ label: 'Saldo atual', message: msg })
     }
     const purchaseUnitFactor = submittedForm.purchaseUnitFactor.trim() || '1'
     if (
       !Number.isFinite(Number(purchaseUnitFactor)) ||
       Number(purchaseUnitFactor) <= 0
     ) {
-      setFormError('O fator da unidade de compra deve ser maior que zero.')
-      return
+      const msg = 'O fator da unidade de compra deve ser maior que zero.'
+      nextFieldErrors.purchaseUnitFactor = msg
+      issues.push({
+        label: 'Unidades de estoque na compra',
+        message: msg,
+        fieldId: 'inventory-purchase-factor',
+      })
     }
     if (submittedForm.leadTimeDays && !Number.isInteger(Number(submittedForm.leadTimeDays))) {
-      setFormError('O prazo de reposição deve ser informado em dias inteiros.')
+      const msg = 'O prazo de reposição deve ser informado em dias inteiros.'
+      nextFieldErrors.leadTimeDays = msg
+      issues.push({
+        label: 'Prazo médio de reposição (dias)',
+        message: msg,
+        fieldId: 'inventory-lead-time',
+      })
+    }
+
+    if (issues.length > 0) {
+      setFieldErrors(nextFieldErrors)
+      setMissingFields(issues)
+      setFormError('Para concluir o cadastro, preencha ou corrija o que está faltando:')
+      const firstFieldId = issues.find((item) => item.fieldId)?.fieldId
+      requestAnimationFrame(() => {
+        const target = firstFieldId ? document.getElementById(firstFieldId) : null
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          if (typeof (target as HTMLElement).focus === 'function') {
+            ;(target as HTMLElement).focus({ preventScroll: true })
+          }
+        } else {
+          formErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      })
       return
     }
 
     setIsSaving(true)
     setFormError('')
+    setFieldErrors({})
+    setMissingFields([])
     try {
       const params = {
         ...submittedForm,
@@ -777,9 +869,50 @@ export function InventoryFormPage() {
         </Card>
       ) : (
         <form noValidate onSubmit={(event) => void handleSubmit(event)} className="space-y-6">
+          {expirationWarning && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 rounded-xl border border-red-300 bg-red-50 p-4 text-sm font-medium text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+              <span>
+                <strong>Alerta de validade:</strong> {expirationWarning}
+              </span>
+            </div>
+          )}
           {formError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {formError}
+            <div
+              ref={formErrorRef}
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            >
+              <p className="font-medium">{formError}</p>
+              {missingFields.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs sm:text-sm">
+                  {missingFields.map((item, idx) => (
+                    <li key={`${item.label}-${idx}`}>
+                      {item.fieldId ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById(item.fieldId!)
+                            el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            if (el && typeof el.focus === 'function') {
+                              el.focus({ preventScroll: true })
+                            }
+                          }}
+                          className="font-semibold underline hover:text-red-900"
+                        >
+                          {item.label}
+                        </button>
+                      ) : (
+                        <span className="font-semibold">{item.label}</span>
+                      )}
+                      : {item.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {supplierError && (
@@ -883,10 +1016,12 @@ export function InventoryFormPage() {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
+                id="inventory-name"
                 label="Nome do produto *"
                 placeholder="Ex.: Cabo elétrico flexível"
                 minLength={2}
                 value={form.name}
+                error={fieldErrors.name}
                 onChange={(event) => {
                   updateForm('name', event.target.value)
                 }}
@@ -905,10 +1040,12 @@ export function InventoryFormPage() {
               />
               <div className="space-y-2">
                 <Input
+                  id="inventory-barcode"
                   label="Código de barras"
                   placeholder="Digite ou leia com o leitor USB"
                   helperText="Leitores USB funcionam como teclado: clique aqui e faça a leitura."
                   value={form.barcode}
+                  error={fieldErrors.barcode}
                   onChange={(event) => {
                     setBarcodeUnavailable(false)
                     updateForm('barcode', event.target.value)
@@ -938,6 +1075,7 @@ export function InventoryFormPage() {
                 searchable
                 helperText="É a unidade usada para controlar e movimentar o estoque."
                 value={form.unit}
+                error={fieldErrors.unit}
                 onChange={(value) => {
                   updateForm('unit', typeof value === 'string' ? value : (value[0] ?? ''))
                 }}
@@ -994,6 +1132,58 @@ export function InventoryFormPage() {
                   updateForm('model', event.target.value)
                 }}
               />
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                  Data de Validade
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    disabled={form.attributes?.has_no_expiration === 'true'}
+                    value={
+                      form.attributes?.has_no_expiration === 'true'
+                        ? ''
+                        : (form.attributes?.expiration_date ?? '')
+                    }
+                    onChange={(event) => {
+                      updateForm('attributes', {
+                        ...(form.attributes ?? {}),
+                        expiration_date: event.target.value,
+                        has_no_expiration: 'false',
+                      })
+                    }}
+                    className="h-10 flex-1 min-w-0 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800"
+                  />
+                  <Button
+                    type="button"
+                    variant={form.attributes?.has_no_expiration === 'true' ? 'primary' : 'outline'}
+                    onClick={() => {
+                      const nextNoExp = form.attributes?.has_no_expiration !== 'true'
+                      updateForm('attributes', {
+                        ...(form.attributes ?? {}),
+                        has_no_expiration: nextNoExp ? 'true' : 'false',
+                        expiration_date: nextNoExp
+                          ? ''
+                          : (form.attributes?.expiration_date ?? ''),
+                      })
+                    }}
+                    className={`h-10 shrink-0 px-3 text-xs font-semibold ${
+                      form.attributes?.has_no_expiration === 'true'
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {form.attributes?.has_no_expiration === 'true'
+                      ? 'Sem validade ✓'
+                      : 'Sem validade'}
+                  </Button>
+                </div>
+                {expirationWarning && (
+                  <p className="mt-1.5 text-xs font-semibold text-red-600 dark:text-red-400">
+                    {expirationWarning}
+                  </p>
+                )}
+              </div>
               <div className="sm:col-span-2">
                 <label
                   htmlFor="inventory-description"
@@ -1055,6 +1245,7 @@ export function InventoryFormPage() {
                 />
               )}
               <Input
+                id="inventory-min-qty"
                 label="Estoque mínimo"
                 type="number"
                 min="0"
@@ -1062,17 +1253,20 @@ export function InventoryFormPage() {
                 placeholder="0"
                 helperText="O sistema destaca o produto quando atingir esse saldo."
                 value={form.minimumQuantity}
+                error={fieldErrors.minimumQuantity}
                 onChange={(event) => {
                   updateForm('minimumQuantity', event.target.value)
                 }}
               />
               <Input
+                id="inventory-max-qty"
                 label="Estoque máximo"
                 type="number"
                 min="0"
                 step="0.0001"
                 placeholder="0"
                 value={form.maximumQuantity}
+                error={fieldErrors.maximumQuantity}
                 onChange={(event) => {
                   updateForm('maximumQuantity', event.target.value)
                 }}
@@ -1518,12 +1712,14 @@ export function InventoryFormPage() {
                   }}
                 />
                 <Input
+                  id="inventory-lead-time"
                   label="Prazo médio de reposição (dias)"
                   type="number"
                   min="0"
                   step="1"
                   placeholder="0"
                   value={form.leadTimeDays}
+                  error={fieldErrors.leadTimeDays}
                   onChange={(event) => {
                     updateForm('leadTimeDays', event.target.value)
                   }}
@@ -1567,6 +1763,7 @@ export function InventoryFormPage() {
                   }}
                 />
                 <Input
+                  id="inventory-purchase-factor"
                   label="Quantas unidades de estoque vêm na compra?"
                   type="number"
                   min="0.0001"
@@ -1574,6 +1771,7 @@ export function InventoryFormPage() {
                   placeholder="1"
                   helperText="Ex.: 1 caixa contém 12 unidades. Se não informado, o padrão é 1."
                   value={form.purchaseUnitFactor}
+                  error={fieldErrors.purchaseUnitFactor}
                   onChange={(event) => {
                     updateForm('purchaseUnitFactor', event.target.value)
                   }}
@@ -1711,6 +1909,41 @@ export function InventoryFormPage() {
               </div>
             </div>
           </details>
+
+          {formError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            >
+              <p className="font-medium">{formError}</p>
+              {missingFields.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs sm:text-sm">
+                  {missingFields.map((item, idx) => (
+                    <li key={`bottom-${item.label}-${idx}`}>
+                      {item.fieldId ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById(item.fieldId!)
+                            el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            if (el && typeof el.focus === 'function') {
+                              el.focus({ preventScroll: true })
+                            }
+                          }}
+                          className="font-semibold underline hover:text-red-900"
+                        >
+                          {item.label}
+                        </button>
+                      ) : (
+                        <span className="font-semibold">{item.label}</span>
+                      )}
+                      : {item.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-3">
             <Link to="/orcafacil/inventory/search">

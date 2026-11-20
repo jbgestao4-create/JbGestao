@@ -12,6 +12,7 @@ import { GeneralCashStatusBadge } from '@shared/components/GeneralCashStatusBadg
 import { BrandLogo } from '@shared/components/BrandLogo'
 import { FeedbackWidget } from '@modules/suggestions/components/FeedbackWidget'
 import { SystemNotificationModal } from '@shared/components/SystemNotificationModal'
+import { HeaderNotificationsButton } from '@shared/components/HeaderNotificationsButton'
 import { OrganizationBillingBanner } from '@modules/organizations/components/OrganizationBillingBanner'
 import { OrganizationSuspensionGuard } from '@modules/organizations/components/OrganizationSuspensionGuard'
 import { TermsOfUseModal } from '@modules/dashboard/components/TermsOfUseModal'
@@ -811,6 +812,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               >
                 <Home aria-hidden="true" className="h-4 w-4" />
               </Link>
+
+              <HeaderNotificationsButton />
 
               <div ref={profileMenuRef} className="inline-flex">
                 <ProfileMenu

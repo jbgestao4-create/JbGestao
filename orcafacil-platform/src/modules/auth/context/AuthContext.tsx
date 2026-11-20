@@ -178,6 +178,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await authService.signOut()
     if (res.success) {
       cashBillsService.clearAllAlertDismissals()
+      try {
+        const keysToRemove: string[] = []
+        for (let i = 0; i < sessionStorage.length; i += 1) {
+          const k = sessionStorage.key(i)
+          if (k && k.startsWith('orcafacil:read-notifications:')) {
+            keysToRemove.push(k)
+          }
+        }
+        for (const k of keysToRemove) {
+          sessionStorage.removeItem(k)
+        }
+      } catch {
+        // ignore
+      }
       setUser(null)
       setProfile(null)
       setSession(null)

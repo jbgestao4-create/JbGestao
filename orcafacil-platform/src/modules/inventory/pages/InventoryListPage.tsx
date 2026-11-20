@@ -13,6 +13,7 @@ import { ImportInvoiceModal } from '../components/ImportInvoiceModal'
 import {
   AlertCircle,
   ArrowLeft,
+  CalendarClock,
   CheckCircle2,
   FileUp,
   Layers,
@@ -27,6 +28,41 @@ import {
 
 function formatQuantity(value: string) {
   return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 }).format(Number(value))
+}
+
+function getExpirationAlert(item: InventoryItem): { badge: string; message: string } | null {
+  if (!item.isActive) return null
+  const attrs = (item.attributes || {}) as Record<string, unknown>
+  const hasNoExp = attrs.has_no_expiration === true || attrs.has_no_expiration === 'true'
+  const expDate = typeof attrs.expiration_date === 'string' ? attrs.expiration_date : ''
+  if (hasNoExp || !expDate) return null
+
+  const [y, m, d] = expDate.slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  const target = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  if (diff > 5) return null
+
+  const formattedDate = expDate.slice(0, 10).split('-').reverse().join('/')
+  if (diff < 0) {
+    return {
+      badge: 'Produto vencido',
+      message: `Este produto encontra-se vencido desde ${formattedDate}.`,
+    }
+  }
+  if (diff === 0) {
+    return {
+      badge: 'Vence hoje',
+      message: `Este produto encontra-se prestes a vencer (vence hoje, ${formattedDate}).`,
+    }
+  }
+  return {
+    badge: `Prestes a vencer (${diff} ${diff === 1 ? 'dia' : 'dias'})`,
+    message: `Este produto encontra-se prestes a vencer (validade ${formattedDate} — faltam ${diff} ${diff === 1 ? 'dia' : 'dias'}).`,
+  }
 }
 
 function formatPrice(value: string) {
@@ -348,6 +384,7 @@ export function InventoryListPage() {
         <div className="space-y-4">
           {filteredItems.map((item) => {
             const isLowStock = Number(item.quantityOnHand) <= Number(item.minimumQuantity)
+            const expirationAlert = getExpirationAlert(item)
             const isAwaiting =
               item.registrationStatus === 'awaiting_information' ||
               Number(item.unitPrice) <= 0 ||
@@ -356,11 +393,13 @@ export function InventoryListPage() {
               <Card
                 key={item.id}
                 className={`rounded-xl shadow-sm transition-all ${
-                  isAwaiting
-                    ? 'border-amber-200 bg-amber-50/20'
-                    : !item.isActive
-                    ? 'border-gray-200 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-900/40 opacity-60 hover:opacity-90'
-                    : 'bg-white dark:bg-[#111827] border-gray-200 dark:border-slate-800'
+                  expirationAlert
+                    ? 'border-red-300 bg-red-50/20 dark:border-red-900/60 dark:bg-red-950/10'
+                    : isAwaiting
+                      ? 'border-amber-200 bg-amber-50/20'
+                      : !item.isActive
+                        ? 'border-gray-200 dark:border-slate-800 bg-gray-50/75 dark:bg-slate-900/40 opacity-60 hover:opacity-90'
+                        : 'bg-white dark:bg-[#111827] border-gray-200 dark:border-slate-800'
                 }`}
               >
                 <CardContent className="space-y-4 p-5 sm:p-6">
@@ -416,6 +455,12 @@ export function InventoryListPage() {
                           <span className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
                             Cód. #{item.sku || '—'}
                           </span>
+                          {expirationAlert && (
+                            <span className="shrink-0 inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-bold text-red-700">
+                              <CalendarClock className="h-3 w-3 text-red-600" />
+                              {expirationAlert.badge}
+                            </span>
+                          )}
                           <h2
                             className={`truncate text-base font-bold ${
                               !item.isActive ? 'text-gray-600' : 'text-gray-900'
@@ -466,6 +511,17 @@ export function InventoryListPage() {
                       </div>
                     )}
                   </div>
+
+                  {expirationAlert && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+                      <div className="flex items-center gap-2 font-medium">
+                        <CalendarClock className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                        <span>
+                          <strong>Alerta de validade:</strong> {expirationAlert.message}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {isAwaiting && (
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">

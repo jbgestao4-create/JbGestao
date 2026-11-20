@@ -943,6 +943,9 @@ export function CashManagementPage() {
               {formatCurrency(massiveCardsTotal)}
             </p>
             <span className="text-[11px] text-zinc-400">Crédito + Débito total</span>
+            <p className="mt-1 text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+              Valor sem sincronização com banco.
+            </p>
           </CardContent>
         </Card>
         </div>
@@ -999,6 +1002,9 @@ export function CashManagementPage() {
             <span className="text-[11px] text-indigo-600/80 dark:text-indigo-400/80">
               Pix + Cartões + Sangrias p/ Conta
             </span>
+            <p className="mt-1 text-[10px] leading-tight text-indigo-600/75 dark:text-indigo-400/75">
+              Valor sem sincronização com banco.
+            </p>
           </CardContent>
         </Card>
         </div>

@@ -16,6 +16,7 @@ import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import {
+  BarChart3,
   Boxes,
   Briefcase,
   CheckCircle2,
@@ -40,9 +41,16 @@ import { ReportPrintHeader } from '../components/ReportPrintHeader'
 import { ReportPrintFooter } from '../components/ReportPrintFooter'
 import { ReportActionBar } from '../components/ReportActionBar'
 import { CashManagementReportView } from '../components/CashManagementReportView'
+import { SalesMainChartView } from '../components/SalesMainChartView'
 
 // Tipos principais de relatórios conforme solicitado pelo usuário
-export type ReportView = 'home' | 'registrations' | 'financial' | 'inventory_services' | 'cash_management'
+export type ReportView =
+  | 'home'
+  | 'registrations'
+  | 'financial'
+  | 'inventory_services'
+  | 'cash_management'
+  | 'sales_chart'
 
 // Abas de cada tipo de relatório
 export type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
@@ -88,7 +96,9 @@ export function ReportsPage() {
           ? 'inventory_services'
           : rawView === 'cash_management' || rawView === 'caixa'
             ? 'cash_management'
-            : 'home'
+            : rawView === 'sales_chart' || rawView === 'grafico_vendas'
+              ? 'sales_chart'
+              : 'home'
 
   // ============================================================================
   // 1. RELATÓRIOS CADASTRAIS (Usuários, Funcionários, Fornecedores, Clientes)
@@ -187,6 +197,7 @@ export function ReportsPage() {
     if (currentView === 'financial') return true
     if (currentView === 'inventory_services') return true
     if (currentView === 'cash_management') return true
+    if (currentView === 'sales_chart') return true
     if (currentView === 'registrations') {
       return registrationsTab === 'customers' || registrationsTab === 'suppliers'
     }
@@ -1085,7 +1096,42 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* OS 3 MÓDULOS PRINCIPAIS DE RELATÓRIO */}
+        {/* MÓDULO EM DESTAQUE: GRÁFICO PRINCIPAL DE VENDAS – ALTA VISIBILIDADE */}
+        <Card className="group relative overflow-hidden rounded-2xl border-2 border-blue-200 dark:border-blue-900/70 hover:border-blue-500 shadow-xs hover:shadow-md transition-all bg-gradient-to-r from-blue-50/60 via-white to-emerald-50/40 dark:from-blue-950/30 dark:via-slate-900 dark:to-emerald-950/20">
+          <CardContent className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-blue-600 p-3 text-white shadow-xs shrink-0">
+                <BarChart3 className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold tracking-wide text-gray-900 dark:text-white">
+                    GRÁFICO PRINCIPAL DE VENDAS — ALTA VISIBILIDADE
+                  </h3>
+                  <span className="rounded-full bg-blue-100 dark:bg-blue-950/70 px-3 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    DESTAQUE
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs leading-5 text-gray-600 dark:text-slate-400 max-w-3xl">
+                  Gráfico amplo em barras verticais ou linhas com faturamento por dia, quantidade de vendas, ticket médio, destaque de maior/menor dia e comparativo com o período anterior (Hoje, 7 dias, Semana, 30 dias, Mês e Ano).
+                </p>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => navigateToView('sales_chart')}
+              className="shrink-0 justify-between gap-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm px-5 py-2.5"
+            >
+              <span className="inline-flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Abrir Gráfico Principal
+              </span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* OS MÓDULOS PRINCIPAIS DE RELATÓRIO */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
@@ -2660,6 +2706,20 @@ export function ReportsPage() {
         printOrientationMode={printOrientationMode}
         effectiveOrientation={effectiveOrientation}
         onPrintOrientationChange={setPrintOrientationMode}
+      />
+    )
+  }
+
+  // ============================================================================
+  // VIEW: 5. GRÁFICO PRINCIPAL DE VENDAS – ALTA VISIBILIDADE
+  // ============================================================================
+  if (currentView === 'sales_chart') {
+    return (
+      <SalesMainChartView
+        dataset={dataset}
+        isRefreshing={isLoading}
+        onRefresh={() => void loadData()}
+        onBack={() => navigateToView('home')}
       />
     )
   }
