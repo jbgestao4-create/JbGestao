@@ -161,7 +161,7 @@ export function CompanyUsersModal({ company, isOpen, onClose }: CompanyUsersModa
       password: effectivePw,
       role: newUserRole,
       jobTitle: newUserJobTitle.trim() || null,
-      dashboardModules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-04'],
+      dashboardModules: ['MOD-01', 'MOD-02', 'MOD-03', 'MOD-04', 'MOD-05'],
     })
 
     setIsAddingUser(false)

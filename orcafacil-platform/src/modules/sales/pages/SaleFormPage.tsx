@@ -754,13 +754,6 @@ export function SaleFormPage() {
               </p>
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={() => navigate('/cash')}
-            className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs"
-          >
-            Abrir Caixa Agora →
-          </Button>
         </div>
       )}
 

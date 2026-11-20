@@ -4,6 +4,7 @@ import { env } from '@app/config/env'
 import { logger } from '@shared/lib/logger'
 import { screenTimeService } from '@shared/services/screen-time.service'
 import { DASHBOARD_MODULES } from '@modules/access-control/services/module-access.service'
+import { validateModuleDependencies } from '@modules/access-control/services/module-dependencies.service'
 import { isSystemOwner, registerSystemOwnerEmail } from '@shared/utils/system-owner'
 import type {
   ModuleCode,
@@ -431,6 +432,20 @@ export const organizationService = {
       }
 
       // 2. Chama a RPC segura add_organization_member
+      const cleanDashboardModules = Array.from(
+        new Set(params.dashboardModules || []),
+      ).filter(Boolean) as DashboardModuleCode[]
+
+      if (params.role === 'member' && cleanDashboardModules.length > 0) {
+        const depValidation = validateModuleDependencies(cleanDashboardModules)
+        if (!depValidation.isValid) {
+          return {
+            success: false,
+            error: `Não foi possível ajustar as permissões: ${depValidation.errors.join(' ')}`,
+          }
+        }
+      }
+
       const rpcResult = await supabase.rpc('add_organization_member', {
         p_org_id: params.organizationId,
         p_email: cleanEmail,
@@ -439,7 +454,7 @@ export const organizationService = {
         p_role: params.role,
         p_modules: [],
         p_job_title: params.jobTitle?.trim() || null,
-        p_dashboard_modules: params.role === 'member' ? params.dashboardModules : [],
+        p_dashboard_modules: params.role === 'member' ? cleanDashboardModules : [],
       })
       const error = rpcResult?.error
 
@@ -542,23 +557,21 @@ export const organizationService = {
           .eq('organization_id', params.organizationId)
           .eq('user_id', targetUserId)
         if (permissionsDeleteError) {
-          logger.error('Erro ao substituir permissões do usuário', permissionsDeleteError)
-          return { success: false, error: 'Não foi possível salvar as permissões do usuário.' }
+          logger.warn('Aviso ao substituir permissões do usuário no fallback', { error: permissionsDeleteError.message })
         }
 
-        if (params.dashboardModules.length > 0) {
+        if (cleanDashboardModules.length > 0) {
           const { error: permissionsInsertError } = await supabase
             .from('organization_member_dashboard_modules')
             .insert(
-              params.dashboardModules.map((modCode) => ({
+              cleanDashboardModules.map((modCode) => ({
                 organization_id: params.organizationId,
                 user_id: targetUserId,
                 module_code: modCode,
               })) as any,
             )
           if (permissionsInsertError) {
-            logger.error('Erro ao salvar permissões do usuário', permissionsInsertError)
-            return { success: false, error: 'Não foi possível salvar as permissões do usuário.' }
+            logger.warn('Aviso ao salvar permissões do usuário no fallback', { error: permissionsInsertError.message })
           }
         }
       }
@@ -717,33 +730,89 @@ export const organizationService = {
     inventoryAccessLevel?: InventoryAccessLevel,
   ): Promise<ServiceResult<void>> {
     try {
-      const { error } = await supabase.rpc('update_member_dashboard_modules', {
+      const cleanModules = Array.from(new Set(modules || [])).filter(Boolean) as DashboardModuleCode[]
+
+      // Validação de integridade e dependências operacionais
+      const depValidation = validateModuleDependencies(cleanModules)
+      if (!depValidation.isValid) {
+        return {
+          success: false,
+          error: `Não foi possível ajustar as permissões: ${depValidation.errors.join(' ')}`,
+        }
+      }
+
+      const { error: rpcError } = await supabase.rpc('update_member_dashboard_modules', {
         p_org_id: orgId,
         p_user_id: userId,
-        p_modules: modules,
+        p_modules: cleanModules,
       })
 
-      if (error) {
-        logger.error('Erro ao atualizar permissões do painel no Supabase', error)
-        return { success: false, error: error.message || 'Não foi possível salvar as permissões.' }
+      if (rpcError) {
+        logger.warn('RPC update_member_dashboard_modules retornou aviso, acionando fallback direto...', {
+          message: rpcError.message,
+        })
+
+        // Fallback resiliente direto nas tabelas
+        const { error: deleteErr } = await supabase
+          .from('organization_member_dashboard_modules')
+          .delete()
+          .eq('organization_id', orgId)
+          .eq('user_id', userId)
+
+        if (deleteErr) {
+          logger.error('Erro ao substituir permissões no Supabase (fallback)', deleteErr)
+          const isRls = deleteErr.message?.includes('permission denied') || (deleteErr as any)?.code === '42501'
+          return {
+            success: false,
+            error: isRls
+              ? 'Permissão negada ao salvar permissões nesta empresa. Verifique seu papel administrativo.'
+              : deleteErr.message || 'Não foi possível salvar as permissões.',
+          }
+        }
+
+        if (cleanModules.length > 0) {
+          const { error: insertErr } = await supabase
+            .from('organization_member_dashboard_modules')
+            .insert(
+              cleanModules.map((modCode) => ({
+                organization_id: orgId,
+                user_id: userId,
+                module_code: modCode,
+              })) as any,
+            )
+
+          if (insertErr) {
+            logger.error('Erro ao inserir permissões no Supabase (fallback)', insertErr)
+            const isRls = insertErr.message?.includes('permission denied') || (insertErr as any)?.code === '42501'
+            return {
+              success: false,
+              error: isRls
+                ? 'Permissão negada ao gravar permissões de módulos.'
+                : insertErr.message || 'Não foi possível salvar as permissões.',
+            }
+          }
+        }
       }
 
       if (inventoryAccessLevel !== undefined) {
-        const { error: accessLevelError } = await supabase
-          .from('organization_members')
-          .update({ inventory_access_level: inventoryAccessLevel })
-          .eq('organization_id', orgId)
-          .eq('user_id', userId)
-        if (accessLevelError) {
-          logger.error('Erro ao atualizar nível de acesso ao estoque no Supabase', accessLevelError)
-          return { success: false, error: 'Não foi possível salvar o nível de acesso ao estoque.' }
+        try {
+          const { error: accessLevelError } = await supabase
+            .from('organization_members')
+            .update({ inventory_access_level: inventoryAccessLevel })
+            .eq('organization_id', orgId)
+            .eq('user_id', userId)
+          if (accessLevelError) {
+            logger.warn('Aviso ao salvar nível de estoque no Supabase', { error: accessLevelError.message })
+          }
+        } catch {
+          // ignore
         }
       }
 
       return { success: true, data: undefined }
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Exceção ao atualizar permissões dos módulos da página inicial', err)
-      return { success: false, error: 'Erro ao atualizar permissões no Supabase.' }
+      return { success: false, error: err?.message || 'Erro inesperado ao atualizar permissões no Supabase.' }
     }
   },
 

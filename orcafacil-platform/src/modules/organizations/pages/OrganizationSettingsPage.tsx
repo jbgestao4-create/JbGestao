@@ -4,6 +4,12 @@ import { useOrganization } from '../context/OrganizationContext'
 import { organizationService } from '../services/organization.service'
 import { useModuleAccess } from '@modules/access-control/context/ModuleAccessContext'
 import { DASHBOARD_MODULES } from '@modules/access-control/services/module-access.service'
+import {
+  MODULE_DEPENDENCY_RULES,
+  validateModuleDependencies,
+  resolveDependenciesOnSelect,
+  checkDependenciesOnDeselect,
+} from '@modules/access-control/services/module-dependencies.service'
 import { companyManagementService } from '@modules/companies/services/company-management.service'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { isSystemOwner } from '@shared/utils/system-owner'
@@ -31,6 +37,8 @@ import {
   Palette,
   Phone,
   Receipt,
+  Info,
+  AlertTriangle,
   X,
 } from 'lucide-react'
 import type {
@@ -227,12 +235,15 @@ export function OrganizationSettingsPage() {
   const [addInventoryLevel, setAddInventoryLevel] = useState<InventoryAccessLevel>(3)
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [addDependencyNotice, setAddDependencyNotice] = useState<string | null>(null)
 
   // Modal de edição de permissões de membro existente
   const [editingMember, setEditingMember] = useState<OrganizationMemberDetail | null>(null)
   const [editDashboardModules, setEditDashboardModules] = useState<DashboardModuleCode[]>([])
   const [editInventoryLevel, setEditInventoryLevel] = useState<InventoryAccessLevel>(3)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editModulesError, setEditModulesError] = useState<string | null>(null)
+  const [editDependencyNotice, setEditDependencyNotice] = useState<string | null>(null)
   const [memberToEdit, setMemberToEdit] = useState<OrganizationMemberDetail | null>(null)
   const [editMemberName, setEditMemberName] = useState('')
   const [editMemberJobTitle, setEditMemberJobTitle] = useState('')
@@ -355,16 +366,59 @@ export function OrganizationSettingsPage() {
     return list
   }, [members, user, profile, isDeveloper, currentOrganization?.id])
 
+  const getModuleDependencyRequirementText = (modCode: DashboardModuleCode): string | null => {
+    const rule = MODULE_DEPENDENCY_RULES.find((r) => r.targetModule === modCode)
+    if (!rule) return null
+    const strictRequires = rule.requires.filter((r) => r.strict)
+    if (strictRequires.length === 0) return null
+    return `Requer: ${strictRequires.map((r) => `${r.name} (${r.code})`).join(', ')}`
+  }
+
   const handleToggleDashboardModule = (modCode: DashboardModuleCode) => {
-    setSelectedDashboardModules((prev) =>
-      prev.includes(modCode) ? prev.filter((code) => code !== modCode) : [...prev, modCode],
-    )
+    const isCurrentlySelected = selectedDashboardModules.includes(modCode)
+    const availableCodes = companyModules.map((m) => m.code)
+
+    if (!isCurrentlySelected) {
+      const { autoAddedModules, message } = resolveDependenciesOnSelect(
+        modCode,
+        selectedDashboardModules,
+        availableCodes,
+      )
+      const next = Array.from(new Set([...selectedDashboardModules, modCode, ...autoAddedModules]))
+      setSelectedDashboardModules(next)
+      setAddDependencyNotice(message)
+    } else {
+      const { hasDependents, warningMessage } = checkDependenciesOnDeselect(
+        modCode,
+        selectedDashboardModules,
+      )
+      setSelectedDashboardModules((prev) => prev.filter((code) => code !== modCode))
+      setAddDependencyNotice(hasDependents ? warningMessage : null)
+    }
   }
 
   const handleToggleEditModule = (modCode: DashboardModuleCode) => {
-    setEditDashboardModules((prev) =>
-      prev.includes(modCode) ? prev.filter((c) => c !== modCode) : [...prev, modCode],
-    )
+    setEditModulesError(null)
+    const isCurrentlySelected = editDashboardModules.includes(modCode)
+    const availableCodes = companyModules.map((m) => m.code)
+
+    if (!isCurrentlySelected) {
+      const { autoAddedModules, message } = resolveDependenciesOnSelect(
+        modCode,
+        editDashboardModules,
+        availableCodes,
+      )
+      const next = Array.from(new Set([...editDashboardModules, modCode, ...autoAddedModules]))
+      setEditDashboardModules(next)
+      setEditDependencyNotice(message)
+    } else {
+      const { hasDependents, warningMessage } = checkDependenciesOnDeselect(
+        modCode,
+        editDashboardModules,
+      )
+      setEditDashboardModules((prev) => prev.filter((c) => c !== modCode))
+      setEditDependencyNotice(hasDependents ? warningMessage : null)
+    }
   }
 
   const isAllAddModulesSelected =
@@ -372,6 +426,7 @@ export function OrganizationSettingsPage() {
     companyModules.every((mod) => selectedDashboardModules.includes(mod.code))
 
   const handleToggleSelectAllAddModules = () => {
+    setAddDependencyNotice(null)
     if (isAllAddModulesSelected) {
       setSelectedDashboardModules([])
     } else {
@@ -384,6 +439,8 @@ export function OrganizationSettingsPage() {
     companyModules.every((mod) => editDashboardModules.includes(mod.code))
 
   const handleToggleSelectAllEditModules = () => {
+    setEditDependencyNotice(null)
+    setEditModulesError(null)
     if (isAllEditModulesSelected) {
       setEditDashboardModules([])
     } else {
@@ -410,6 +467,7 @@ export function OrganizationSettingsPage() {
     setSelectedDashboardModules([])
     setAddInventoryLevel(3)
     setFormError('')
+    setAddDependencyNotice(null)
     setIsAddModalOpen(true)
   }
 
@@ -434,12 +492,22 @@ export function OrganizationSettingsPage() {
     }
 
     if (
+      companyModules.length > 0 &&
       role === 'member' &&
       canEditModulePermissions &&
       selectedDashboardModules.length === 0
     ) {
       setFormError('Selecione ao menos um módulo ativo da organização.')
       return
+    }
+
+    const availableCodes = companyModules.map((m) => m.code)
+    if (role === 'member' && selectedDashboardModules.length > 0) {
+      const depValidation = validateModuleDependencies(selectedDashboardModules, availableCodes)
+      if (!depValidation.isValid) {
+        setFormError(`Não foi possível ajustar as permissões: ${depValidation.errors.join(' ')}`)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -467,6 +535,7 @@ export function OrganizationSettingsPage() {
       setPassword('')
       setSelectedDashboardModules([])
       setFormError('')
+      setAddDependencyNotice(null)
 
       // Atualização otimista imediata na interface
       const newMember: OrganizationMemberDetail = {
@@ -509,6 +578,8 @@ export function OrganizationSettingsPage() {
     setEditingMember(member)
     setEditDashboardModules(member.dashboardModules ?? [])
     setEditInventoryLevel(member.inventoryAccessLevel ?? 3)
+    setEditDependencyNotice(null)
+    setEditModulesError(null)
   }
 
   const handleSaveEditModules = async () => {
@@ -520,7 +591,16 @@ export function OrganizationSettingsPage() {
     ) {
       return
     }
+
+    const availableCodes = companyModules.map((m) => m.code)
+    const depValidation = validateModuleDependencies(editDashboardModules, availableCodes)
+    if (!depValidation.isValid) {
+      setEditModulesError(`Não foi possível ajustar as permissões: ${depValidation.errors.join(' ')}`)
+      return
+    }
+
     setIsSavingEdit(true)
+    setEditModulesError(null)
 
     const res = await organizationService.updateMemberDashboardModules(
       currentOrganization.id,
@@ -531,10 +611,11 @@ export function OrganizationSettingsPage() {
 
     if (res.success) {
       setEditingMember(null)
+      setEditModulesError(null)
       await loadMembers()
       await refreshAccess()
     } else {
-      alert(res.error)
+      setEditModulesError(res.error)
     }
 
     setIsSavingEdit(false)
@@ -1061,6 +1142,13 @@ export function OrganizationSettingsPage() {
                     Marque os módulos que este funcionário poderá visualizar e operar:
                   </p>
 
+                  {addDependencyNotice && (
+                    <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 text-xs rounded-xl border border-blue-200 dark:border-blue-800 flex items-start gap-2">
+                      <Info className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
+                      <span className="leading-relaxed">{addDependencyNotice}</span>
+                    </div>
+                  )}
+
                   <div className="space-y-2.5">
                     {companyModules.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-gray-300 p-4 text-center text-xs text-gray-500">
@@ -1069,6 +1157,7 @@ export function OrganizationSettingsPage() {
                     ) : (
                       companyModules.map((mod) => {
                         const isSelected = selectedDashboardModules.includes(mod.code)
+                        const depRequirement = getModuleDependencyRequirementText(mod.code)
 
                         return (
                           <div
@@ -1091,6 +1180,11 @@ export function OrganizationSettingsPage() {
                                   <span className="text-[11px] text-gray-500 block leading-tight">
                                     {mod.description}
                                   </span>
+                                  {depRequirement && (
+                                    <span className="inline-block mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                                      {depRequirement}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <input
@@ -1166,7 +1260,8 @@ export function OrganizationSettingsPage() {
                   disabled={
                     isSubmitting ||
                     !selectedOrganizationId ||
-                    (role === 'member' &&
+                    (companyModules.length > 0 &&
+                      role === 'member' &&
                       canEditModulePermissions &&
                       selectedDashboardModules.length === 0)
                   }
@@ -1266,13 +1361,27 @@ export function OrganizationSettingsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs">
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-gray-900 mb-1">Editar Acesso aos Módulos</h3>
-            <p className="text-xs text-gray-500 mb-4">
+            <p className="text-xs text-gray-500 mb-1">
               Funcionário: <strong>{editingMember.displayName}</strong> ({editingMember.email})
             </p>
             <p className="text-xs text-gray-500 mb-4">
               Módulos desmarcados ficam ocultos na página inicial e não podem ser acessados pelo
               funcionário.
             </p>
+
+            {editModulesError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                <span className="leading-relaxed">{editModulesError}</span>
+              </div>
+            )}
+
+            {editDependencyNotice && (
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 text-xs rounded-xl border border-blue-200 dark:border-blue-800 flex items-start gap-2">
+                <Info className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
+                <span className="leading-relaxed">{editDependencyNotice}</span>
+              </div>
+            )}
 
             <div className="space-y-2.5 mb-6">
               {companyModules.length === 0 ? (
@@ -1282,6 +1391,7 @@ export function OrganizationSettingsPage() {
               ) : (
                 companyModules.map((mod) => {
                   const isSelected = editDashboardModules.includes(mod.code)
+                  const depRequirement = getModuleDependencyRequirementText(mod.code)
 
                   return (
                     <div
@@ -1302,6 +1412,11 @@ export function OrganizationSettingsPage() {
                             <span className="text-[11px] text-gray-500 block leading-tight">
                               {mod.description}
                             </span>
+                            {depRequirement && (
+                              <span className="inline-block mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                                {depRequirement}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <input
