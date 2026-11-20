@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /planos
+Allow: /modulos
+Allow: /politica-de-privacidade
+Allow: /cadastrar-empresa
+Allow: /login
+
+Disallow: /dashboard
+Disallow: /cash
+Disallow: /settings
+Disallow: /orcafacil
+Disallow: /admin
+
+Sitemap: https://controlesoft.com/sitemap.xml
