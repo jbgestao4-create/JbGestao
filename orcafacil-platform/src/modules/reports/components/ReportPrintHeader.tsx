@@ -5,7 +5,7 @@ interface ReportPrintHeaderProps {
   reportSubtitle?: string
   reportType?: string
   moduleTitle?: string
-  totalRecords: number
+  totalRecords?: number
   totalAmountLabel?: string
   totalAmountValue?: string
   emissionWeekday: string
@@ -20,11 +20,11 @@ export function ReportPrintHeader({
   organizationLogoUrl,
   reportTitle,
   reportSubtitle = 'Central de Relatórios • Gestão Empresarial',
-  reportType,
+  reportType: _reportType,
   moduleTitle: _moduleTitle,
-  totalRecords,
-  totalAmountLabel,
-  totalAmountValue,
+  totalRecords: _totalRecords,
+  totalAmountLabel: _totalAmountLabel,
+  totalAmountValue: _totalAmountValue,
   emissionWeekday,
   emissionDate,
   emissionTime,
@@ -32,25 +32,25 @@ export function ReportPrintHeader({
   periodRange,
 }: ReportPrintHeaderProps) {
   return (
-    <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6">
-      <div className="flex items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
+    <div className="hidden print:block border-b-2 border-slate-900 pb-2 mb-2.5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
           <img
             src={organizationLogoUrl || '/controlesoft-logo.png'}
             alt="Logo da Empresa"
-            className="h-14 max-h-16 max-w-[180px] object-contain"
+            className="h-10 max-h-12 max-w-[140px] object-contain"
           />
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">
+            <h2 className="text-base font-black uppercase tracking-tight text-slate-900 leading-tight">
               {organizationName || 'ControleSoft Gestão Empresarial'}
             </h2>
-            <p className="text-xs font-semibold text-slate-600">
+            <p className="text-[10px] font-semibold text-slate-600 leading-tight">
               {reportSubtitle} • {reportTitle}
             </p>
           </div>
         </div>
 
-        <div className="text-right text-[11px] text-slate-700 leading-tight space-y-0.5 border-l border-slate-300 pl-4">
+        <div className="text-right text-[9.5px] text-slate-700 leading-tight space-y-0.5 border-l border-slate-300 pl-3">
           <div>
             <span className="font-bold">Dia da Semana:</span> {emissionWeekday}
           </div>
@@ -64,27 +64,6 @@ export function ReportPrintHeader({
             <span className="font-bold">Filtro de Período:</span> {periodLabel}
             {periodRange ? ` (${periodRange})` : ''}
           </div>
-        </div>
-      </div>
-
-      <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
-        {reportType ? (
-          <div className="font-bold text-slate-800 bg-slate-50 px-2.5 py-1 rounded border border-slate-300">
-            <span className="text-slate-500 font-semibold uppercase mr-1">Tipo do Relatório:</span>
-            <span className="text-slate-900 font-black uppercase">{reportType}</span>
-          </div>
-        ) : (
-          <div />
-        )}
-        <div className="flex items-center gap-4 font-semibold text-slate-700">
-          {totalAmountLabel && totalAmountValue && (
-            <span>
-              {totalAmountLabel}: <span className="font-bold text-slate-900">{totalAmountValue}</span>
-            </span>
-          )}
-          <span>
-            Total de Registros: <span className="font-bold text-slate-900">{totalRecords}</span>
-          </span>
         </div>
       </div>
     </div>

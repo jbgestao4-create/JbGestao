@@ -220,13 +220,24 @@ export function CustomerFormPage() {
       return
     }
 
+    // 1. Validação do Nome Completo / Razão Social (Obrigatório)
+    if (!name.trim() || name.trim().length < 2) {
+      setFormError(
+        personType === 'individual'
+          ? 'Informe o nome completo do cliente (mínimo de 2 caracteres).'
+          : 'Informe a razão social do cliente (mínimo de 2 caracteres).',
+      )
+      return
+    }
+
+    // 2. Validação de CPF / CNPJ (Obrigatório e com conferência matemática de dígitos)
     const cleanDocument = sanitizeCustomerDocument(document, personType)
     const requiredDocumentLength = personType === 'individual' ? 11 : 14
-    if (cleanDocument.length !== requiredDocumentLength) {
+    if (!cleanDocument || cleanDocument.length !== requiredDocumentLength) {
       const lengthMessage =
         personType === 'individual'
-          ? 'Informe o CPF completo com 11 dígitos.'
-          : 'Informe o CNPJ completo com 14 caracteres.'
+          ? 'O CPF é obrigatório. Informe os 11 dígitos do CPF.'
+          : 'O CNPJ é obrigatório. Informe os 14 caracteres do CNPJ.'
       setFormError(lengthMessage)
       setDocumentError(lengthMessage)
       setDocumentSuccess('')
@@ -245,13 +256,28 @@ export function CustomerFormPage() {
       return
     }
 
-    if (!skipPostalCode && postalCode.replace(/\D/g, '').length !== 8) {
-      setFormError('Informe um CEP com 8 dígitos ou marque a opção para cadastrar sem CEP.')
+    // 3. Validação de Telefone / WhatsApp (Obrigatório com DDD)
+    const phoneDigits = phone.replace(/\D/g, '')
+    if (!phoneDigits || phoneDigits.length < 10) {
+      setFormError('O Telefone / WhatsApp é obrigatório. Informe um número válido com DDD (mínimo de 10 dígitos).')
       return
     }
 
+    // 4. Validação de CEP (Obrigatório, a menos que "Sem CEP" esteja marcado)
+    if (!skipPostalCode && postalCode.replace(/\D/g, '').length !== 8) {
+      setFormError('Informe um CEP válido com 8 dígitos ou marque a opção para cadastrar sem CEP.')
+      return
+    }
+
+    // 5. Validação de Endereço Completo (Obrigatório)
+    if (!address.trim() || address.trim().length < 3) {
+      setFormError('O Endereço Completo é obrigatório. Informe o logradouro, bairro e cidade.')
+      return
+    }
+
+    // 6. Validação do Número (Obrigatório)
     if (!addressNumber.trim()) {
-      setFormError('Informe o número do endereço.')
+      setFormError('O Número do endereço é obrigatório. Informe o número ou S/N se não houver.')
       return
     }
 
@@ -341,6 +367,7 @@ export function CustomerFormPage() {
           )}
 
           <form
+            noValidate
             onSubmit={(event) => {
               void handleSubmit(event)
             }}

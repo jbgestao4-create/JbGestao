@@ -16,7 +16,6 @@ import { formatPhoneNumber } from '@shared/utils/phone'
 import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import {
-  BarChart3,
   Boxes,
   Briefcase,
   CheckCircle2,
@@ -41,16 +40,9 @@ import { ReportPrintHeader } from '../components/ReportPrintHeader'
 import { ReportPrintFooter } from '../components/ReportPrintFooter'
 import { ReportActionBar } from '../components/ReportActionBar'
 import { CashManagementReportView } from '../components/CashManagementReportView'
-import { SalesMainChartView } from '../components/SalesMainChartView'
 
 // Tipos principais de relatórios conforme solicitado pelo usuário
-export type ReportView =
-  | 'home'
-  | 'registrations'
-  | 'financial'
-  | 'inventory_services'
-  | 'cash_management'
-  | 'sales_chart'
+export type ReportView = 'home' | 'registrations' | 'financial' | 'inventory_services' | 'cash_management'
 
 // Abas de cada tipo de relatório
 export type RegistrationsTab = 'users' | 'employees' | 'suppliers' | 'customers'
@@ -94,11 +86,9 @@ export function ReportsPage() {
             rawView === 'estoque' ||
             rawView === 'servicos'
           ? 'inventory_services'
-          : rawView === 'cash_management' || rawView === 'caixa'
+          : rawView === 'cash_management' || rawView === 'caixa' || rawView === 'cash'
             ? 'cash_management'
-            : rawView === 'sales_chart' || rawView === 'grafico_vendas'
-              ? 'sales_chart'
-              : 'home'
+            : 'home'
 
   // ============================================================================
   // 1. RELATÓRIOS CADASTRAIS (Usuários, Funcionários, Fornecedores, Clientes)
@@ -196,8 +186,6 @@ export function ReportsPage() {
   const isWideReport = useMemo(() => {
     if (currentView === 'financial') return true
     if (currentView === 'inventory_services') return true
-    if (currentView === 'cash_management') return true
-    if (currentView === 'sales_chart') return true
     if (currentView === 'registrations') {
       return registrationsTab === 'customers' || registrationsTab === 'suppliers'
     }
@@ -460,23 +448,33 @@ export function ReportsPage() {
   // ============================================================================
   // CÁLCULOS E FILTRAGEM: RELATÓRIOS FINANCEIROS (O.S, Orçamentos, Vendas)
   // ============================================================================
-  const finEffectiveRange = useMemo<DateRangeFilter & { label: string }>(() => {
+  const finEffectiveRange: DateRangeFilter = useMemo(() => {
     if (finPeriodMode === 'day') {
-      return { preset: 'custom', startDate: finSelectedDay, endDate: finSelectedDay, label: `Dia ${finSelectedDay.split('-').reverse().join('/')}` }
+      return { preset: 'custom', startDate: finSelectedDay, endDate: finSelectedDay }
     }
     if (finPeriodMode === 'month') {
       const [year, month] = finSelectedMonth.split('-')
       const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate()
       const startDate = `${finSelectedMonth}-01`
       const endDate = `${finSelectedMonth}-${String(lastDay).padStart(2, '0')}`
-      return { preset: 'custom', startDate, endDate, label: `Mês ${month}/${year}` }
+      return { preset: 'custom', startDate, endDate }
     }
     return {
       preset: finDateFilter.preset,
       startDate: finDateFilter.startDate,
       endDate: finDateFilter.endDate,
-      label: `${finDateFilter.startDate.split('-').reverse().join('/')} a ${finDateFilter.endDate.split('-').reverse().join('/')}`,
     }
+  }, [finPeriodMode, finSelectedDay, finSelectedMonth, finDateFilter])
+
+  const finPeriodLabel = useMemo(() => {
+    if (finPeriodMode === 'day') {
+      return `Dia ${finSelectedDay.split('-').reverse().join('/')}`
+    }
+    if (finPeriodMode === 'month') {
+      const [year, month] = finSelectedMonth.split('-')
+      return `Mês ${month}/${year}`
+    }
+    return PERIOD_LABELS[finDateFilter.preset]
   }, [finPeriodMode, finSelectedDay, finSelectedMonth, finDateFilter])
 
   interface UnifiedFinancialRecord {
@@ -1096,42 +1094,7 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* MÓDULO EM DESTAQUE: GRÁFICO PRINCIPAL DE VENDAS – ALTA VISIBILIDADE */}
-        <Card className="group relative overflow-hidden rounded-2xl border-2 border-blue-200 dark:border-blue-900/70 hover:border-blue-500 shadow-xs hover:shadow-md transition-all bg-gradient-to-r from-blue-50/60 via-white to-emerald-50/40 dark:from-blue-950/30 dark:via-slate-900 dark:to-emerald-950/20">
-          <CardContent className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className="rounded-xl bg-blue-600 p-3 text-white shadow-xs shrink-0">
-                <BarChart3 className="h-6 w-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    GRÁFICO PRINCIPAL DE VENDAS — ALTA VISIBILIDADE
-                  </h3>
-                  <span className="rounded-full bg-blue-100 dark:bg-blue-950/70 px-3 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                    DESTAQUE
-                  </span>
-                </div>
-                <p className="mt-1.5 text-xs leading-5 text-gray-600 dark:text-slate-400 max-w-3xl">
-                  Gráfico amplo em barras verticais ou linhas com faturamento por dia, quantidade de vendas, ticket médio, destaque de maior/menor dia e comparativo com o período anterior (Hoje, 7 dias, Semana, 30 dias, Mês e Ano).
-                </p>
-              </div>
-            </div>
-
-            <Button
-              onClick={() => navigateToView('sales_chart')}
-              className="shrink-0 justify-between gap-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm px-5 py-2.5"
-            >
-              <span className="inline-flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Abrir Gráfico Principal
-              </span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* OS MÓDULOS PRINCIPAIS DE RELATÓRIO */}
+        {/* OS 3 MÓDULOS PRINCIPAIS DE RELATÓRIO */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
@@ -1142,174 +1105,182 @@ export function ReportsPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {/* 1. MÓDULO: RELATÓRIOS CADASTRAIS */}
-            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
-              <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
+            <div className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-blue-300 dark:hover:border-slate-700 hover:shadow-sm">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-600 dark:text-blue-400">
-                      <UserCheck className="h-6 w-6" />
-                    </div>
-                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+                      <UserCheck className="h-5 w-5" />
+                    </span>
+                    <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
                       MÓDULO 1
                     </span>
                   </div>
-                  <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    RELATÓRIOS CADASTRAIS
-                  </h3>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
-                    Auditoria completa de todos os cadastros do sistema: usuários de acesso, equipe de funcionários, fornecedores homologados e carteira de clientes.
-                  </p>
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
-                    <span>Usuários: <b className="text-slate-900 dark:text-white">{dataset.members.length}</b></span>
-                    <span>Funcionários: <b className="text-slate-900 dark:text-white">{dataset.members.filter((m) => m.role !== 'owner').length}</b></span>
-                    <span>Fornecedores: <b className="text-slate-900 dark:text-white">{dataset.suppliers.length}</b></span>
-                    <span>Clientes: <b className="text-slate-900 dark:text-white">{dataset.customers.length}</b></span>
+                  <div className="mt-5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      RELATÓRIOS CADASTRAIS
+                    </h3>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      Auditoria completa de todos os cadastros do sistema: usuários de acesso, equipe de funcionários, fornecedores homologados e carteira de clientes.
+                    </p>
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>Usuários: <b className="text-slate-900 dark:text-white">{dataset.members.length}</b></span>
+                      <span>Funcionários: <b className="text-slate-900 dark:text-white">{dataset.members.filter((m) => m.role !== 'owner').length}</b></span>
+                      <span>Fornecedores: <b className="text-slate-900 dark:text-white">{dataset.suppliers.length}</b></span>
+                      <span>Clientes: <b className="text-slate-900 dark:text-white">{dataset.customers.length}</b></span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <Button
-                    size="sm"
+                <div className="mt-auto pt-5">
+                  <button
+                    type="button"
                     onClick={() => navigateToView('registrations')}
-                    className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
+                    className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="inline-flex items-center gap-2">
                       <UserCheck className="h-4 w-4" />
                       Abrir Relatórios Cadastrais
                     </span>
                     <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </div>
 
             {/* 2. MÓDULO: RELATÓRIOS FINANCEIROS */}
-            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
-              <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
+            <div className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-blue-300 dark:hover:border-slate-700 hover:shadow-sm">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-600 dark:text-blue-400">
-                      <CreditCard className="h-6 w-6" />
-                    </div>
-                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+                      <CreditCard className="h-5 w-5" />
+                    </span>
+                    <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
                       MÓDULO 2
                     </span>
                   </div>
-                  <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    RELATÓRIOS FINANCEIROS
-                  </h3>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
-                    Controle financeiro consolidado com alternância entre Ordens de Serviço (O.S), Orçamentos e Vendas efetuadas (PDV e Balcão).
-                  </p>
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
-                    <span>O.S Emitidas: <b className="text-slate-900 dark:text-white">{dataset.serviceOrders.length}</b></span>
-                    <span>Orçamentos: <b className="text-slate-900 dark:text-white">{dataset.quotes.length}</b></span>
-                    <span>Vendas Realizadas: <b className="text-slate-900 dark:text-white">{dataset.sales.length}</b></span>
-                    <span>Total Registros: <b className="text-slate-900 dark:text-white">{dataset.serviceOrders.length + dataset.quotes.length + dataset.sales.length}</b></span>
+                  <div className="mt-5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      RELATÓRIOS FINANCEIROS
+                    </h3>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      Controle financeiro consolidado com alternância entre Ordens de Serviço (O.S), Orçamentos e Vendas efetuadas (PDV e Balcão).
+                    </p>
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>O.S Emitidas: <b className="text-slate-900 dark:text-white">{dataset.serviceOrders.length}</b></span>
+                      <span>Orçamentos: <b className="text-slate-900 dark:text-white">{dataset.quotes.length}</b></span>
+                      <span>Vendas Realizadas: <b className="text-slate-900 dark:text-white">{dataset.sales.length}</b></span>
+                      <span>Total Registros: <b className="text-slate-900 dark:text-white">{dataset.serviceOrders.length + dataset.quotes.length + dataset.sales.length}</b></span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <Button
-                    size="sm"
+                <div className="mt-auto pt-5">
+                  <button
+                    type="button"
                     onClick={() => navigateToView('financial')}
-                    className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
+                    className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="inline-flex items-center gap-2">
                       <CreditCard className="h-4 w-4" />
                       Abrir Relatórios Financeiros
                     </span>
                     <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </div>
 
             {/* 3. MÓDULO: RELATÓRIO DE ESTOQUE E SERVIÇO */}
-            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
-              <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
+            <div className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-blue-300 dark:hover:border-slate-700 hover:shadow-sm">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div className="rounded-xl bg-blue-50 dark:bg-blue-950/60 p-3 text-blue-600 dark:text-blue-400">
-                      <Boxes className="h-6 w-6" />
-                    </div>
-                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+                      <Boxes className="h-5 w-5" />
+                    </span>
+                    <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
                       MÓDULO 3
                     </span>
                   </div>
-                  <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    ESTOQUE E SERVIÇO
-                  </h3>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
-                    Controle de materiais e serviços cadastrados, ranking de itens mais movimentados e histórico de saídas vinculado ao cliente e à venda utilizada.
-                  </p>
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
-                    <span>Materiais / SKUs: <b className="text-slate-900 dark:text-white">{dataset.inventory.length}</b></span>
-                    <span>Serviços: <b className="text-slate-900 dark:text-white">{dataset.services.length}</b></span>
-                    <span>Saídas Registradas: <b className="text-slate-900 dark:text-white">{dataset.quoteItems.length}</b></span>
-                    <span>Total Cadastrado: <b className="text-slate-900 dark:text-white">{dataset.inventory.length + dataset.services.length}</b></span>
+                  <div className="mt-5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      ESTOQUE E SERVIÇO
+                    </h3>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      Controle de materiais e serviços cadastrados, ranking de itens mais movimentados e histórico de saídas vinculado ao cliente e à venda utilizada.
+                    </p>
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>Materiais / SKUs: <b className="text-slate-900 dark:text-white">{dataset.inventory.length}</b></span>
+                      <span>Serviços: <b className="text-slate-900 dark:text-white">{dataset.services.length}</b></span>
+                      <span>Saídas: <b className="text-slate-900 dark:text-white">{dataset.quoteItems.length}</b></span>
+                      <span>Total Cadastrado: <b className="text-slate-900 dark:text-white">{dataset.inventory.length + dataset.services.length}</b></span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <Button
-                    size="sm"
+                <div className="mt-auto pt-5">
+                  <button
+                    type="button"
                     onClick={() => navigateToView('inventory_services')}
-                    className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
+                    className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="inline-flex items-center gap-2">
                       <Boxes className="h-4 w-4" />
                       Abrir Estoque e Serviços
                     </span>
                     <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </div>
 
             {/* 4. MÓDULO: GERENCIAMENTO DE CAIXA */}
-            <Card className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between bg-white dark:bg-slate-900">
-              <CardContent className="p-6 flex flex-col justify-between h-full space-y-4">
+            <div className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-emerald-300 dark:hover:border-slate-700 hover:shadow-sm">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/60 p-3 text-emerald-600 dark:text-emerald-400">
-                      <Wallet className="h-6 w-6" />
-                    </div>
-                    <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                      <Wallet className="h-5 w-5" />
+                    </span>
+                    <span className="rounded-md bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
                       MÓDULO 4
                     </span>
                   </div>
-                  <h3 className="mt-4 text-base font-bold tracking-wide text-gray-900 dark:text-white">
-                    GERENCIAMENTO DE CAIXA
-                  </h3>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-slate-400">
-                    Relatórios por dia, semana, mês e por funcionário, além do Livro do Caixa detalhado e completo com entradas, saídas e saldo acumulado.
-                  </p>
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-slate-400">
-                    <span>Sessões: <b className="text-slate-900 dark:text-white">{dataset.cashSessions.length}</b></span>
-                    <span>Mov. Caixa: <b className="text-slate-900 dark:text-white">{dataset.cashMovements.length}</b></span>
-                    <span>Lançamentos: <b className="text-slate-900 dark:text-white">{dataset.cashEntries.length}</b></span>
-                    <span>Vendas PDV: <b className="text-slate-900 dark:text-white">{dataset.sales.length}</b></span>
+                  <div className="mt-5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      GERENCIAMENTO DE CAIXA
+                    </h3>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      Relatórios por dia, semana, mês e por funcionário, além do Livro do Caixa detalhado e completo com entradas, saídas e saldo acumulado.
+                    </p>
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>Sessões: <b className="text-slate-900 dark:text-white">{dataset.cashSessions.length}</b></span>
+                      <span>Mov. Caixa: <b className="text-slate-900 dark:text-white">{dataset.cashMovements.length}</b></span>
+                      <span>Lançamentos: <b className="text-slate-900 dark:text-white">{dataset.cashEntries.length}</b></span>
+                      <span>Vendas PDV: <b className="text-slate-900 dark:text-white">{dataset.sales.length}</b></span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <Button
-                    size="sm"
+                <div className="mt-auto pt-5">
+                  <button
+                    type="button"
                     onClick={() => navigateToView('cash_management')}
-                    className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                    className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="inline-flex items-center gap-2">
                       <Wallet className="h-4 w-4" />
                       Abrir Relatório de Caixa
                     </span>
                     <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </div>
           </div>
         </div>
       </div>
@@ -1325,7 +1296,15 @@ export function ReportsPage() {
         <ReportPrintHeader
           organizationName={currentOrganization?.name}
           organizationLogoUrl={currentOrganization?.logoUrl}
-          reportTitle="Relatório Geral de Cadastros"
+          reportTitle={`Relatório de Cadastros — ${
+            registrationsTab === 'users'
+              ? 'Usuários de Acesso'
+              : registrationsTab === 'employees'
+                ? 'Funcionários'
+                : registrationsTab === 'suppliers'
+                  ? 'Fornecedores'
+                  : 'Clientes'
+          }`}
           reportType={
             registrationsTab === 'users'
               ? 'Usuários de Acesso'
@@ -1744,7 +1723,13 @@ export function ReportsPage() {
         <ReportPrintHeader
           organizationName={currentOrganization?.name}
           organizationLogoUrl={currentOrganization?.logoUrl}
-          reportTitle="Relatórios Financeiros & Comerciais"
+          reportTitle={`Relatórios Financeiros — ${
+            financialTab === 'orders'
+              ? 'Ordens de Serviço (O.S)'
+              : financialTab === 'quotes'
+                ? 'Orçamentos & Propostas'
+                : 'Vendas Realizadas'
+          }`}
           reportType={
             financialTab === 'orders'
               ? 'Ordens de Serviço (O.S)'
@@ -1758,7 +1743,7 @@ export function ReportsPage() {
           emissionWeekday={emissionWeekday}
           emissionDate={emissionDate}
           emissionTime={emissionTime}
-          periodLabel={finEffectiveRange.label}
+          periodLabel={finPeriodLabel}
           periodRange={`${finEffectiveRange.startDate.split('-').reverse().join('/')} a ${finEffectiveRange.endDate.split('-').reverse().join('/')}`}
         />
 
@@ -2122,7 +2107,13 @@ export function ReportsPage() {
         <ReportPrintHeader
           organizationName={currentOrganization?.name}
           organizationLogoUrl={currentOrganization?.logoUrl}
-          reportTitle="Relatório de Estoque e Serviços"
+          reportTitle={`Relatório de Estoque e Serviços — ${
+            invServicesTab === 'movements'
+              ? 'Movimentações e Saídas'
+              : invServicesTab === 'inventory'
+                ? 'Estoque Atual'
+                : 'Serviços Cadastrados'
+          }`}
           reportType={
             invServicesTab === 'movements'
               ? 'Saídas & Movimentações de Materiais e Serviços'
@@ -2692,7 +2683,7 @@ export function ReportsPage() {
   }
 
   // ============================================================================
-  // VIEW: 4. RELATÓRIOS DE GERENCIAMENTO DE CAIXA
+  // VIEW: 4. RELATÓRIO DE GERENCIAMENTO DE CAIXA
   // ============================================================================
   if (currentView === 'cash_management') {
     return (
@@ -2706,20 +2697,6 @@ export function ReportsPage() {
         printOrientationMode={printOrientationMode}
         effectiveOrientation={effectiveOrientation}
         onPrintOrientationChange={setPrintOrientationMode}
-      />
-    )
-  }
-
-  // ============================================================================
-  // VIEW: 5. GRÁFICO PRINCIPAL DE VENDAS – ALTA VISIBILIDADE
-  // ============================================================================
-  if (currentView === 'sales_chart') {
-    return (
-      <SalesMainChartView
-        dataset={dataset}
-        isRefreshing={isLoading}
-        onRefresh={() => void loadData()}
-        onBack={() => navigateToView('home')}
       />
     )
   }

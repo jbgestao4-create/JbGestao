@@ -216,21 +216,42 @@ export function SupplierFormPage() {
       return
     }
     if (isEditing && !isDetailsEditing) return
-    if (form.name.trim().length < 2) {
-      setFormError('Informe o nome ou a razão social do fornecedor.')
+
+    // 1. Razão Social / Nome (Obrigatório)
+    if (!form.name.trim() || form.name.trim().length < 2) {
+      setFormError('A Razão Social / Nome do fornecedor é obrigatória (mínimo de 2 caracteres).')
       return
     }
+
+    // 2. CNPJ (Obrigatório e válido)
     const cleanDoc = sanitizeCustomerDocument(form.document, 'company')
-    if (cleanDoc) {
-      if (cleanDoc.length !== 14) {
-        setFormError('Informe o CNPJ completo com 14 caracteres ou deixe o campo em branco.')
-        return
-      }
-      const val = validateCnpj(cleanDoc)
-      if (!val.isValid) {
-        setFormError(val.error ?? CNPJ_INVALID_ERROR)
-        return
-      }
+    if (!cleanDoc || cleanDoc.length !== 14) {
+      const msg = 'O CNPJ é obrigatório. Informe o CNPJ completo com 14 caracteres.'
+      setFormError(msg)
+      setDocumentError(msg)
+      setDocumentSuccess('')
+      return
+    }
+    const val = validateCnpj(cleanDoc)
+    if (!val.isValid) {
+      const msg = val.error ?? CNPJ_INVALID_ERROR
+      setFormError(msg)
+      setDocumentError(msg)
+      setDocumentSuccess('')
+      return
+    }
+
+    // 3. Telefone / WhatsApp (Obrigatório com DDD)
+    const cleanPhone = form.phone.replace(/\D/g, '')
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setFormError('O Telefone / WhatsApp é obrigatório. Informe um número de contato com DDD (mínimo de 10 dígitos).')
+      return
+    }
+
+    // 4. Endereço (Obrigatório)
+    if (!form.address.trim() || form.address.trim().length < 3) {
+      setFormError('O Endereço é obrigatório. Informe o endereço completo do fornecedor.')
+      return
     }
 
     setIsSaving(true)
@@ -360,6 +381,7 @@ export function SupplierFormPage() {
           )}
 
           <form
+            noValidate
             onSubmit={(event) => {
               void handleSubmit(event)
             }}
@@ -379,7 +401,7 @@ export function SupplierFormPage() {
                 required
               />
               <Input
-                label="CNPJ"
+                label="CNPJ *"
                 placeholder="00.000.000/0000-00"
                 name="supplier-document"
                 inputMode="text"
@@ -391,7 +413,8 @@ export function SupplierFormPage() {
                 maxLength={18}
                 error={documentError}
                 success={documentSuccess}
-                helperText={!documentError && !documentSuccess ? "Opcional. Informe 14 caracteres quando preencher." : undefined}
+                helperText={!documentError && !documentSuccess ? "CNPJ obrigatório com 14 caracteres e validação oficial." : undefined}
+                required
               />
               <Input
                 label="Nome do contato"
@@ -405,7 +428,7 @@ export function SupplierFormPage() {
                 }}
               />
               <Input
-                label="Telefone / WhatsApp"
+                label="Telefone / WhatsApp *"
                 placeholder="(31) 90000-0000"
                 name="supplier-phone"
                 type="tel"
@@ -417,6 +440,7 @@ export function SupplierFormPage() {
                 }}
                 inputMode="numeric"
                 maxLength={15}
+                required
               />
               <Input
                 label="E-mail"
@@ -431,7 +455,7 @@ export function SupplierFormPage() {
                 }}
               />
               <Input
-                label="Endereço"
+                label="Endereço *"
                 placeholder="Rua, número, bairro, cidade e estado"
                 name="supplier-address"
                 autoComplete="street-address"
@@ -440,6 +464,7 @@ export function SupplierFormPage() {
                 onChange={(event) => {
                   setForm({ ...form, address: event.target.value })
                 }}
+                required
               />
             </div>
             <label className="block space-y-1.5 text-sm font-medium text-gray-700">

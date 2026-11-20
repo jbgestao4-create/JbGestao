@@ -292,13 +292,24 @@ export function ServiceFormPage() {
     e.preventDefault()
     if (!currentOrganization) return
 
+    if (!serviceCode.trim()) {
+      setErrorMessage('O código do serviço é obrigatório.')
+      setActiveTab('general')
+      return
+    }
+
     if (!name.trim()) {
-      setErrorMessage('Informe o nome do serviço.')
+      setErrorMessage('O nome do serviço é obrigatório.')
       setActiveTab('general')
       return
     }
 
     const salePrice = parseCurrencyInput(salePriceInput)
+    if (salePrice <= 0) {
+      setErrorMessage('O preço de venda do serviço é obrigatório e deve ser maior que zero.')
+      setActiveTab('pricing')
+      return
+    }
     const minimumPrice = parseCurrencyInput(minimumSalePriceInput)
     if (minimumPrice > 0 && salePrice < minimumPrice) {
       setErrorMessage(

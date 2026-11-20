@@ -191,7 +191,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/admin/developer-settings/terms',
-    element: <Navigate to="/admin/terms" replace />,
+    element: <Navigate to="/admin/companies?tab=terms" replace />,
   },
   {
     path: '/admin/developer-settings',

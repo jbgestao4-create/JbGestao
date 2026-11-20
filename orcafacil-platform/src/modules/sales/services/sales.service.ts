@@ -626,8 +626,25 @@ export const salesService = {
         }
       }
 
-      // Validação de quantidade dos itens
+      // Validação estrita: somente materiais e serviços cadastrados podem ser vendidos
       for (const item of effectiveItems) {
+        const isService = item.itemType === 'service' || (!item.inventoryItemId && !!item.serviceId)
+        if (isService) {
+          if (!item.serviceId) {
+            return {
+              success: false,
+              error: `O serviço "${item.description}" não está cadastrado no sistema. Apenas serviços cadastrados podem ser vendidos.`,
+            }
+          }
+        } else {
+          if (!item.inventoryItemId) {
+            return {
+              success: false,
+              error: `O material "${item.description}" não está cadastrado no estoque. Apenas materiais cadastrados podem ser vendidos.`,
+            }
+          }
+        }
+
         const qty = Number(item.quantity)
         if (!Number.isFinite(qty) || qty <= 0) {
           return { success: false, error: `Quantidade inválida para o item "${item.description}".` }

@@ -577,13 +577,14 @@ html.dark * {
 
 /* ==========================================================================
    ESTILOS GLOBAIS DE IMPRESSÃO PROFISSIONAL (PRINT MEDIA)
-   Garante relatórios perfeitamente organizados, com nova logo,
-   sem cabeçalhos, sem barras laterais, sem botões e sem dark mode.
+   Formato planilha Excel ultra-compacto: máxima densidade de linhas por folha,
+   cabeçalho limpo sem barras intermediárias, sem rodapés com visto/assinatura,
+   linhas compactas com bordas nítidas e aproveitamento total da página A4.
    ========================================================================== */
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 0mm;
+    size: auto;
+    margin: 5mm 6mm 5mm 6mm;
   }
 
   /* Força modo claro completo na impressão independente do tema ativo */
@@ -611,7 +612,7 @@ html.dark * {
     background: #ffffff !important;
     color: #0f172a !important;
     margin: 0 !important;
-    padding: 8mm 10mm 10mm 10mm !important;
+    padding: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     min-height: auto !important;
@@ -621,12 +622,28 @@ html.dark * {
     box-sizing: border-box !important;
   }
 
-  /* Remove qualquer barra de rolagem ou corte horizontal na impressão */
+  /* Remove espaçamentos de layout de tela que afastam a tabela e gastam espaço */
+  .space-y-6 > :not([hidden]) ~ :not([hidden]),
+  .space-y-4 > :not([hidden]) ~ :not([hidden]),
+  .space-y-3 > :not([hidden]) ~ :not([hidden]),
+  .space-y-2 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Remove qualquer barra de rolagem, bordas de card ou cortes na impressão */
   .overflow-x-auto,
   .overflow-hidden,
-  .table-responsive {
+  .table-responsive,
+  .print\:overflow-visible {
     overflow: visible !important;
     overflow-x: visible !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   /* Oculta tudo que não faz parte do documento impresso */
@@ -660,8 +677,12 @@ html.dark * {
     visibility: visible !important;
   }
 
-  /* Tabelas limpas para impressão que sempre cabem 100% na largura da folha */
-  table {
+  /* ==========================================================================
+     TABELAS ULTRA-COMPACTAS NO FORMATO PLANILHA EXCEL
+     Maximiza a quantidade de itens por folha na impressão de todos os relatórios
+     ========================================================================== */
+  table,
+  .report-fit-table {
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
@@ -670,42 +691,83 @@ html.dark * {
     page-break-inside: auto !important;
     color: #0f172a !important;
     background-color: #ffffff !important;
+    border: 1px solid #94a3b8 !important;
+    font-size: 7.2pt !important;
   }
 
   thead {
     display: table-header-group !important;
   }
 
-  tr,
-  th,
-  td {
+  tr {
     page-break-inside: avoid !important;
     page-break-after: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  /* Linhas zebradas elegantes de planilha */
+  tbody tr:nth-child(even) td {
+    background-color: #f8fafc !important;
+  }
+
+  tbody tr:nth-child(odd) td {
+    background-color: #ffffff !important;
   }
 
   th {
     background-color: #f1f5f9 !important;
     color: #0f172a !important;
-    border: 1px solid #cbd5e1 !important;
-    padding: 4px 6px !important;
-    font-size: 7.5pt !important;
-    line-height: 1.2 !important;
+    border: 1px solid #94a3b8 !important;
+    padding: 2.5px 4px !important;
+    font-size: 7.2pt !important;
+    line-height: 1.15 !important;
     font-weight: 700 !important;
     white-space: normal !important;
     overflow-wrap: break-word !important;
     word-break: normal !important;
+    text-transform: uppercase !important;
+    vertical-align: middle !important;
   }
 
   td {
-    border: 1px solid #e2e8f0 !important;
-    padding: 4px 6px !important;
-    font-size: 7.5pt !important;
-    line-height: 1.25 !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 2px 4px !important;
+    font-size: 7.2pt !important;
+    line-height: 1.15 !important;
     color: #0f172a !important;
-    background-color: #ffffff !important;
     white-space: normal !important;
     overflow-wrap: break-word !important;
     word-break: normal !important;
+    vertical-align: middle !important;
+  }
+
+  tfoot tr td {
+    background-color: #e2e8f0 !important;
+    border: 1px solid #94a3b8 !important;
+    font-weight: 700 !important;
+    padding: 2.5px 4px !important;
+    font-size: 7.2pt !important;
+    line-height: 1.15 !important;
+  }
+
+  /* Badges e tags dentro das células: tamanho compacto sem esticar as linhas */
+  table span,
+  table [class*='rounded-full'],
+  table [class*='rounded-md'],
+  table [class*='rounded-lg'] {
+    display: inline-block !important;
+    padding: 0 4px !important;
+    font-size: 6.8pt !important;
+    line-height: 1.15 !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+  }
+
+  table td > *,
+  table th > * {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
   }
 
   table .truncate,
@@ -726,7 +788,7 @@ html.dark * {
   .rounded-2xl,
   .rounded-xl,
   .rounded-lg {
-    border-radius: 4px !important;
+    border-radius: 2px !important;
   }
 
   /* Remove sombras que gastam tinta e deixam borrões */

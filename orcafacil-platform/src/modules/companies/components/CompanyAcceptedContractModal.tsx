@@ -426,7 +426,7 @@ export function CompanyAcceptedContractModal({
                         variant="ghost"
                         onClick={() => {
                           onClose()
-                          navigate(`/admin/acceptance-audit?search=${encodeURIComponent(evidenceRecord.receiptNumber)}`)
+                          navigate(`/admin/companies?tab=acceptance-audit&search=${encodeURIComponent(evidenceRecord.receiptNumber)}`)
                         }}
                         className="gap-1 text-xs text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100/60"
                       >

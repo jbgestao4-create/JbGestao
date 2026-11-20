@@ -168,6 +168,13 @@ export const customerService = {
     params: CreateCustomerParams,
   ): Promise<ServiceResult<Customer>> {
     try {
+      if (!params.name || params.name.trim().length < 2) {
+        return {
+          success: false,
+          error: 'O nome do cliente é obrigatório (mínimo de 2 caracteres).',
+        }
+      }
+
       let cleanDocument: string | null = null
       if (params.document && params.document.trim()) {
         const validation = validateCustomerDocument(params.document, params.personType)

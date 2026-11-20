@@ -11,7 +11,6 @@ import {
   GitBranch,
   Settings,
   Activity,
-  Scale,
 } from 'lucide-react'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -135,10 +134,10 @@ export function DeveloperSettingsPage() {
     {
       id: 'companies',
       title: 'Empresas Cadastradas',
-      badge: companiesCount !== null ? `${companiesCount} cadastradas` : undefined,
+      badge: companiesCount !== null ? `${companiesCount} cadastradas • Termos & Aceites` : 'Termos & Aceites',
       badgeColor: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300',
       description:
-        'Gerencie as empresas cadastradas, contratos de locação, faturas mensais, controle financeiro de pagamentos, ative ou desative acessos e controle os módulos liberados.',
+        'Gerencie as empresas cadastradas, contratos de locação, faturas mensais, controle financeiro de pagamentos, termos de adesão dos planos e auditoria de aceites digitais (SHA-256).',
       actionText: 'Acessar Empresas',
       path: '/admin/companies',
       icon: Building2,
@@ -233,20 +232,6 @@ export function DeveloperSettingsPage() {
       accentColor: 'blue',
     },
     {
-      id: 'terms-and-acceptance',
-      title: 'Termos de Adesão & Registros de Aceites',
-      badge: 'Termos & Auditoria SHA-256',
-      badgeColor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold',
-      description:
-        'Gerencie os termos e cláusulas de adesão de cada plano e consulte a trilha de registros de aceites e evidências digitais (hashes SHA-256, telemetria de IP e dossiês em PDF/JSON) em abas separadas.',
-      actionText: 'Acessar Termos e Aceites',
-      path: '/admin/terms',
-      icon: Scale,
-      iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-400',
-      cardHoverBorder: 'hover:border-emerald-400 dark:hover:border-emerald-600',
-      accentColor: 'emerald',
-    },
-    {
       id: 'audit-logs',
       title: 'Logs de Auditoria (Audit Logs)',
       badge: 'Imutável • LGPD',
@@ -323,45 +308,44 @@ export function DeveloperSettingsPage() {
       </div>
 
       {/* CARDS DE ACESSO AOS MÓDULOS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
         {developerOptions.map((opt) => {
           const Icon = opt.icon
           return (
-            <div
-              key={opt.id}
-              onClick={() => void navigate(opt.path)}
-              className={`group relative bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs transition-all duration-200 hover:shadow-md ${opt.cardHoverBorder} cursor-pointer flex flex-col justify-between`}
-            >
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className={`w-12 h-12 rounded-xl ${opt.iconBg} flex items-center justify-center transition-transform group-hover:scale-105 duration-200`}>
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  {opt.badge && (
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${opt.badgeColor}`}>
-                      {opt.badge}
-                    </span>
-                  )}
-                </div>
-
+            <div key={opt.id} className="flex w-full">
+              <article
+                onClick={() => void navigate(opt.path)}
+                className={`group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all cursor-pointer ${opt.cardHoverBorder} hover:shadow-sm select-none`}
+              >
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {opt.title}
-                  </h2>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-slate-400 line-clamp-3 leading-relaxed">
-                    {opt.description}
-                  </p>
-                </div>
-              </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={`flex h-11 w-11 items-center justify-center rounded-lg ${opt.iconBg} transition-transform group-hover:scale-105 duration-200`}>
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    {opt.badge && (
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-semibold ${opt.badgeColor}`}>
+                        {opt.badge}
+                      </span>
+                    )}
+                  </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 group-hover:underline">
-                  {opt.actionText}
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white text-slate-500 dark:text-slate-400 flex items-center justify-center transition-all duration-200">
-                  <ArrowRight className="w-4 h-4" />
+                  <div className="mt-5">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      {opt.title}
+                    </h2>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400 line-clamp-3">
+                      {opt.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
+
+                <div className="mt-auto pt-5">
+                  <div className="flex min-h-10 items-center justify-between gap-2 rounded-lg bg-slate-50 text-slate-700 group-hover:bg-blue-100 group-hover:text-blue-800 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-300 px-3 py-2 text-xs font-semibold transition-colors">
+                    <span>{opt.actionText}</span>
+                    <ArrowRight className="h-4 w-4 shrink-0" />
+                  </div>
+                </div>
+              </article>
             </div>
           )
         })}

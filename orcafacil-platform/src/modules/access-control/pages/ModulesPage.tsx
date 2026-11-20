@@ -1,9 +1,6 @@
 import { useModuleAccess } from '../context/ModuleAccessContext'
-import { Card, CardContent } from '@shared/components/ui/Card'
-import { Badge } from '@shared/components/ui/Badge'
-import { Button } from '@shared/components/ui/Button'
 import { Link } from 'react-router-dom'
-import { FileSpreadsheet, Calendar, Package, CheckCircle2, Clock } from 'lucide-react'
+import { FileSpreadsheet, Calendar, Package, CheckCircle2, Clock, ArrowRight } from 'lucide-react'
 
 export function ModulesPage() {
   const { allModules, canAccess } = useModuleAccess()
@@ -11,11 +8,11 @@ export function ModulesPage() {
   const getModuleIcon = (code: string) => {
     switch (code) {
       case 'orcafacil':
-        return <FileSpreadsheet className="w-6 h-6 text-blue-600" />
+        return <FileSpreadsheet className="w-5 h-5 text-blue-600" />
       case 'agendapro':
-        return <Calendar className="w-6 h-6 text-amber-600" />
+        return <Calendar className="w-5 h-5 text-amber-600" />
       case 'estoqueleve':
-        return <Package className="w-6 h-6 text-emerald-600" />
+        return <Package className="w-5 h-5 text-emerald-600" />
       default:
         return null
     }
@@ -24,65 +21,69 @@ export function ModulesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Catálogo de Módulos</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Catálogo de Módulos</h1>
+        <p className="text-sm text-gray-500 dark:text-slate-400">
           Ferramentas modulares independentes integradas à sua organização
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
         {allModules.map((mod) => {
           const isActivated = canAccess(mod.code)
 
           return (
-            <Card key={mod.code} className="flex flex-col justify-between">
-              <CardContent className="space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                    {getModuleIcon(mod.code)}
-                  </div>
-                  <div>
-                    {isActivated ? (
-                      <Badge variant="success" className="gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> Ativo
-                      </Badge>
-                    ) : mod.status === 'coming_soon' ? (
-                      <Badge variant="warning" className="gap-1">
-                        <Clock className="w-3 h-3" /> Em Breve
-                      </Badge>
-                    ) : (
-                      <Badge variant="default" className="gap-1">
-                        Planejado
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
+            <div key={mod.code} className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-blue-300 dark:hover:border-slate-700 hover:shadow-sm">
                 <div>
-                  <h3 className="text-base font-bold text-gray-900 mb-1">{mod.name}</h3>
-                  <p className="text-xs text-gray-500 leading-relaxed">{mod.description}</p>
-                </div>
-              </CardContent>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                      {getModuleIcon(mod.code)}
+                    </span>
+                    <div>
+                      {isActivated ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                          <CheckCircle2 className="w-3 h-3" /> Ativo
+                        </span>
+                      ) : mod.status === 'coming_soon' ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/50 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                          <Clock className="w-3 h-3" /> Em Breve
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                          Planejado
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100">
-                {isActivated ? (
-                  <Link to="/orcafacil/quotes" className="block">
-                    <Button variant="outline" size="sm" className="w-full">
-                      Abrir Módulo
-                    </Button>
-                  </Link>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full cursor-not-allowed hover:bg-blue-100 hover:text-blue-700"
-                    disabled
-                  >
-                    Indisponível nesta versão
-                  </Button>
-                )}
-              </div>
-            </Card>
+                  <div className="mt-5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">{mod.name}</h3>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{mod.description}</p>
+                  </div>
+                </div>
+
+                <div className="mt-auto pt-5">
+                  {isActivated ? (
+                    <Link
+                      to="/orcafacil/quotes"
+                      className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-slate-50 text-slate-700 hover:bg-blue-100 hover:text-blue-800 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-300 px-3 py-2 text-xs font-semibold transition-colors"
+                    >
+                      <span>Abrir Módulo</span>
+                      <ArrowRight className="h-4 w-4 shrink-0" />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="flex min-h-10 w-full cursor-not-allowed items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-left text-xs font-semibold text-slate-400 dark:text-slate-500 transition-colors"
+                    >
+                      <span>Indisponível nesta versão</span>
+                      <ArrowRight className="h-4 w-4 shrink-0" />
+                    </button>
+                  )}
+                </div>
+              </article>
+            </div>
           )
         })}
       </div>

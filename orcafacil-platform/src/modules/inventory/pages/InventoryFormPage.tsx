@@ -633,6 +633,12 @@ export function InventoryFormPage() {
       nextFieldErrors.unit = msg
       issues.push({ label: 'Unidade usada no saldo', message: msg, fieldId: 'inventory-unit' })
     }
+    const salePriceNum = Number(submittedForm.unitPrice)
+    if (!submittedForm.unitPrice.trim() || !Number.isFinite(salePriceNum) || salePriceNum <= 0) {
+      const msg = 'O preço de venda é obrigatório e deve ser maior que zero.'
+      nextFieldErrors.unitPrice = msg
+      issues.push({ label: 'Preço de venda', message: msg, fieldId: 'inventory-sale-price' })
+    }
     if (!isValidBarcode(submittedForm.barcode)) {
       const msg = 'EAN-8, UPC e EAN-13 precisam ter dígito verificador válido.'
       nextFieldErrors.barcode = msg
@@ -649,7 +655,6 @@ export function InventoryFormPage() {
       { key: 'minimumQuantity', label: 'Estoque mínimo', value: submittedForm.minimumQuantity, fieldId: 'inventory-min-qty' },
       { key: 'maximumQuantity', label: 'Estoque máximo', value: submittedForm.maximumQuantity, fieldId: 'inventory-max-qty' },
       { key: 'idealRestockQuantity', label: 'Quantidade ideal para reposição', value: submittedForm.idealRestockQuantity },
-      { key: 'unitPrice', label: 'Preço de venda', value: submittedForm.unitPrice },
       { key: 'purchasePrice', label: 'Preço de compra', value: submittedForm.purchasePrice },
       { key: 'extraPurchaseCost', label: 'Custo adicional de compra', value: submittedForm.extraPurchaseCost },
       { key: 'promotionalPrice', label: 'Preço promocional', value: submittedForm.promotionalPrice },
@@ -1591,14 +1596,17 @@ export function InventoryFormPage() {
                   }}
                 />
                 <Input
-                  label="3. Preço de venda (R$)"
+                  id="inventory-sale-price"
+                  label="3. Preço de venda (R$) *"
                   currency
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  helperText="Calculado automaticamente. Se alterar, a margem é recalculada."
+                  helperText="Obrigatório. Calculado automaticamente ou digitado diretamente."
                   value={form.unitPrice}
+                  error={fieldErrors.unitPrice}
+                  required
                   onChange={(event) => {
                     const unitPrice = event.target.value
                     const margin = calculateMarginPercent(form.purchasePrice, unitPrice)

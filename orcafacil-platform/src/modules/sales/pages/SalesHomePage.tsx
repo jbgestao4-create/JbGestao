@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, CardContent } from '@shared/components/ui/Card'
 import { Button } from '@shared/components/ui/Button'
 import { useAuth } from '@modules/auth/context/AuthContext'
 import { useOrganization } from '@modules/organizations/context/OrganizationContext'
@@ -262,160 +261,169 @@ export function SalesHomePage() {
           </p>
         </div>
       ) : (
-        <div
-          className={`grid grid-cols-1 gap-5 ${
-            canAccessInvoices ? 'md:grid-cols-3' : 'md:grid-cols-2'
-          }`}
-        >
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
           {/* CARD 1: VENDAS & PDV (NOVA VENDA & PDV) */}
           {(canAccessQuickSale || canAccessPdv) && (
-            <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="flex h-full flex-col p-6 sm:p-8">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-xl bg-blue-50 p-3 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                    <ShoppingCart className="h-6 w-6" aria-hidden="true" />
+            <div className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-blue-300 dark:hover:border-slate-700 hover:shadow-sm">
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                      <ShoppingCart className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <span className="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                      EMISSÃO &amp; BALCÃO
+                    </span>
                   </div>
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                    EMISSÃO &amp; BALCÃO
-                  </span>
+                  <div className="mt-5">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                      VENDAS &amp; PDV
+                    </h2>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      {canAccessQuickSale && canAccessPdv
+                        ? 'Inicie uma nova venda rápida com seleção de itens e pagamento, ou acesse o terminal de frente de caixa PDV em tela cheia.'
+                        : canAccessQuickSale
+                          ? 'Inicie uma nova venda rápida com seleção de itens, descontos e faturamento.'
+                          : 'Acesse o terminal de frente de caixa PDV para vendas rápidas em balcão.'}
+                    </p>
+                  </div>
                 </div>
-                <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
-                  VENDAS &amp; PDV
-                </h2>
-                <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
-                  {canAccessQuickSale && canAccessPdv
-                    ? 'Inicie uma nova venda rápida com seleção de itens e pagamento, ou acesse o terminal de frente de caixa PDV em tela cheia.'
-                    : canAccessQuickSale
-                      ? 'Inicie uma nova venda rápida com seleção de itens, descontos e faturamento.'
-                      : 'Acesse o terminal de frente de caixa PDV para vendas rápidas em balcão.'}
-                </p>
 
-                <div className="mt-6 flex flex-col gap-2.5">
+                <div className="mt-auto pt-5 flex flex-col gap-2">
                   {canAccessQuickSale && (
-                    <Button
-                      size="lg"
+                    <button
+                      type="button"
                       onClick={() => {
                         void navigate('/orcafacil/sales/new')
                       }}
-                      className="w-full justify-between rounded-xl bg-blue-600 hover:bg-blue-700"
+                      className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                     >
                       <span className="inline-flex items-center gap-2">
                         <Plus className="h-4 w-4" aria-hidden="true" />
                         Nova Venda
                       </span>
                       <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                    </Button>
+                    </button>
                   )}
                   {canAccessPdv && (
                     <>
-                      <Button
-                        size="lg"
+                      <button
+                        type="button"
                         onClick={handleAccessPdv}
-                        className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                        className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                       >
                         <span className="inline-flex items-center gap-2">
                           <Barcode className="h-4 w-4" aria-hidden="true" />
                           Ponto de Venda (PDV)
                         </span>
                         <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                      </Button>
+                      </button>
                       {canManagePdvRegisters && (
-                        <Button
-                          size="lg"
-                          variant="outline"
+                        <button
+                          type="button"
                           onClick={() => {
                             setRegisterModalError(null)
                             setRegisterModalSuccess(null)
                             setShowRegistersModal(true)
                           }}
-                          className="w-full justify-between rounded-xl border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                          className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                         >
                           <span className="inline-flex items-center gap-2">
                             <Store className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                             Cadastrar Caixa PDV
                           </span>
                           <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                        </Button>
+                        </button>
                       )}
                     </>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </div>
           )}
 
           {/* CARD 2: CONSULTAR VENDAS & FATURAMENTO */}
           {canAccessSearchSales && (
-            <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="flex h-full flex-col p-6 sm:p-8">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-xl bg-emerald-50 p-3 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                    <Receipt className="h-6 w-6" aria-hidden="true" />
+            <div className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-emerald-300 dark:hover:border-slate-700 hover:shadow-sm">
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      <Receipt className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <span className="rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      CONSULTA &amp; HISTÓRICO
+                    </span>
                   </div>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                    CONSULTA &amp; HISTÓRICO
-                  </span>
+                  <div className="mt-5">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                      CONSULTAR VENDAS
+                    </h2>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      Acompanhe vendas faturadas, cupons emitidos, formas de pagamento praticadas e histórico detalhado por cliente ou data.
+                    </p>
+                  </div>
                 </div>
-                <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
-                  CONSULTAR VENDAS
-                </h2>
-                <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
-                  Acompanhe vendas faturadas, cupons emitidos, formas de pagamento praticadas e histórico detalhado por cliente ou data.
-                </p>
-                <div className="mt-6 flex flex-col justify-end gap-2.5">
-                  <Button
-                    size="lg"
+
+                <div className="mt-auto pt-5">
+                  <button
+                    type="button"
                     onClick={() => {
                       void navigate('/orcafacil/sales/search')
                     }}
-                    className="w-full justify-between rounded-xl bg-emerald-600 hover:bg-emerald-700 focus-visible:outline-emerald-600"
+                    className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="inline-flex items-center gap-2">
                       <Search className="h-4 w-4" aria-hidden="true" />
                       Consultar Vendas
                     </span>
                     <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </div>
           )}
 
           {/* CARD 3: EMISSÃO DE NOTAS FISCAIS (NF-e / NFC-e) */}
           {canAccessInvoices && (
-            <Card className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="flex h-full flex-col p-6 sm:p-8">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-xl bg-purple-50 p-3 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
-                    <FileText className="h-6 w-6" aria-hidden="true" />
+            <div className="flex w-full">
+              <article className="group relative flex w-full min-h-[240px] sm:min-h-[260px] flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all hover:border-purple-300 dark:hover:border-slate-700 hover:shadow-sm">
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                      <FileText className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <span className="rounded-md bg-purple-50 px-2 py-1 text-[10px] font-semibold text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                      CENTRAL FISCAL
+                    </span>
                   </div>
-                  <span className="rounded-full bg-purple-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
-                    CENTRAL FISCAL
-                  </span>
+                  <div className="mt-5">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                      NOTAS FISCAIS (NF-e / NFC-e)
+                    </h2>
+                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      Emissão eletrônica de Cupom Fiscal do Consumidor (NFC-e) e Nota Fiscal Eletrônica (NF-e) com autorização SEFAZ, DANFE e chave de 44 dígitos.
+                    </p>
+                  </div>
                 </div>
-                <h2 className="mt-5 text-lg font-bold tracking-wide text-gray-900 dark:text-white">
-                  NOTAS FISCAIS (NF-e / NFC-e)
-                </h2>
-                <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-slate-300">
-                  Emissão eletrônica de Cupom Fiscal do Consumidor (NFC-e) e Nota Fiscal Eletrônica (NF-e) com autorização SEFAZ, DANFE e chave de 44 dígitos.
-                </p>
-                <div className="mt-6 flex flex-col justify-end gap-2.5">
-                  <Button
-                    size="lg"
+
+                <div className="mt-auto pt-5">
+                  <button
+                    type="button"
                     onClick={() => {
                       void navigate('/orcafacil/sales/invoices')
                     }}
-                    className="w-full justify-between rounded-xl bg-purple-600 hover:bg-purple-700 focus-visible:outline-purple-600"
+                    className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="inline-flex items-center gap-2">
                       <FileText className="h-4 w-4" aria-hidden="true" />
                       Painel de Notas Fiscais
                     </span>
                     <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </div>
           )}
         </div>
       )}

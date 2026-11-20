@@ -15,6 +15,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Scale,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -38,6 +39,8 @@ import { AdjustCompanyLicenseModal } from '../components/AdjustCompanyLicenseMod
 import { CompanyUsersModal } from '../components/CompanyUsersModal'
 import { ManageAccessPlansModal } from '../components/ManageAccessPlansModal'
 import { ContractsManagementSection } from '../components/ContractsManagementSection'
+import { PlanTermsSection } from '../components/PlanTermsSection'
+import { ContractAcceptanceAuditAdminPage } from './ContractAcceptanceAuditAdminPage'
 import { formatLastAccess } from '@shared/services/screen-time.service'
 import {
   contractService,
@@ -46,15 +49,36 @@ import {
 } from '../services/contract.service'
 import { calculateCompanyLicenseStatus } from '../utils/license.utils'
 
+export type CompanyManagementTab = 'companies' | 'invoices' | 'terms' | 'acceptance-audit'
+
 export function CompanyManagementPage() {
   const { user } = useAuth()
   const { isLoading: isLoadingRole } = useOrganization()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const activeTab: 'companies' | 'invoices' =
-    searchParams.get('tab') === 'invoices' ? 'invoices' : 'companies'
+  const tabParam = searchParams.get('tab')
+  const activeTab: CompanyManagementTab =
+    tabParam === 'invoices' ||
+    tabParam === 'contracts' ||
+    tabParam === 'terms' ||
+    tabParam === 'acceptance-audit'
+      ? (tabParam === 'contracts' ? 'invoices' : tabParam)
+      : 'companies'
   const prefillCompanyId = searchParams.get('companyId') || undefined
+
+  const handleTabChange = (tab: CompanyManagementTab) => {
+    const next = new URLSearchParams()
+    next.set('tab', tab)
+    if (tab === 'acceptance-audit') {
+      const q = searchParams.get('search') || searchParams.get('q')
+      if (q) next.set('search', q)
+    } else if (tab === 'invoices') {
+      const cid = searchParams.get('companyId')
+      if (cid) next.set('companyId', cid)
+    }
+    setSearchParams(next)
+  }
 
   const [companies, setCompanies] = useState<ManagedCompany[]>([])
   const [invoices, setInvoices] = useState<ContractInvoice[]>([])
@@ -264,7 +288,7 @@ export function CompanyManagementPage() {
             Gerenciamento de Empresas Cadastradas & Licenças
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Gerencie as empresas cadastradas, acompanhe as mensalidades e controle os pagamentos financeiros.
+            Gerencie as empresas cadastradas, mensalidades financeiras, termos de adesão dos planos e auditoria de aceites eletrônicos.
           </p>
         </div>
 
@@ -299,43 +323,79 @@ export function CompanyManagementPage() {
         </div>
       </div>
 
-      {/* Abas Unificadas: Empresas Cadastradas & Gerar Contratos / Faturas (Item 1) */}
-      <div className="border-b border-gray-200 dark:border-slate-800">
-        <nav className="-mb-px flex space-x-6">
+      {/* Abas Unificadas do Módulo: Empresas Cadastradas, Financeiro, Termos e Auditoria de Aceites */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-2.5 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Aba 1: Empresas Cadastradas */}
           <button
             type="button"
-            onClick={() => setSearchParams({ tab: 'companies' })}
-            className={`py-3 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
+            onClick={() => handleTabChange('companies')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all border cursor-pointer ${
               activeTab === 'companies'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-slate-400 dark:hover:text-slate-300'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800'
             }`}
           >
-            <Building2 className="h-4 w-4" />
-            Empresas Cadastradas
-            <span className="ml-1 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 px-2 py-0.5 text-xs font-bold">
+            <Building2 className="w-4 h-4" />
+            <span>Empresas Cadastradas</span>
+            <span
+              className={`ml-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+                activeTab === 'companies'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+              }`}
+            >
               {companies.length}
             </span>
           </button>
 
+          {/* Aba 2: Pagamentos Realizados & Financeiro */}
           <button
             type="button"
-            onClick={() => setSearchParams({ tab: 'invoices' })}
-            className={`py-3 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
+            onClick={() => handleTabChange('invoices')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all border cursor-pointer ${
               activeTab === 'invoices'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-slate-400 dark:hover:text-slate-300'
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800'
             }`}
           >
-            <CreditCard className="h-4 w-4" />
-            Pagamentos Realizados & Financeiro
+            <CreditCard className="w-4 h-4" />
+            <span>Pagamentos Realizados & Financeiro</span>
             {overdueCompanyIds.size > 0 && (
-              <span className="ml-1.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 px-2 py-0.5 text-xs font-extrabold animate-pulse">
+              <span className="ml-1 rounded-full bg-rose-500 text-white px-2 py-0.5 text-xs font-extrabold animate-pulse">
                 {overdueCompanyIds.size} vencida(s)
               </span>
             )}
           </button>
-        </nav>
+
+          {/* Aba 3: Termos de Adesão */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('terms')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all border cursor-pointer ${
+              activeTab === 'terms'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Scale className="w-4 h-4" />
+            <span>Termos de Adesão</span>
+          </button>
+
+          {/* Aba 4: Registros de Aceites */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('acceptance-audit')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all border cursor-pointer ${
+              activeTab === 'acceptance-audit'
+                ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800'
+            }`}
+          >
+            <FileSignature className="w-4 h-4" />
+            <span>Registros de Aceites</span>
+          </button>
+        </div>
       </div>
 
       {feedbackMsg && (
@@ -362,7 +422,7 @@ export function CompanyManagementPage() {
           hideSubTabs={true}
           hideBanner={true}
           initialCompanyId={prefillCompanyId}
-          onSelectTab={() => setSearchParams({ tab: 'invoices' })}
+          onSelectTab={() => handleTabChange('invoices')}
         />
       )}
 
@@ -771,6 +831,16 @@ export function CompanyManagementPage() {
         )}
       </div>
       </>
+      )}
+
+      {/* Conteúdo Aba Termos de Adesão */}
+      {activeTab === 'terms' && (
+        <PlanTermsSection onOpenManagePlans={() => setIsManagePlansModalOpen(true)} />
+      )}
+
+      {/* Conteúdo Aba Registros de Aceites */}
+      {activeTab === 'acceptance-audit' && (
+        <ContractAcceptanceAuditAdminPage embedded />
       )}
 
       {/* Modal de Cadastro de Nova Empresa (Requisito 2) */}

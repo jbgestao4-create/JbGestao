@@ -416,13 +416,13 @@ export function SaleFormPage() {
 
   const handleAddToCart = () => {
     if (itemTypeToAdd === 'service') {
-      if (!selectedService && !productQuery.trim()) {
-        setError('Selecione um serviço cadastrado ou informe a descrição.')
+      if (!selectedService) {
+        setError('Selecione um serviço cadastrado no catálogo para adicionar ao carrinho. O sistema não permite vender serviços não cadastrados.')
         return
       }
 
-      const description = selectedService?.name || productQuery.trim()
-      const unit = selectedService?.billingUnit || 'UN'
+      const description = selectedService.name
+      const unit = selectedService.billingUnit || 'UN'
       const qty = Number(itemQuantity)
 
       if (!Number.isFinite(qty) || qty <= 0) {
@@ -431,12 +431,12 @@ export function SaleFormPage() {
       }
 
       const price = Number(itemUnitPrice)
-      if (!Number.isFinite(price) || price < 0) {
-        setError('Informe um valor unitário válido.')
+      if (!Number.isFinite(price) || price <= 0) {
+        setError('Informe um valor unitário válido maior que zero.')
         return
       }
 
-      if (selectedService && Number(selectedService.minimumSalePrice) > 0) {
+      if (Number(selectedService.minimumSalePrice) > 0) {
         if (price < Number(selectedService.minimumSalePrice)) {
           setError(
             `O valor de venda do serviço não pode ser menor que o preço mínimo cadastrado (${formatCurrency(selectedService.minimumSalePrice)}).`,
@@ -445,19 +445,31 @@ export function SaleFormPage() {
         }
       }
 
-      const total = calculateItemTotal(itemQuantity, itemUnitPrice)
-      const newItem: CartItem = {
-        id: crypto.randomUUID(),
-        itemType: 'service',
-        serviceId: selectedService?.id,
-        description,
-        unit,
-        quantity: itemQuantity,
-        unitPrice: itemUnitPrice,
-        total,
-        sku: selectedService?.serviceCode,
+      // Se o serviço já estiver no carrinho, soma a quantidade
+      const existingIndex = cart.findIndex((c) => c.serviceId === selectedService.id)
+      if (existingIndex >= 0) {
+        const current = cart[existingIndex]
+        const newQty = (Number(current.quantity) + qty).toString()
+        const newTotal = calculateItemTotal(newQty, current.unitPrice)
+        const updated = [...cart]
+        updated[existingIndex] = { ...current, quantity: newQty, total: newTotal }
+        setCart(updated)
+      } else {
+        const total = calculateItemTotal(itemQuantity, itemUnitPrice)
+        const newItem: CartItem = {
+          id: crypto.randomUUID(),
+          itemType: 'service',
+          serviceId: selectedService.id,
+          description,
+          unit,
+          quantity: itemQuantity,
+          unitPrice: itemUnitPrice,
+          total,
+          sku: selectedService.serviceCode,
+        }
+        setCart([...cart, newItem])
       }
-      setCart([...cart, newItem])
+
       setSelectedService(null)
       setProductQuery('')
       setItemQuantity('1')
@@ -466,21 +478,21 @@ export function SaleFormPage() {
       return
     }
 
-    // Se for Produto de Estoque
-    if (!selectedProduct && !productQuery.trim()) {
-      setError('Selecione um produto do estoque ou informe a descrição.')
+    // Se for Produto de Estoque (Material)
+    if (!selectedProduct) {
+      setError('Selecione um material cadastrado no estoque para adicionar ao carrinho. O sistema não permite vender materiais não cadastrados.')
       return
     }
 
-    if (selectedProduct && (!selectedProduct.canSell || selectedProduct.registrationStatus === 'awaiting_information')) {
+    if (!selectedProduct.canSell || selectedProduct.registrationStatus === 'awaiting_information') {
       setError(
         `O material "${selectedProduct.name}" está com status "Aguardando informação" e não pode ser utilizado em vendas até que o cadastro esteja concluído no estoque.`,
       )
       return
     }
 
-    const description = selectedProduct?.name || productQuery.trim()
-    const unit = selectedProduct?.unit || 'UN'
+    const description = selectedProduct.name
+    const unit = selectedProduct.unit || 'UN'
     const qty = Number(itemQuantity)
 
     if (!Number.isFinite(qty) || qty <= 0) {
@@ -489,29 +501,23 @@ export function SaleFormPage() {
     }
 
     const price = Number(itemUnitPrice)
-    if (!Number.isFinite(price) || price < 0) {
-      setError('Informe um valor unitário válido.')
+    if (!Number.isFinite(price) || price <= 0) {
+      setError('Informe um valor unitário válido maior que zero.')
       return
     }
 
-    if (selectedProduct) {
-      const available = Number(selectedProduct.quantityOnHand ?? 0)
-      const existingInCart = cart.find((c) => c.inventoryItemId === selectedProduct.id)
-      const currentQtyInCart = existingInCart ? Number(existingInCart.quantity) : 0
-      if (available < currentQtyInCart + qty) {
-        setError(
-          `Estoque insuficiente para "${selectedProduct.name}". Saldo disponível: ${selectedProduct.quantityOnHand} ${selectedProduct.unit} (solicitado: ${currentQtyInCart + qty}).`,
-        )
-        return
-      }
+    const available = Number(selectedProduct.quantityOnHand ?? 0)
+    const existingInCart = cart.find((c) => c.inventoryItemId === selectedProduct.id)
+    const currentQtyInCart = existingInCart ? Number(existingInCart.quantity) : 0
+    if (available < currentQtyInCart + qty) {
+      setError(
+        `Estoque insuficiente para "${selectedProduct.name}". Saldo disponível: ${selectedProduct.quantityOnHand} ${selectedProduct.unit} (solicitado: ${currentQtyInCart + qty}).`,
+      )
+      return
     }
 
     // Se o item já estiver no carrinho, soma a quantidade
-    const existingIndex = cart.findIndex(
-      (c) =>
-        (selectedProduct && c.inventoryItemId === selectedProduct.id) ||
-        (!selectedProduct && c.description.toLowerCase() === description.toLowerCase()),
-    )
+    const existingIndex = cart.findIndex((c) => c.inventoryItemId === selectedProduct.id)
 
     if (existingIndex >= 0) {
       const current = cart[existingIndex]
@@ -525,14 +531,14 @@ export function SaleFormPage() {
       const newItem: CartItem = {
         id: crypto.randomUUID(),
         itemType: 'product',
-        inventoryItemId: selectedProduct?.id,
+        inventoryItemId: selectedProduct.id,
         description,
         unit,
         quantity: itemQuantity,
         unitPrice: itemUnitPrice,
         total,
-        availableStock: selectedProduct?.quantityOnHand,
-        sku: selectedProduct?.sku,
+        availableStock: selectedProduct.quantityOnHand,
+        sku: selectedProduct.sku,
       }
       setCart([...cart, newItem])
     }
@@ -590,6 +596,21 @@ export function SaleFormPage() {
     if (cart.length === 0) {
       setError('Adicione pelo menos um item ao carrinho antes de finalizar.')
       return
+    }
+
+    // Validação estrita: somente materiais e serviços cadastrados podem ser vendidos
+    for (const it of cart) {
+      if (it.itemType === 'service') {
+        if (!it.serviceId) {
+          setError(`O serviço "${it.description}" não está cadastrado no catálogo. Remova-o do carrinho e selecione um serviço cadastrado.`)
+          return
+        }
+      } else {
+        if (!it.inventoryItemId) {
+          setError(`O material "${it.description}" não está cadastrado no estoque. Remova-o do carrinho e selecione um material cadastrado.`)
+          return
+        }
+      }
     }
 
     if (forwardToSchedule && !scheduleDate) {
@@ -1030,6 +1051,26 @@ export function SaleFormPage() {
                     ))}
                   </div>
                 )}
+                {/* Avisos quando nenhum item foi selecionado */}
+                {productQuery.trim() && !selectedProduct && !selectedService && (
+                  <div className="mt-1.5 text-xs font-medium">
+                    {itemTypeToAdd === 'product' && filteredProducts.length === 0 && (
+                      <p className="text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                        Nenhum material cadastrado no estoque corresponde a "{productQuery}". O sistema só permite vender materiais que existam no cadastro de estoque.
+                      </p>
+                    )}
+                    {itemTypeToAdd === 'service' && filteredServices.length === 0 && (
+                      <p className="text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                        Nenhum serviço cadastrado no catálogo corresponde a "{productQuery}". O sistema só permite vender serviços que existam no cadastro.
+                      </p>
+                    )}
+                    {((itemTypeToAdd === 'product' && filteredProducts.length > 0) || (itemTypeToAdd === 'service' && filteredServices.length > 0)) && (
+                      <p className="text-blue-600">
+                        Clique em um dos itens da lista de resultados acima para selecioná-lo antes de adicionar ao carrinho.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {selectedProduct && itemTypeToAdd === 'product' && (
@@ -1094,6 +1135,17 @@ export function SaleFormPage() {
                 <Button
                   type="button"
                   onClick={handleAddToCart}
+                  disabled={
+                    (itemTypeToAdd === 'product' && !selectedProduct) ||
+                    (itemTypeToAdd === 'service' && !selectedService)
+                  }
+                  title={
+                    itemTypeToAdd === 'product' && !selectedProduct
+                      ? 'Localize e selecione um material cadastrado para adicionar'
+                      : itemTypeToAdd === 'service' && !selectedService
+                        ? 'Localize e selecione um serviço cadastrado para adicionar'
+                        : 'Adicionar item selecionado ao carrinho'
+                  }
                   className={`h-10 gap-2 ${
                     itemTypeToAdd === 'service'
                       ? 'bg-emerald-600 hover:bg-emerald-700'
